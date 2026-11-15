@@ -59,10 +59,16 @@ What the numbers say about the brand:
   milkshakes, smoothies, **dawas** (ginger/lemon/honey, Mint, Cinnamon Garlic, Kinywaji Chakula),
   nojitos, coladas, 10 juices. This is a café-that-eats as much as a restaurant-that-drinks, and
   it opens 6:30 am — the chai-and-coffee morning is a distinct customer.
-- **The signature is goat.** Full Mandy KSh 2,200, Half Mandy 1,200, Deillo 1,300, Arosto 1,400,
-  and the **Sinia platter at KSh 5,000** (goat mandy + grilled chicken + mandy rice + pilau +
+- **The signature is goat.** Full Mandy KSh 2,300, Half Mandy 1,300, Deillo 2,600 full / 1,400 half,
+  Arosto 2,800 full / 1,450 half, and the **Sinia platter at KSh 6,000** (goat mandy + grilled chicken
+  + mandy rice + pilau +
   spaghetti + chutney) — the table-feast hero. Google's own "popular with regulars" dish list:
   **Full Mandy** and **Wet Fry Fish with Rice**.
+  *Amendment A5, 2026-11-15:* these six figures were corrected from the live `menu_items` rows. The
+  earlier numbers here (2,200 / 1,200 / 1,300 / 1,400 / 5,000) came from the Uber Eats cached listing
+  and the original design note, both of which lag the kitchen's own system — see `research/PRESS.md`
+  §4 and `press.json` → `disagreements`. Nothing in the site, the build, or the tests carries the old
+  numbers any more.
 - **Bakery is a product line, not a footer.** Whole cakes sold in **2 KG and 3 KG formats**
   (White Forest, Black Forest, Blueberry, Red Velvet, Carrot, Chocolate Fudge, Chocolate Mint),
   slices, cheesecakes, muffins, cookies by threes, brownies. Orderable cakes are a revenue

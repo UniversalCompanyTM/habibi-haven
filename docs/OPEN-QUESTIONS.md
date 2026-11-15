@@ -63,12 +63,19 @@ them would be inventing what a kitchen serves.
 **Preview position.** Photo-led tiles with no fabricated text. **Ask:** a description pass from them,
 or permission to leave it as is.
 
-## 7. Mirroring their dish photos
+## 7. Hosting copies of their dish photos
 
-The 173 hosted photos sit in their Supabase bucket and answer 401/403 to probes from outside a
-browser. The build intends to mirror them into the site for speed and stability.
+The 173 hosted photos sit in their Supabase bucket, and the bucket is **public-read for objects**:
+all six sampled photos returned `200 image/jpeg` to a plain Node `fetch` with no browser, no cookie,
+no referer and no token (350 KB–1.0 MB each, 1000×1000). The earlier line here — that the bucket
+"answers 401/403 to probes from outside a browser" — described a *listing* request and was read as an
+*object* request; the measurement is in [`PROBE-FINDINGS.md`](PROBE-FINDINGS.md) §2.
 
-**Ask.** Permission to host copies, and who updates them when a dish changes photo.
+So mirroring was never blocked, and it has been done: `site/public/menu/` now carries 173 originals
+plus 173 400px derivatives, and the site does not depend on their bucket at runtime.
+
+**Ask.** Not access — rights. Whether we may host copies at all, who owns the files, and who tells us
+when a dish changes photo (see §1 for the photographer question and §8 for who can answer).
 
 ## 8. Who signs off
 

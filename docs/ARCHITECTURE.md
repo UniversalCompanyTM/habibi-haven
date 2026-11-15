@@ -93,7 +93,7 @@ in `docs/OPEN-QUESTIONS.md` §1 and in `research/BRAND-FACTS.md` §6.
 | Prices | KSh **100 → 6,000**, median **550** | menu.or.ke render |
 | Taxonomy caveat | `BREAKFAST COMBO` (65) and `HABIBI COFFEE` (87) are over-collected — they absorbed following sub-groups; Uber Eats splits the same kitchen into **~37 real sections** | verified this session |
 | Beverages | ≈⅓ of the menu: coffees, lattes, teas (Karak Chai, Camel Tea, African Tea Pot), Cool Specials, iced teas, 10 milkshakes, smoothies, **dawas**, nojitos, coladas, 10 juices | both sources |
-| The goat | Half Mandy 1,200 · Full Mandy 2,200 · Deillo 1,300 · Arosto 1,400 · **Sinia platter 5,000** | both sources |
+| The goat | Half Mandy 1,300 · Full Mandy 2,300 · Deillo 2,600 / 1,400 half · Arosto 2,800 / 1,450 half · **Sinia platter 6,000** | live `menu_items` rows (Amendment A5; the delivery listing lags) |
 | Bakery as product | whole cakes in **2KG and 3KG formats** + slices, cheesecakes, muffins, cookies ×3, brownies | both sources |
 | Coastal/Somali vocabulary | malawax, anjera, mandy, mandazi, dawa, kahawa, samosa, in-house tortilla | both sources |
 | Voice | second person, short, playful, emoji as punctuation ("Sip, savor, and stay a while", "Warning: dangerously delicious", "where every visit feels like coming home") | 12 Instagram captions |
@@ -300,7 +300,7 @@ Five panels, left to right:
    `research/COPY-BANK.md`; a side stack on the runtime column: `gate.mjs` →
    `DoorScene (three, lazy)` / `2D fallback` → `table.mjs` → `wa.me/254116880000`.
 3. **The door, as wireframe** — an orthographic top-down schematic of a long table with six place
-   markers, each annotated only with real menu strings: `Full Mandy KSh 2,200`, `Sinia KSh 5,000`,
+   markers, each annotated only with real menu strings: `Full Mandy KSh 2,300`, `Sinia KSh 6,000`,
    `Lamb Chops KSh 1,350`, `Chicken Biryani KSh 1,300`, `Karak Chai KSh 350`,
    `White Forest Cake 2KG`; party chips `2 · 4 · 6 · 8`; a slider labelled `06:30 ——— 23:00`;
    a small tier strip `full · lite · 2d · poster`.
