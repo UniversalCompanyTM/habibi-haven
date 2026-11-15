@@ -229,6 +229,62 @@ for (const [route, src] of all) {
   if (blank.length) bad("safety", `${route}: ${blank.length} target="_blank" links without rel=noopener`);
 }
 
+// ---------------------------------------------------------------- origin & schema
+//
+// `site` is the origin the canonical, the og:url and the WhatsApp handoff link are all built from, so a
+// build that carries a host nobody deployed to is not a cosmetic slip: the link the kitchen receives
+// points at a page that does not exist. Every host this project has ever parked on is banned by name,
+// because each of them is still a domain someone owns.
+const STALE_HOSTS = ["netlify.app", "vercel.app", "github.io", "habibi-haven.example"];
+for (const [route, src] of all) {
+  for (const host of STALE_HOSTS) {
+    if (src.includes(host)) bad("origin", `${route} references "${host}" — an origin nobody deployed to`);
+  }
+}
+
+// The structured data is the loudest claim the site makes, so it is verified in the artefact rather than
+// trusted from the module: it has to parse, and the prices in it have to be numbers a person could pay.
+for (const [route, src] of all) {
+  const blocks = [...src.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/g)];
+  if (blocks.length !== 1) {
+    bad("schema", `${route} carries ${blocks.length} JSON-LD block(s), expected exactly 1`);
+    continue;
+  }
+  let data;
+  try {
+    data = JSON.parse(blocks[0][1]);
+  } catch (e) {
+    bad("schema", `${route}: the JSON-LD does not parse — ${e.message}`);
+    continue;
+  }
+  if (data["@type"] !== "Restaurant") bad("schema", `${route}: @type is ${data["@type"]}, not Restaurant`);
+  if (data.address?.streetAddress !== "Koinange Street") bad("schema", `${route}: address is not Koinange Street`);
+  if (!data.openingHoursSpecification?.length) bad("schema", `${route}: no opening hours published`);
+  if (!data.servesCuisine?.length) bad("schema", `${route}: no cuisine type published`);
+  const items = data.menu?.hasMenuItem ?? [];
+  if (items.length < 5) bad("schema", `${route}: the menu lists ${items.length} priced dishes, expected the signature set`);
+  for (const item of items) {
+    const price = item.offers?.price;
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0)
+      bad("schema", `${route}: "${item.name}" has no real price (${JSON.stringify(price)})`);
+    if (item.offers?.priceCurrency !== "KES")
+      bad("schema", `${route}: "${item.name}" is quoted in ${item.offers?.priceCurrency}, not KES`);
+  }
+  // GPS either means something or is absent. A latitude that is not a number in range is a fabricated
+  // coordinate wearing this venue's name, which is the one schema error that sends people to a wrong door.
+  if (data.geo) {
+    const { latitude, longitude } = data.geo;
+    if (!(typeof latitude === "number" && latitude >= -90 && latitude <= 90) ||
+        !(typeof longitude === "number" && longitude >= -180 && longitude <= 180))
+      bad("schema", `${route}: geo is present but is not a coordinate (${JSON.stringify(data.geo)})`);
+  }
+  // The thumb-reachable actions, present in the HTML before any script runs.
+  if (!/href="tel:\+/.test(src)) bad("schema", `${route} has no tap-to-call link`);
+  if (!data.hasMap?.includes("google.com/maps")) bad("schema", `${route}: no map link in the structured data`);
+}
+if (!fails.some((f) => f.includes("origin") || f.includes("schema")))
+  ok("origin + schema", "one parsing Restaurant block per page, KES prices, hours, cuisine, tel: and map links, no stale origin");
+
 // ---------------------------------------------------------------- weight
 let kb = 0;
 for (const file of await readdir(join(dist, "_astro"))) {

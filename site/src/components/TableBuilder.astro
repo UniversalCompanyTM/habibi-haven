@@ -172,7 +172,11 @@ const change = nextChange();
   component("[data-builder]", { mount: wire, unmount: (stop) => stop?.() });
 
   function wire(builder: HTMLElement) {
-    const origin = builder.dataset.origin ?? location.origin;
+    // The build-time origin is the fallback, not the answer. The link the floor staff open has to be the
+    // table this guest was looking at, wherever this copy of the site happens to be served from — a
+    // preview on a pages.dev subdomain must not hand the kitchen a URL for a domain nobody deployed.
+    // (file:// gives "null" as an origin, which is why this checks the scheme rather than just truthiness.)
+    const origin = /^https?:/.test(location.origin) ? location.origin : (builder.dataset.origin ?? "");
     const signatureIds = Array.from(builder.querySelectorAll<HTMLElement>("[data-add]")).map((n) => n.dataset.add ?? "");
     const linesEl = builder.querySelector<HTMLOListElement>("[data-lines]")!;
     const emptyEl = builder.querySelector<HTMLElement>("[data-empty]")!;

@@ -977,8 +977,88 @@ check("a collection and a component share the one pair of listeners", () => {
   return eq(doc.count("astro:after-swap"), 1, "after-swap listeners");
 });
 
-/* ----------------------------------------------------------------- summary */
+/* ------------------------------------------------------- structured data */
 
+describe("structured data — what Google is told about this restaurant");
+
+const { restaurantSchema } = await lib("site/src/lib/schema.mjs");
+const ORIGIN = "https://habibihavenpreview.pages.dev";
+const built = restaurantSchema({
+  menu,
+  origin: ORIGIN,
+  canonical: `${ORIGIN}/`,
+  description: "test",
+});
+
+check("every price in the schema block is the price on the menu row", () => {
+  const items = built.menu?.hasMenuItem ?? [];
+  if (items.length < 5) return `only ${items.length} dishes published — the signature set went missing`;
+  for (const entry of items) {
+    const source = ALL_ITEMS.find((i) => i.name === entry.name);
+    if (!source) return `"${entry.name}" is in the schema and not on the menu`;
+    if (entry.offers?.price !== Number(source.price))
+      return `${entry.name}: schema says ${entry.offers?.price}, the menu row says ${source.price}`;
+    if (entry.offers?.priceCurrency !== menu.meta.currency)
+      return `${entry.name}: quoted in ${entry.offers?.priceCurrency}, menu currency is ${menu.meta.currency}`;
+  }
+  return true;
+});
+
+check("the schema block publishes no GPS nobody gave us", () => {
+  if (built.geo !== undefined) return `geo appeared without a sourced coordinate: ${JSON.stringify(built.geo)}`;
+  const withPin = restaurantSchema({
+    menu: {
+      ...menu,
+      meta: {
+        ...menu.meta,
+        facts: { ...menu.meta.facts, coordinates: { latitude: -1.24, longitude: 36.8 } },
+      },
+    },
+    origin: ORIGIN,
+    canonical: `${ORIGIN}/`,
+    description: "test",
+  });
+  return eq(JSON.stringify(withPin.geo), JSON.stringify({ "@type": "GeoCoordinates", latitude: -1.24, longitude: 36.8 }), "geo once pinned");
+});
+
+check("availability follows the kitchen's own inStock flag, both ways", () => {
+  const on = built.menu.hasMenuItem.every((i) => i.offers.availability === "https://schema.org/InStock");
+  if (!on) return `an in-stock dish was published as ${built.menu.hasMenuItem.map((i) => i.offers.availability).join(", ")}`;
+  const flipped = JSON.parse(JSON.stringify(menu));
+  const target = table.signatureItems(flipped)[0];
+  target.availability = { open: true, inStock: false };
+  const out = restaurantSchema({ menu: flipped, origin: ORIGIN, canonical: `${ORIGIN}/`, description: "test" });
+  const entry = out.menu.hasMenuItem.find((i) => i.name === target.name);
+  return eq(entry.offers.availability, "https://schema.org/OutOfStock", "a sold-out signature stays sold-out in the schema");
+});
+
+check("the address, hours and phone the schema claims are the ones on screen", () => {
+  const f = menu.meta.facts;
+  const problems = [];
+  if (built.address.streetAddress !== "Koinange Street") problems.push(`street is ${built.address.streetAddress}`);
+  if (built.address.addressCountry !== "KE") problems.push(`country is ${built.address.addressCountry}`);
+  if (built.telephone !== f.phone) problems.push(`telephone is ${built.telephone}, facts say ${f.phone}`);
+  const spec = built.openingHoursSpecification[0];
+  if (spec.opens !== f.hoursOfRecord.open || spec.closes !== f.hoursOfRecord.close)
+    problems.push(`hours are ${spec.opens}–${spec.closes}, record says ${f.hoursOfRecord.open}–${f.hoursOfRecord.close}`);
+  if (spec.dayOfWeek.length !== 7) problems.push(`${spec.dayOfWeek.length} days published`);
+  if (!built.hasMap.includes("google.com/maps")) problems.push(`hasMap is ${built.hasMap}`);
+  if (built.aggregateRating.ratingValue !== f.rating || built.aggregateRating.reviewCount !== f.reviews)
+    problems.push("the rating is not the rating they have");
+  return problems.length ? problems.join("; ") : true;
+});
+
+check("the handoff link the kitchen receives points at where the guest was standing", () => {
+  const sampleTable = { party: 2, lines: [{ id: ALL_ITEMS[0].id, qty: 1 }] };
+  const url = table.shareUrl(ORIGIN, sampleTable);
+  if (!url.startsWith(`${ORIGIN}/table?t=`)) return `share link is ${url}`;
+  const link = table.whatsappUrl(menu, sampleTable, "Fri 19:00", ORIGIN);
+  const from = decodeURIComponent(link).match(/From: (\S+)/)?.[1];
+  if (!from?.startsWith(ORIGIN)) return `the WhatsApp message hands out ${from}, not ${ORIGIN}`;
+  return true;
+});
+
+/* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {
   console.log(`${failures.length} FAILED · ${passed} passed`);

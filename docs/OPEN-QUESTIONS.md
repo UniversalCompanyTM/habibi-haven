@@ -82,3 +82,39 @@ when a dish changes photo (see §1 for the photographer question and §8 for who
 This is a concept for a private preview, carrying a disclosure that it is not Habibi's official site.
 Before anything is published as theirs we need a named person who can approve the copy, the prices and
 the photography.
+
+## 9. The pin on the map
+
+The structured data publishes name, address, hours, cuisine, phone and prices, and a plus code
+(**PR99+82**) on the Visit page — but no latitude/longitude, because no source we captured carries one.
+OpenStreetMap's Nominatim returns nothing for "Habibi Haven", the Google listing gives a street address
+and a plus code, and a street centroid on Koinange Street would be a different location wearing this
+venue's name. Sending someone to the wrong door is the one mapping error a restaurant cannot forgive.
+
+**Preview position.** `site/src/lib/schema.mjs` implements `geo` and leaves it dark until
+`meta.facts.coordinates` exists, so the switch is one edit in `content/menu.overrides.json` rather than a
+code change; both branches are pinned by `tests/run.mjs`, and `scripts/verify-dist.mjs` rejects a `geo`
+that is not a real coordinate. Directions work today through the map links. **Ask:** drop a pin from the
+Google Business listing, or read the two numbers off the Maps place page.
+
+## 10. Taking money — what M-Pesa would actually need
+
+The brief asks for a checkout that pushes an M-Pesa prompt to the guest's phone and verifies the callback.
+That is a real integration, and every part of it belongs to the restaurant:
+
+- a Daraja account under their Safaricom business profile, plus the consumer **API key/secret** and the
+  **Passkey** — three credentials we do not have and must never be sent through a chat;
+- a **Paybill or Till number** to receive the money, and the short code that shows on the customer's phone;
+- an **HTTPS callback URL** we control, plus a store for order records so a callback can be matched to an
+  order and a double-tap cannot double-charge;
+- their **consent** to take payments on their behalf at all — this site is a concept.
+
+A button that looks like checkout and is not one is worse than no button: a guest who enters a phone number
+expecting a PIN prompt and gets nothing takes that story to the counter. So the preview sends the order to
+the venue's own WhatsApp thread with the lines, quantities and total already formatted, and the payment
+happens where the restaurant already does business.
+
+**What is already in place for the real thing.** The order maths (`site/src/lib/table.mjs`) runs on the menu
+data, not on anything the browser typed, so a server-side function can reuse it to recompute the total
+before it asks Daraja for money — the part that must not be trusted to the client. **Ask:** who owns the
+Paybill, and is a card-on-file M-Pesa prompt even wanted for dine-in, or is this a delivery-only flow?

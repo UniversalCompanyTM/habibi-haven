@@ -8,10 +8,12 @@
 // same answer (tests/run.mjs pins it).
 import menu from "../data/menu.json";
 import { nairobiHour, rigFor } from "../lib/hours.mjs";
+import { restaurantSchema } from "../lib/schema.mjs";
 import "../styles/tokens.css";
 import "../styles/global.css";
 
 import Nav from "../components/Nav.astro";
+import ActionDock from "../components/ActionDock.astro";
 import Footer from "../components/Footer.astro";
 import Ticker from "../components/Ticker.astro";
 import Cursor from "../components/Cursor.astro";
@@ -28,43 +30,19 @@ const ORIGIN = Astro.site ?? new URL("https://habibi-haven.example");
 const path = Astro.url.pathname.replace(/\/$/, "") || "/";
 const canonical = new URL(path, ORIGIN).href;
 
-// Every factual claim in the block below traces to research/BRAND-FACTS.md or research/PRESS.md.
-// The description says "Coastal and Somali", which is how their own TripAdvisor listing frames it,
-// and the rating is Google's, with its count, because a schema rating without a source is fiction.
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Restaurant",
-  name: menu.meta.name,
+// Every factual claim in the block traces to research/BRAND-FACTS.md or research/PRESS.md — the same
+// facts/ field the visible pages read, so a price cannot disagree with itself between the menu card and
+// the answer Google gives about it. lib/schema.mjs is where the rules live; see that file for why the
+// GPS field is implemented and still dark.
+const jsonLd = restaurantSchema({
+  menu,
+  origin: ORIGIN.href,
+  canonical,
+  // "Coastal and Somali" is how their own TripAdvisor listing frames it, and the rating is Google's with
+  // its count attached, because a schema rating without a source is fiction.
   description:
     "Habibi Haven is a modern halal restaurant on Koinange Street in Nairobi CBD — Coastal and Somali cooking, goat mandy, karak chai, and a garden courtyard that opens at 06:30.",
-  telephone: f.phone,
-  priceRange: f.pricePerPerson,
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "Koinange Street",
-    addressLocality: "Nairobi",
-    addressCountry: "KE",
-  },
-  hasMap: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.mapsQuery)}`,
-  openingHoursSpecification: [
-    {
-      "@type": "OpeningHoursSpecification",
-      dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-      opens: f.hoursOfRecord.open,
-      closes: f.hoursOfRecord.close,
-    },
-  ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: f.rating,
-    reviewCount: f.reviews,
-    bestRating: 5,
-  },
-  servesCuisine: ["Somali", "Kenyan", "International"],
-  sameAs: [f.socials.instagram, f.socials.tiktok, f.socials.facebook],
-  menu: new URL("/menu", ORIGIN).href,
-  url: canonical,
-};
+});
 
 const title = props.title ?? "Habibi Haven — goat mandy and a garden courtyard on Koinange Street";
 const description =
@@ -124,6 +102,7 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 
     <Ticker />
     <Footer />
+    <ActionDock current={path} whatsapp={f.whatsapp} phone={f.phone} />
     <Cursor />
   </body>
 </html>

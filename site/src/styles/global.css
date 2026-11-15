@@ -687,6 +687,15 @@ html.js [data-reveal]:focus-within {
   }
 }
 
+/* The bottom dock (ActionDock.astro) is fixed over the last content on a phone, so the document gives it
+   room instead of letting the footer's last line live underneath a button. Height plus the notch safe-area,
+   matching the dock's own padding. */
+@media (max-width: 720px) {
+  body {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* --------------------------------------------------------------- marquee */
 
 /* The ticker is their own caption language, moving. Duplicated track, so the loop has no seam. */

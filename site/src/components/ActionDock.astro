@@ -1,0 +1,87 @@
+---
+// ActionDock.astro — the three things a guest on a phone actually reaches for, kept under the thumb.
+//
+// Why this exists as its own thing: on a narrow screen the top bar sheds links to fit, which is correct
+// for navigation and wrong for the two actions that are the point of a restaurant site — ordering and
+// booking. A guest who has scrolled to the biryani should not have to scroll back up to act on it. So the
+// dock stays put at the bottom of the viewport on phones and disappears entirely on wider screens, where
+// the bar above already carries the WhatsApp action and the route links.
+//
+// Everything here is a real destination: `tel:` dials, wa.me opens the conversation, /table is the
+// builder. Nothing is a decorative button, and nothing pretends to take a payment.
+const { current = "/", whatsapp, phone } = Astro.props;
+const digits = String(phone ?? "").replace(/[^\d]/g, "");
+const atTable = current === "/table";
+---
+
+<nav class="dock" aria-label="Quick actions" data-dock>
+  <a class="dock__btn" href={`tel:+${digits}`}>Call</a>
+  <a class="dock__btn dock__btn--go" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+    WhatsApp
+  </a>
+  {
+    atTable ? null : (
+      <a class="dock__btn" href="/table" aria-label="Book a table — set one before you arrive">
+        Book a table
+      </a>
+    )
+  }
+</nav>
+
+<style>
+  .dock {
+    /* Hidden until the viewport is narrow enough that the top bar starts dropping things. `display: none`
+       rather than opacity 0 or a transform off-screen: a dock nobody can see must not be a stop the
+       keyboard has to walk past, and the runtime harness counts exactly that. */
+    display: none;
+  }
+
+  @media (max-width: 720px) {
+    .dock {
+      position: fixed;
+      inset: auto 0 0 0;
+      z-index: 55;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      gap: 0.5rem;
+      padding: 0.55rem var(--gutter) calc(0.55rem + env(safe-area-inset-bottom, 0px));
+      background: color-mix(in oklab, var(--bg-0) 82%, transparent);
+      backdrop-filter: saturate(140%) blur(14px);
+      border-top: 1px solid color-mix(in oklab, var(--teal) 14%, transparent);
+    }
+  }
+
+  .dock__btn {
+    display: grid;
+    place-content: center;
+    min-height: 44px;
+    padding: 0.55rem 0.4rem;
+    border: 1px solid color-mix(in oklab, var(--teal) 30%, transparent);
+    border-radius: 999px;
+    font-size: var(--step--1);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--mist);
+    text-align: center;
+    text-decoration: none;
+    background: color-mix(in oklab, var(--bg-1) 70%, transparent);
+  }
+
+  /* The one action the restaurant is paid for gets the filled treatment; the other two stay quiet. */
+  .dock__btn--go {
+    color: var(--bg-0);
+    background: var(--teal);
+    border-color: var(--teal);
+  }
+
+  .dock__btn:active {
+    transform: translateY(1px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dock__btn:active {
+      transform: none;
+    }
+  }
+</style>
