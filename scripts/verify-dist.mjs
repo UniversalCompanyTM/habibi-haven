@@ -76,9 +76,9 @@ if (!fails.length) ok("entry graph", `three (${threeChunk[0] ?? "n/a"}) is refer
 // `data-lines` was on this list from a draft contract and appears in neither component: a phantom
 // requirement the verifier invented, caught by grepping the source rather than by fixing the site.
 const CONTRACTS = {
-  "/": ["data-dial", "data-dial-input", "data-scene", "data-door", "data-reveal", "data-cursor", "data-ring", "data-kin"],
+  "/": ["data-dial", "data-dial-input", "data-scene", "data-door", "data-reveal", "data-cursor", "data-ring", "data-kin", "data-magnetic"],
   "/menu": ["data-explorer", "data-q", "data-sort", "data-band", "data-min", "data-max", "data-tag", "data-reset", "data-count", "data-groups", "data-group", "data-subgroup", "data-card", "data-add", "data-signed"],
-  "/table": ["data-builder", "data-origin", "data-phone", "data-party", "data-card", "data-add"],
+  "/table": ["data-builder", "data-origin", "data-phone", "data-party", "data-card", "data-add", "data-magnetic"],
   "/visit": ["data-dial", "data-dial-input"],
 };
 for (const [route, needed] of Object.entries(CONTRACTS)) {

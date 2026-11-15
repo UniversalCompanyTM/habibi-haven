@@ -265,6 +265,30 @@ const door = (async () => {
       aboveFoldHidden: [...document.querySelectorAll("[data-reveal]")]
         .filter((el) => el.getBoundingClientRect().top < innerHeight && getComputedStyle(el).opacity === "0").length,
       cursor: !!document.querySelector("[data-cursor]"),
+      // Magnetic pull: the cursor script reads [data-magnetic], so the hook has to exist in markup and the
+      // element has to actually move. A feature whose selector nothing emits is only a comment, and the
+      // release matters as much as the pull — a leaning button the guest has walked away from is a defect.
+      magnet: (() => {
+        const el = document.querySelector("[data-magnetic]");
+        const fine = matchMedia("(pointer: fine)").matches;
+        if (!el) return { present: false, fine };
+        const box = el.getBoundingClientRect();
+        el.dispatchEvent(new PointerEvent("pointermove", {
+          clientX: box.left + box.width * 0.85,
+          clientY: box.top + box.height * 0.5,
+          bubbles: true,
+          pointerType: "mouse",
+        }));
+        const moved = el.style.translate;
+        document.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true, pointerType: "mouse" }));
+        return {
+          present: true,
+          fine,
+          reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
+          moved,
+          released: el.style.translate === "",
+        };
+      })(),
     };
   `);
   const withCanvas = await pixelStats(await shot());
@@ -322,6 +346,11 @@ const door = (async () => {
   if (facts.hasCanvas && !contributed) failures.push("/ the door canvas is mounted but changes no pixels — it is rendering nothing over the photograph");
   if (facts.hasCanvas && !facts.live) failures.push("/ the door canvas mounted but never faded in (data-live absent)");
   if (facts.aboveFoldHidden > 0) failures.push(`/ ${facts.aboveFoldHidden} reveal element(s) are above the fold and stuck at opacity 0`);
+  if (!facts.magnet.present) failures.push("/ emits no [data-magnetic] target, so the pull the cursor script implements never happens");
+  else if (facts.magnet.fine && !facts.magnet.reduced && !facts.magnet.moved)
+    failures.push(`/ the magnet did not move: a pointermove near the edge of the hero button left translate "${facts.magnet.moved}"`);
+  else if (facts.magnet.fine && !facts.magnet.reduced && facts.magnet.moved && !facts.magnet.released)
+    failures.push(`/ the magnetised button kept its offset after the pointer left the document: translate "${facts.magnet.moved}"`);
   if (reveal.missed > 0)
     failures.push(`/ ${reveal.missed} of ${reveal.total} reveal elements were still invisible after the whole page was walked: ${reveal.which.join(", ")}`);
   if (dial.at20.hour === dial.before.hour) failures.push("/ the dial did not write --hour — the light rig is not coupled");

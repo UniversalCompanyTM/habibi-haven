@@ -80,8 +80,8 @@ const rooms = [
         straight from the kitchen's own menu data, median {money(menu.meta.median)}.
       </p>
       <div class="hero__actions">
-        <a class="btn" href="/table">Set your table</a>
-        <a class="btn btn--ghost" href="/menu">Read the menu</a>
+        <a class="btn" href="/table" data-magnetic="0.3">Set your table</a>
+        <a class="btn btn--ghost" href="/menu" data-magnetic="0.18">Read the menu</a>
         <a class="btn btn--ghost" href={f.socials.order} target="_blank" rel="noopener noreferrer">
           Order for delivery
         </a>
@@ -253,6 +253,7 @@ const rooms = [
                   {r.rank ? <span class="chip">{r.rank}</span> : null}
                 </div>
                 <p class="meta dim">{r.read}</p>
+                {r.price ? <p class="meta">{r.price}</p> : null}
                 {r.note ? <p class="meta warn">{r.note}</p> : null}
                 <a class="link-arrow" href={r.url} target="_blank" rel="noopener noreferrer">
                   Read it on {r.panel}
@@ -313,8 +314,8 @@ const rooms = [
           the floor staff reply as they always have.
         </p>
         <div class="row-wrap">
-          <a class="btn" href="/table">Build a table</a>
-          <a class="btn btn--ghost" href={`https://wa.me/${f.whatsapp}`} target="_blank" rel="noopener noreferrer">
+          <a class="btn" href="/table" data-magnetic="0.3">Build a table</a>
+          <a class="btn btn--ghost" data-magnetic="0.18" href={`https://wa.me/${f.whatsapp}`} target="_blank" rel="noopener noreferrer">
             {f.phone}
           </a>
         </div>

@@ -130,7 +130,11 @@ const change = nextChange();
     <p class="meta warn" data-unavailable hidden></p>
 
     <div class="stack" style="margin-top:0.4rem">
-      <a class="btn btn--wide" data-whatsapp href={initial.count ? "#" : "#"}>Send it on WhatsApp</a>
+      <!-- The href the server prints is the plain "message the restaurant" link, and the script replaces it
+           with the one carrying the table as soon as there is a table to carry. It used to be
+           `initial.count ? "#" : "#"` — both arms the same value, so a guest with JavaScript switched off
+           got a link that jumped to the top of the page instead of a way to book. -->
+      <a class="btn btn--wide" data-whatsapp data-magnetic="0.3" href={`https://wa.me/${f.whatsapp}`}>Send it on WhatsApp</a>
       <div class="row-wrap">
         <button type="button" class="btn btn--small btn--ghost" data-copy-link>Copy this table as a link</button>
         <button type="button" class="btn btn--small btn--ghost" data-clear>Empty the table</button>

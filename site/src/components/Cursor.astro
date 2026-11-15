@@ -78,7 +78,18 @@
 
     addEventListener("pointerdown", () => ring.setAttribute("data-hot", ""), { passive: true });
     addEventListener("pointerup", () => ring.removeAttribute("data-hot"), { passive: true });
+
+    // A pointer that leaves the window sends no further pointermove, so the last magnetised button would
+    // keep its offset forever: the guest comes back to a call-to-action leaning toward nobody. Same for
+    // the tab losing focus. Releasing both is what makes the pull safe to put on real links.
+    const release = () => {
+      magnetised?.style.removeProperty("translate");
+      ring.removeAttribute("data-hot");
+    };
+    document.addEventListener("pointerleave", release, { passive: true });
+
     addEventListener("blur", () => {
+      release();
       document.body.classList.remove("cursor-on");
       cancelAnimationFrame(raf);
       visible = false;
