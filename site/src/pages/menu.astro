@@ -1,0 +1,78 @@
+---
+// site/src/pages/menu.astro — every dish the kitchen lists, with the filter on top of it.
+//
+// No curtain here. The one job of this page is to let someone find the price of fish, and a splash
+// screen in front of that is impolite, so `loader` is deliberately absent.
+import Base from "../layouts/Base.astro";
+import menu from "../data/menu.json";
+import MenuExplorer from "../components/MenuExplorer.astro";
+import HoursClock from "../components/HoursClock.astro";
+
+const f = menu.meta.facts;
+const rooms = menu.families.map((family) => ({
+  id: family.id,
+  label: family.label,
+  count: family.sections.reduce((sum, s) => sum + s.count, 0),
+  sections: family.sections.length,
+}));
+---
+
+<Base
+  title="The menu, by room — Habibi Haven, Koinange Street"
+  description={`All ${menu.meta.items} dishes and drinks Habibi Haven lists, with their prices in Kenyan shillings, from breakfast to the bar. Search, filter by price and tag, and put anything on a table before you call.`}
+>
+  <section class="stage stage--tight">
+    <div class="shell">
+      <p class="eyebrow">The menu, by room</p>
+      <h1 class="display" data-kin>{menu.meta.items} things, exactly as they are listed</h1>
+      <p class="lede">
+        Read from the kitchen's own menu data on {menu.meta.capturedAt.slice(0, 10)} — {menu.meta.families}
+        rooms, {menu.meta.sections} sections, prices in Kenyan shillings, median {menu.meta.median}. The
+        filter only ever hides something; nothing here is generated, renamed or rounded.
+      </p>
+
+      <nav class="row-wrap" aria-label="Jump to a room" style="margin-top:1.2rem">
+        {
+          rooms.map((room) => (
+            <a class="chip" href={`/menu#${room.id}`}>
+              {room.label} <span class="dim num">{room.count}</span>
+            </a>
+          ))
+        }
+      </nav>
+
+      <p class="meta dim" style="margin-top:0.9rem">
+        {menu.meta.described} of {menu.meta.items} carry a description upstream. The rest print the
+        item as the kitchen lists it, and say so on the card rather than inventing appetite.
+      </p>
+    </div>
+  </section>
+
+  <section class="stage stage--tight">
+    <div class="shell">
+      <MenuExplorer featuredFirst />
+    </div>
+  </section>
+
+  <section class="stage stage--tight">
+    <div class="shell grid-2">
+      <div class="stack">
+        <h2 class="display--h2" data-kin>Table before you come</h2>
+        <p class="lede">
+          Anything on this page can go onto a table with a price next to it, then to the restaurant as
+          one message. It is a wish-list, not a booking — there is no reservation system behind this
+          site, and the site does not pretend there is one.
+        </p>
+        <div class="row-wrap">
+          <a class="btn" href="/table">Set your table</a>
+          <a class="btn btn--ghost" href={`https://wa.me/${f.whatsapp}`} target="_blank" rel="noopener noreferrer">
+            {f.phone}
+          </a>
+        </div>
+      </div>
+      <div class="panel">
+        <HoursClock name="menu" />
+      </div>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,73 @@
+---
+// SocialLinks.astro — the brand's own accounts, from the handles on record.
+//
+// URLs come from menu.json meta.facts.socials, which build-content.mjs wrote from
+// research/BRAND-FACTS.md — not typed into markup, so a handle that changes in the research changes
+// here on the next build. `rel` includes nofollow only where the destination is not the business's
+// own property (the ordering page is theirs, so it does not need it).
+//
+// It reads the facts itself rather than requiring a prop: there is one restaurant, so page-specific
+// socials do not exist, and an optional prop with no default is a latent crash — the first build of
+// this site died on `<SocialLinks size="stack" />` in index.astro for exactly that reason. The prop
+// stays so a caller can still pass a subset (Footer does), but omitting it is now correct, not fatal.
+import menu from "../data/menu.json";
+
+const { facts = menu.meta.facts, size = "row" } = Astro.props;
+const s = facts.socials;
+
+const items = [
+  {
+    href: s.instagram,
+    label: "Instagram",
+    handle: "@habibi.haven",
+    path: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.3 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .3-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.3-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.3 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.1a6.7 6.7 0 1 0 0 13.4 6.7 6.7 0 0 0 0-13.4Zm0 1.9a4.8 4.8 0 1 1 0 9.6 4.8 4.8 0 0 1 0-9.6Zm6.9-2.3a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0Z",
+  },
+  {
+    href: s.tiktok,
+    label: "TikTok",
+    handle: "@habibi.haven",
+    path: "M16.5 2h-2.6v13.1a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6 0 .9.1V9.6a5.6 5.6 0 0 0-.9-.1 5.5 5.5 0 1 0 5.5 5.5V8.3a6.6 6.6 0 0 0 3.8 1.2V6.8a3.9 3.9 0 0 1-2.9-1.3 3.7 3.7 0 0 1-.9-2.5V2Z",
+  },
+  {
+    href: s.facebook,
+    label: "Facebook",
+    handle: "Habibi Haven",
+    path: "M13.5 21v-7.3h2.5l.4-2.9h-2.9V9.1c0-.8.2-1.4 1.4-1.4h1.6V5c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.5-4 4.1v2.3H8v2.9h2.6V21h2.9Z",
+  },
+  {
+    href: `https://wa.me/${facts.whatsapp}`,
+    label: "WhatsApp",
+    handle: facts.phone,
+    path: "M12 2a10 10 0 0 0-8.6 15L2 22l5.1-1.3A10 10 0 1 0 12 2Zm5.6 14.2c-.2.6-1.2 1.2-1.7 1.2-.5.1-1 .1-1.7-.1a11 11 0 0 1-5.6-4.9c-.5-.9-.8-1.9-.5-2.7.1-.4.5-1 .8-1.1.3-.2.7-.1.9 0l.6 1.2c.1.3 0 .5-.2.7l-.4.5c-.1.2-.2.3 0 .6.5.9 1.6 2 2.6 2.4.3.1.4 0 .6-.2l.5-.5c.2-.2.4-.3.7-.2l1.2.6c.2.3.2.7-.1 1.3Z",
+  },
+  {
+    href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(facts.mapsQuery)}`,
+    label: "Maps",
+    handle: facts.plusCode,
+    path: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z",
+  },
+  {
+    href: s.order,
+    label: "Order",
+    handle: "menu.or.ke",
+    // a bag rather than a generic arrow, so the row reads as "buy from here" and not "another link"
+    path: "M6.8 8.2V7a5.2 5.2 0 0 1 10.4 0v1.2H21l-1.1 11.3a2 2 0 0 1-2 1.8H6.1a2 2 0 0 1-2-1.8L3 8.2h3.8Zm2.8 0h4.8V7a2.4 2.4 0 0 0-4.8 0v1.2Z",
+  },
+];
+---
+
+<ul class={size === "row" ? "socials" : "stack"} data-social>
+  {
+    items.map((i) => (
+      <li>
+        <a class="social" href={i.href} target="_blank" rel="noopener noreferrer" aria-label={`${i.label}: ${i.handle}`}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d={i.path} />
+          </svg>
+          {i.label}
+          {size === "row" ? null : <span class="dim"> · {i.handle}</span>}
+        </a>
+      </li>
+    ))
+  }
+</ul>

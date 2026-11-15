@@ -1,0 +1,21 @@
+{
+  "name": "habibi-haven",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Habibi Haven Restaurant — concept site, private preview.",
+  "scripts": {
+    "dev": "astro dev",
+    "content": "node ../scripts/ingest.mjs && node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
+    "data": "node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
+    "prebuild": "node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "node ../scripts/check-ssr-safety.mjs && node ../scripts/check-astro-parse.mjs && node ../scripts/check-css.mjs && node ../tests/run.mjs && node ../scripts/check-drift.mjs",
+    "test": "node ../tests/run.mjs"
+  },
+  "dependencies": {
+    "astro": "^5.1.1",
+    "three": "^0.171.0"
+  }
+}

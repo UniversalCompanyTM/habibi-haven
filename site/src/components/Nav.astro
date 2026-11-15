@@ -1,0 +1,78 @@
+---
+// Nav.astro — the badge, four routes, and the one live fact a diner actually checks.
+//
+// The status pill is computed server-side from lib/hours.mjs (so it is correct in the HTML a crawler
+// or a JS-off visitor gets) and then re-computed on the client from the same module. The client tick
+// is 30 seconds, not requestAnimationFrame: it is a countdown to closing time, and nothing on screen
+// needs to know more often than that.
+import { isOpen, nextChange, nairobiMinutes, minutesToLabel } from "../lib/hours.mjs";
+
+const { facts, rig, current = "/" } = Astro.props;
+const open = isOpen();
+const change = nextChange();
+
+const links = [
+  { href: "/menu", label: "Menu" },
+  { href: "/table", label: "Set a table" },
+  { href: "/visit", label: "Visit" },
+];
+---
+
+<header class="nav" data-hour={rig.hour}>
+  <a class="brand" href="/" aria-label="Habibi Haven — home">
+    <img src="/brand/habibi-haven-badge.jpg" alt="Habibi Haven badge: a teal mandala ring with HABIBI HAVEN around it and HH in the centre" width="38" height="38" />
+    <span class="brand__type">
+      <b>Habibi Haven</b>
+      <span>Koinange Street</span>
+    </span>
+  </a>
+
+  <nav class="nav__links" aria-label="Primary">
+    {
+      links.map((l) => (
+        <a
+          class="nav__link"
+          href={l.href}
+          aria-current={current === l.href ? "page" : undefined}
+        >
+          {l.label}
+        </a>
+      ))
+    }
+    <a class="btn btn--small" href="https://wa.me/254116880000" rel="noopener" target="_blank">
+      Order on WhatsApp
+    </a>
+  </nav>
+
+  <p class="nav__status" data-status>
+    <span class="pulse" data-closed={open ? undefined : ""} aria-hidden="true"></span>
+    <span data-status-text>
+      {open ? "Open now" : "Closed"} · {change.label} · {minutesToLabel(nairobiMinutes())} Nairobi
+    </span>
+  </p>
+</header>
+
+<style>
+  .brand__type {
+    display: grid;
+    gap: 0.12rem;
+  }
+</style>
+
+<script>
+  import { isOpen, nextChange, nairobiMinutes, minutesToLabel } from "../lib/hours.mjs";
+
+  const text = document.querySelector("[data-status-text]");
+  const pulse = document.querySelector(".pulse");
+
+  function tick() {
+    if (!text) return;
+    const open = isOpen();
+    text.textContent = `${open ? "Open now" : "Closed"} · ${nextChange().label} · ${minutesToLabel(nairobiMinutes())} Nairobi`;
+    if (pulse) pulse.toggleAttribute("data-closed", !open);
+  }
+
+  tick();
+  // A minute of drift is invisible to a guest; a rAF loop burning CPU to keep a clock current is not.
+  setInterval(tick, 30_000);
+</script>

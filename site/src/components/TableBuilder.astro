@@ -1,0 +1,397 @@
+---
+// TableBuilder.astro — "set your table", the centre of the concept.
+//
+// What it is: a wish-list you can send. What it is not: a booking. There is no availability data
+// upstream and no kitchen system to write into, so nothing here can promise a table — the handoff is
+// a WhatsApp message the guest sends themselves, with the exact lines, the exact prices, and a link
+// back to this same table. That distinction is written into the copy twice, because a configurator
+// that looks like a checkout and isn't one is how a restaurant gets angry phone calls.
+//
+// The maths is all in lib/table.mjs and is covered by tests/run.mjs; the state is in
+// lib/table-client.mjs. This file only draws, and re-draws when "hh:table" fires — so a card added on
+// /menu and a row changed here go through the same code path.
+import menu from "../data/menu.json";
+import { money, partyAdvice, signatureItems, totals as computeTotals } from "../lib/table.mjs";
+import { hourToLabel, OPEN_MINUTES, CLOSE_MINUTES, nextChange, nairobiMinutes } from "../lib/hours.mjs";
+import { getTable } from "../lib/table-client.mjs";
+
+const f = menu.meta.facts;
+const signatures = signatureItems(menu);
+const origin = Astro.site ?? new URL("https://habibi-haven.example");
+
+// Half-hour slots across the day they are actually open. The last one is 22:30 rather than 23:00:
+// asking a guest to arrive at the minute the kitchen closes would be a rude interface.
+const slots: string[] = [];
+for (let m = OPEN_MINUTES; m <= CLOSE_MINUTES - 30; m += 30) slots.push(hourToLabel(m));
+const uniqueSlots = [...new Set(slots)];
+
+const initialTable = getTable();
+const initial = computeTotals(menu, initialTable);
+const change = nextChange();
+---
+
+<div class="builder" data-builder data-origin={origin.href} data-phone={f.whatsapp}>
+  <div class="stack-lg">
+    <section class="panel" style="padding:1.1rem">
+      <h2 class="display--h3" id="party-label">How many of you</h2>
+      <div class="party" role="group" aria-labelledby="party-label">
+        <div class="stepper">
+          <button type="button" data-party="-1" aria-label="One guest fewer">−</button>
+          <output class="num" data-party-count aria-live="polite">{initialTable.party}</output>
+          <button type="button" data-party="1" aria-label="One guest more">+</button>
+        </div>
+        <div class="party__dots" data-party-dots aria-hidden="true"></div>
+        <span class="meta" data-party-note>
+          {initialTable.party === 1 ? "One seat" : `${initialTable.party} seats`} · their own listing says
+          Ksh 1,000–2,000 a head
+        </span>
+      </div>
+      <!-- hidden in the server HTML because partyAdvice() answers null for the common case (a party
+           that divides evenly); render() un-hides it when there is something to say. Without this the
+           empty slot keeps its dashed border and occupies grid space on first paint, and with JS off it
+           stays an empty box forever. -->
+      <p class="meta" data-advice hidden>{initial.count ? partyAdvice(initial, initialTable.party) ?? "" : ""}</p>
+    </section>
+
+    <section class="panel" style="padding:1.1rem">
+      <h2 class="display--h3" id="when-label">When you fancy it</h2>
+      <div class="explorer__tools" role="group" aria-labelledby="when-label">
+        <label class="field">
+          <span class="dim">Day</span>
+          <input type="date" data-when-day />
+        </label>
+        <label class="field">
+          <span class="dim">Time</span>
+          <select data-when-time aria-label="Time, in half-hour slots they are open">
+            {uniqueSlots.map((slot) => <option value={slot}>{slot}</option>)}
+          </select>
+        </label>
+      </div>
+      <p class="meta">
+        They are open {f.hoursOfRecord.open}–{f.hoursOfRecord.close} every day, {change.label} at the moment you loaded this
+        page. Choosing a slot here does not reserve it — it tells the floor staff what you want.
+      </p>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2 class="display--h2" data-kin>Start from the house set</h2>
+        <span class="meta">{signatures.length} rows the restaurant is known for</span>
+      </div>
+      <div class="deck deck--wide">
+        {
+          signatures.map((item) => (
+            <article class="card" data-card={item.id}>
+              <div class="card__row">
+                <h3 class="card__name">{item.name}</h3>
+                <p class="card__price">{money(item.price)}</p>
+              </div>
+              <p class="card__desc">{item.signatureRole}</p>
+              <div class="card__foot">
+                <button
+                  type="button"
+                  class="btn btn--small btn--ghost"
+                  data-add={item.id}
+                  aria-label={`Add ${item.name} to your table`}
+                >
+                  Add
+                </button>
+                <a class="link-arrow" href={`/menu#${item.section}`}>see the section</a>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+      <div class="row-wrap" style="margin-top:1rem">
+        <button type="button" class="btn btn--ghost" data-add-all>Put the whole house set on the table</button>
+      </div>
+    </section>
+  </div>
+
+  <aside class="sheet panel" aria-label="Your table">
+    <h2 class="display--h3">Your table</h2>
+
+    <ol class="sheet__lines" data-lines></ol>
+
+    <p class="empty-note" data-empty>
+      Nothing on it yet. Add anything from this page or from <a class="link-arrow" href="/menu">the full menu</a> —
+      it stays here between visits, on this device, until you empty it.
+    </p>
+
+    <div class="sheet__total">
+      <span>Estimated</span>
+      <b data-total>{money(initial.subtotal)}</b>
+    </div>
+    <p class="meta" data-breakdown>
+      {initial.count
+        ? `${initial.count} plates · ${money(initial.perPerson)} a head across ${initialTable.party}`
+        : "No plates yet."}
+    </p>
+    <p class="meta warn" data-unavailable hidden></p>
+
+    <div class="stack" style="margin-top:0.4rem">
+      <a class="btn btn--wide" data-whatsapp href={initial.count ? "#" : "#"}>Send it on WhatsApp</a>
+      <div class="row-wrap">
+        <button type="button" class="btn btn--small btn--ghost" data-copy-link>Copy this table as a link</button>
+        <button type="button" class="btn btn--small btn--ghost" data-clear>Empty the table</button>
+      </div>
+      <p class="meta" data-copy-state aria-live="polite"></p>
+    </div>
+
+    <p class="meta" style="margin-top:0.6rem">
+      This is a wish-list, not a booking. Nothing leaves your browser until you press the button, and the
+      message opens in WhatsApp so you are the one who sends it.
+    </p>
+  </aside>
+</div>
+
+<script>
+  import menu from "../data/menu.json";
+  import {
+    EVENT,
+    addToTable,
+    changeOption,
+    changeQty,
+    clearTable,
+    dropLine,
+    getTable,
+    setParty,
+    tableLink,
+  } from "../lib/table-client.mjs";
+  import { findItem, money, partyAdvice, totals, whatsappUrl } from "../lib/table.mjs";
+  import { UTC_OFFSET_MINUTES, hourToLabel, nairobiHour } from "../lib/hours.mjs";
+
+  const builder = document.querySelector<HTMLElement>("[data-builder]");
+
+  if (builder) {
+    const origin = builder.dataset.origin ?? location.origin;
+    const signatureIds = Array.from(builder.querySelectorAll<HTMLElement>("[data-add]")).map((n) => n.dataset.add ?? "");
+    const linesEl = builder.querySelector<HTMLOListElement>("[data-lines]")!;
+    const emptyEl = builder.querySelector<HTMLElement>("[data-empty]")!;
+    const totalEl = builder.querySelector<HTMLElement>("[data-total]")!;
+    const breakdownEl = builder.querySelector<HTMLElement>("[data-breakdown]")!;
+    const unavailableEl = builder.querySelector<HTMLElement>("[data-unavailable]")!;
+    const adviceEl = builder.querySelector<HTMLElement>("[data-advice]")!;
+    const waEl = builder.querySelector<HTMLAnchorElement>("[data-whatsapp]")!;
+    const partyCountEl = builder.querySelector<HTMLElement>("[data-party-count]")!;
+    const partyNoteEl = builder.querySelector<HTMLElement>("[data-party-note]")!;
+    const dotsEl = builder.querySelector<HTMLElement>("[data-party-dots]")!;
+    const dayEl = builder.querySelector<HTMLInputElement>("[data-when-day]")!;
+    const timeEl = builder.querySelector<HTMLSelectElement>("[data-when-time]")!;
+    const copyStateEl = builder.querySelector<HTMLElement>("[data-copy-state]")!;
+
+    // Today in Nairobi, not today on the laptop: a guest in Dubai picking "yesterday" because their
+    // clock is two hours behind is a bug the site can simply refuse to have.
+    const nairobiToday = () => {
+      const utc = Date.now() + new Date().getTimezoneOffset() * 60_000;
+      return new Date(utc + UTC_OFFSET_MINUTES * 60_000);
+    };
+    if (!dayEl.value) {
+      const t = nairobiToday();
+      dayEl.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      dayEl.min = dayEl.value;
+    }
+    // Land on the next half-hour they are open, so the default is something a guest could actually use.
+    const pickDefaultSlot = () => {
+      const now = nairobiHour();
+      const next = Math.max(6.5, Math.min(22.5, Math.ceil((now + 0.5) * 2) / 2));
+      const label = hourToLabel(next);
+      if (Array.from(timeEl.options).some((o) => o.value === label)) timeEl.value = label;
+    };
+    pickDefaultSlot();
+
+    const whenLabel = () => {
+      const date = dayEl.value ? new Date(`${dayEl.value}T12:00:00Z`) : null;
+      const day = date
+        ? date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+        : "Today";
+      return `${day}, ${timeEl.value}`;
+    };
+
+    /* ---------------- the rows ---------------- */
+
+    const rowFor = (row: ReturnType<typeof totals>["rows"][number]) => {
+      const item = findItem(menu, row.id);
+      const li = document.createElement("li");
+      li.className = "line";
+      li.dataset.key = row.key;
+
+      const name = document.createElement("div");
+      name.className = "line__name";
+      const bold = document.createElement("b");
+      bold.textContent = row.name;
+      const note = document.createElement("span");
+      note.textContent = `${money(row.unit)} × ${row.qty}${row.unavailable ? " · showing unavailable" : ""}`;
+      if (row.unavailable) note.className = "warn";
+      name.append(bold, note);
+      li.append(name);
+
+      const stepper = document.createElement("div");
+      stepper.className = "stepper";
+      const minus = document.createElement("button");
+      minus.type = "button";
+      minus.textContent = "−";
+      minus.dataset.dec = row.key;
+      minus.setAttribute("aria-label", `One fewer ${row.name}`);
+      const out = document.createElement("output");
+      out.textContent = String(row.qty);
+      out.className = "num";
+      const plus = document.createElement("button");
+      plus.type = "button";
+      plus.textContent = "+";
+      plus.dataset.inc = row.key;
+      plus.setAttribute("aria-label", `One more ${row.name}`);
+      stepper.append(minus, out, plus);
+      li.append(stepper);
+
+      const kill = document.createElement("button");
+      kill.type = "button";
+      kill.className = "line__kill";
+      kill.textContent = "×";
+      kill.dataset.drop = row.key;
+      kill.setAttribute("aria-label", `Remove ${row.name} from your table`);
+      li.append(kill);
+
+      // A dish with a chosen side gets its select inside the row, so the choice can be changed here
+      // rather than by removing the line and going back to the menu to rebuild it.
+      if (item?.accompaniments?.options?.length) {
+        const wrap = document.createElement("label");
+        wrap.className = "line__option";
+        const text = document.createElement("span");
+        text.className = "meta";
+        text.textContent = "Side";
+        const select = document.createElement("select");
+        select.dataset.option = row.key;
+        select.setAttribute("aria-label", `Accompaniment for ${row.name}`);
+        for (const option of item.accompaniments.options) {
+          const o = document.createElement("option");
+          o.value = option;
+          o.textContent = option;
+          o.selected = option === row.option;
+          select.append(o);
+        }
+        wrap.append(text, select);
+        li.append(wrap);
+      }
+      return li;
+    };
+
+    const splitKey = (key: string) => {
+      const at = key.indexOf("::");
+      return at === -1 ? { id: key, option: undefined as string | undefined } : { id: key.slice(0, at), option: key.slice(at + 2) };
+    };
+
+    const render = () => {
+      const table = getTable();
+      const t = totals(menu, table);
+      linesEl.textContent = "";
+      for (const row of t.rows) linesEl.append(rowFor(row));
+      emptyEl.hidden = t.rows.length > 0;
+      totalEl.textContent = money(t.subtotal);
+      breakdownEl.textContent = t.count
+        ? `${t.count} plate${t.count === 1 ? "" : "s"} · ${money(t.perPerson)} a head across ${table.party}`
+        : "No plates yet.";
+      unavailableEl.hidden = t.unavailable === 0;
+      unavailableEl.textContent = t.unavailable
+        ? `${t.unavailable} of those rows are showing as unavailable on their own menu today. The kitchen can usually swap them — the message says so.`
+        : "";
+      const advice = partyAdvice(t, table.party);
+      adviceEl.textContent = advice ?? "";
+      adviceEl.hidden = !advice;
+      partyCountEl.textContent = String(table.party);
+      partyNoteEl.textContent = `${table.party === 1 ? "One seat" : `${table.party} seats`} · their own listing says Ksh 1,000–2,000 a head`;
+      dotsEl.textContent = "";
+      for (let i = 0; i < Math.min(table.party, 16); i += 1) {
+        const dot = document.createElement("span");
+        dot.className = "dot";
+        dot.setAttribute("data-on", "");
+        dotsEl.append(dot);
+      }
+      if (t.count) {
+        waEl.href = whatsappUrl(menu, table, whenLabel(), origin);
+        waEl.removeAttribute("aria-disabled");
+        waEl.textContent = "Send it on WhatsApp";
+      } else {
+        waEl.href = "#";
+        waEl.setAttribute("aria-disabled", "true");
+        waEl.textContent = "Add something first";
+      }
+      // The house-set buttons on this very page say what they have already done, so pressing "Add"
+      // twice is visibly two plates rather than a mystery.
+      for (const id of signatureIds) {
+        const button = builder.querySelector<HTMLElement>(`[data-add="${CSS.escape(id)}"]`);
+        const row = t.rows.find((r) => r.id === id);
+        if (button) button.textContent = row ? `On the table · ${row.qty}` : "Add";
+      }
+    };
+
+    document.addEventListener(EVENT, render);
+
+    /* ---------------- the controls ---------------- */
+
+    linesEl.addEventListener("change", (event: Event) => {
+      const select = (event.target as HTMLElement)?.closest?.<HTMLSelectElement>("[data-option]");
+      if (!select) return;
+      const { id, option } = splitKey(select.dataset.option ?? "");
+      changeOption(id, option, select.value);
+    });
+
+    linesEl.addEventListener("click", (event: MouseEvent) => {
+      const button = (event.target as HTMLElement)?.closest?.<HTMLElement>("[data-inc],[data-dec],[data-drop]");
+      if (!button) return;
+      const key = button.dataset.inc ?? button.dataset.dec ?? button.dataset.drop ?? "";
+      const { id, option } = splitKey(key);
+      const line = getTable().lines.find((l) => (l.option ? `${l.id}::${l.option}` : l.id) === key);
+      if (!line) return;
+      if (button.dataset.drop) dropLine(id, option);
+      else changeQty(id, option, line.qty + (button.dataset.inc ? 1 : -1));
+    });
+
+    builder.addEventListener("click", (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const add = target?.closest?.<HTMLElement>("[data-add]");
+      if (add) {
+        addToTable(add.dataset.add ?? "");
+        return;
+      }
+      const all = target?.closest?.("[data-add-all]");
+      if (all) {
+        for (const id of signatureIds) addToTable(id);
+        return;
+      }
+      const party = target?.closest?.<HTMLElement>("[data-party]");
+      if (party) {
+        const delta = Number(party.dataset.party ?? 0);
+        setParty(Math.max(1, Math.min(30, getTable().party + delta)));
+        return;
+      }
+      const copy = target?.closest?.("[data-copy-link]");
+      if (copy) {
+        const link = tableLink();
+        const done = (ok: boolean) => {
+          copyStateEl.textContent = ok
+            ? "Link copied — it opens this exact table on any device."
+            : `Copy it manually: ${link}`;
+        };
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(link).then(() => done(true), () => done(false));
+        else done(false);
+        return;
+      }
+      if (target?.closest?.("[data-clear]")) {
+        clearTable();
+        copyStateEl.textContent = "";
+        return;
+      }
+      if (target?.closest?.("[data-whatsapp]") && waEl.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+        copyStateEl.textContent = "Nothing to send yet — add a dish first.";
+      }
+    });
+
+    dayEl.addEventListener("change", render);
+    timeEl.addEventListener("change", render);
+
+    render();
+  }
+</script>
+

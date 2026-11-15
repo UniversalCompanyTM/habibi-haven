@@ -1,0 +1,270 @@
+---
+// DoorScene.astro — the WebGL threshold, mounted inside the hero's `[data-scene]` div.
+//
+// This file is the ONLY place in src/ that imports three.js, and it imports it dynamically, after the
+// capability gate has already said yes (ARCHITECTURE.md decision 5: "`three` is never in the entry graph
+// — only the gate-yes path dynamic-imports it"). A static import here would put ~600 kB into every page's
+// entry graph, which is the one failure mode of this slice. scenes/haven.js and scenes/rig.js take the
+// namespace as a parameter for exactly that reason.
+//
+// The CSS still is the renderer of record: `.hero__still` behind this canvas already paints the correct
+// look at every hour with no JavaScript at all. So this component adds a sibling canvas rather than
+// replacing anything, keeps the renderer transparent (`alpha: true`, no `scene.background`), and fades
+// itself in only after a frame has actually rendered. If the gate says no, if three fails to load, or if
+// context creation throws, nothing here runs far enough to hide the photograph.
+import { decide, readEnvironment } from "../lib/gate.mjs";
+
+const {
+  // Camera framing lives here rather than in haven.js so the scene module stays about contents.
+  position = [0, 1.62, 9.4] as [number, number, number],
+  target = [0, 1.78, -3.2] as [number, number, number],
+  fov = 38,
+  parallax = true,
+} = Astro.props;
+---
+
+<div
+  class="door-scene"
+  data-door
+  data-position={JSON.stringify(position)}
+  data-target={JSON.stringify(target)}
+  data-fov={String(fov)}
+  data-parallax={String(parallax)}
+></div>
+
+<style>
+  .door-scene {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .door-scene canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 900ms ease-out;
+  }
+
+  .door-scene canvas[data-live] {
+    opacity: 1;
+  }
+
+  /* Reduced motion still gets the room, just frozen: one frame at the current hour, then the loop is
+     gone. The fade would be the only movement left, so it goes too. */
+  @media (prefers-reduced-motion: reduce) {
+    .door-scene canvas {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  import { decide, readEnvironment } from "../lib/gate.mjs";
+  import { HOUR_EVENT } from "../lib/rig-client.mjs";
+  import { buildHaven } from "../scenes/haven.js";
+  import { readClock, readPalette, rigValues } from "../scenes/rig.js";
+
+  // The framing comes off the host element, not off the template. A `<script>` body in Astro is NOT
+  // interpolated — `{position}` here is plain JavaScript, an object shorthand naming a binding that does
+  // not exist, so it would compile and then throw `position is not defined` on the first frame. (Writing
+  // `{{ position }}` was worse: that is a syntax error, which is how this was first caught.) Data
+  // attributes are the framework-free way, they are readable in the DOM for debugging, and they keep the
+  // props next to the element they describe.
+  const host = document.querySelector<HTMLElement>("[data-door]");
+  const props = host
+    ? {
+        position: JSON.parse(host.dataset.position ?? "[0,1.62,9.4]") as [number, number, number],
+        target: JSON.parse(host.dataset.target ?? "[0,1.78,-3.2]") as [number, number, number],
+        fov: Number(host.dataset.fov ?? 38),
+        parallax: host.dataset.parallax !== "false",
+      }
+    : null;
+  const gate = decide(readEnvironment());
+  // `2d` and `poster` stop here: no canvas, no three, and the CSS still underneath stays exactly as it is.
+  if (host && props && (gate.tier === "full" || gate.tier === "lite")) {
+    // Three arrives only down this branch, and a failed chunk leaves the photograph untouched.
+    const THREE = await import("three").catch(() => null);
+    if (THREE) mount(THREE, host, gate, props);
+  }
+
+  function mount(THREE: any, host: HTMLElement, decision: ReturnType<typeof decide>, config: typeof props) {
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let renderer: InstanceType<typeof THREE.WebGLRenderer>;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        // Antialiasing is the first thing a weak device can afford to lose, and `lite` is precisely the
+        // tier that asked for fewer pixels per frame.
+        antialias: decision.tier === "full",
+        powerPreference: decision.tier === "full" ? "high-performance" : "default",
+      });
+    } catch {
+      return;
+    }
+
+    const canvas = renderer.domElement;
+    // The placeholder div is already aria-hidden, but the canvas is appended inside this component's own
+    // div, so it needs the attribute on its own before anything can reach it by keyboard or cursor.
+    canvas.setAttribute("aria-hidden", "true");
+    host.append(canvas);
+    // One canvas, one renderer, sized by CSS (.hero__scene canvas): the false argument stops three writing
+    // inline pixel sizes over those rules. The DPR cap is enforced twice on purpose — gate.mjs clamps the
+    // number, and ARCHITECTURE.md caps the pixels, so a hand-edited gate cannot ask for 3x.
+    renderer.setPixelRatio(Math.min(decision.dpr ?? 1, 2));
+    renderer.setSize(host.clientWidth, host.clientHeight, false);
+    // Set once, before the first render: changing toneMapping later flips materialProperties.toneMapping
+    // and recompiles every program. Brightness changes go through toneMappingExposure, which three refreshes
+    // on program use without a recompile.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(config.fov, 1, 0.1, 90);
+    camera.position.set(config.position[0], config.position[1], config.position[2]);
+    camera.lookAt(config.target[0], config.target[1], config.target[2]);
+
+    let haven = buildHaven(THREE, {
+      tier: decision.tier,
+      oneLight: decision.oneLight === true,
+      particleCap: decision.particleCap,
+    });
+    scene.add(haven.group);
+    scene.fog = haven.fog;
+
+    let values = rigValues(readClock().night, true);
+    haven.applyRig(values, readPalette());
+    haven.resize(host.clientHeight, renderer.getPixelRatio());
+    renderer.toneMappingExposure = values.exposure;
+    haven.update(0, 0, 0, values);
+    renderer.render(scene, camera);
+
+    const hero = host.closest<HTMLElement>(".hero") ?? host;
+    let pointerX = 0;
+    let pointerY = 0;
+    let scrollLean = 0;
+
+    // Drift is measured against the hero rather than the window so the lean reverses as you cross its
+    // centre, and stays a couple of degrees — an orbit would fight the photograph it sits on top of.
+    const onPointer = (event: PointerEvent) => {
+      const box = hero.getBoundingClientRect();
+      pointerX = ((event.clientX - box.left) / Math.max(box.width, 1) - 0.5) * 2;
+      pointerY = ((event.clientY - box.top) / Math.max(box.height, 1) - 0.5) * 2;
+    };
+
+    const onScroll = () => {
+      const box = hero.getBoundingClientRect();
+      scrollLean = Math.min(Math.max(-box.top / Math.max(box.height, 1), 0), 1);
+    };
+
+    // The clock is the only writer of --hour/--night; this is the read side of that contract, and the one
+    // place the scene learns what hour it is standing in.
+    const onHour = (event: Event) => {
+      const detail = (event as CustomEvent<{ night?: number; open?: boolean }>).detail;
+      values = rigValues(detail?.night ?? readClock().night, detail?.open);
+      haven.applyRig(values, readPalette());
+      renderer.toneMappingExposure = values.exposure;
+      if (reduced) renderStatic();
+    };
+
+    function renderStatic() {
+      haven.group.rotation.y = pointerX * 0.045;
+      haven.group.rotation.x = pointerY * 0.02 + scrollLean * 0.03;
+      haven.update(0, pointerX, pointerY, values);
+      renderer.render(scene, camera);
+    }
+
+    const observer = new ResizeObserver(() => {
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      if (!width || !height) return;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      haven.resize(height, renderer.getPixelRatio());
+      if (reduced) renderStatic();
+    });
+    observer.observe(host);
+
+    // ARCHITECTURE.md decision 5: "After init, 30 measured frames averaging >24ms downgrade full→lite
+    // once." At most once, because a device that recovers should not be rebuilt every few seconds.
+    let probeLeft = decision.tier === "full" ? 30 : 0;
+    let probeTotal = 0;
+    let previous = performance.now();
+    const started = previous;
+    let raf = 0;
+    let running = false;
+    let revealed = false;
+
+    const step = (now: number) => {
+      const delta = now - previous;
+      previous = now;
+      if (probeLeft > 0) {
+        probeTotal += delta;
+        probeLeft -= 1;
+        if (probeLeft === 0 && probeTotal / 30 > 24) {
+          probeLeft = -1;
+          downgradeToLite();
+        }
+      }
+      haven.update((now - started) / 1000, pointerX, pointerY, values);
+      haven.group.rotation.y += (pointerX * 0.045 - haven.group.rotation.y) * 0.06;
+      haven.group.rotation.x += (pointerY * 0.02 + scrollLean * 0.03 - haven.group.rotation.x) * 0.06;
+      renderer.render(scene, camera);
+      if (!revealed) {
+        revealed = true;
+        canvas.dataset.live = "";
+      }
+      raf = requestAnimationFrame(step);
+    };
+
+    function downgradeToLite() {
+      scene.remove(haven.group);
+      haven.dispose();
+      haven = buildHaven(THREE, { tier: "lite", oneLight: true, particleCap: 120 });
+      scene.add(haven.group);
+      scene.fog = haven.fog;
+      haven.applyRig(values, readPalette());
+      haven.resize(host.clientHeight, renderer.getPixelRatio());
+    }
+
+    const play = () => {
+      if (running || reduced || document.hidden) return;
+      running = true;
+      previous = performance.now();
+      raf = requestAnimationFrame(step);
+    };
+
+    const pause = () => {
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+
+    const onVisibility = () => (document.hidden ? pause() : play());
+
+    if (reduced) {
+      // One frame at the current hour, already rendered above; the loop is never created.
+      canvas.dataset.live = "";
+    } else {
+      addEventListener("pointermove", onPointer, { passive: true });
+      if (config.parallax) addEventListener("scroll", onScroll, { passive: true });
+      document.addEventListener("visibilitychange", onVisibility);
+      play();
+    }
+    document.addEventListener(HOUR_EVENT, onHour);
+
+    function stop() {
+      pause();
+      removeEventListener("pointermove", onPointer);
+      removeEventListener("scroll", onScroll);
+      removeEventListener("pagehide", stop);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener(HOUR_EVENT, onHour);
+      observer.disconnect();
+      haven.dispose();
+      renderer.dispose();
+    }
+    addEventListener("pagehide", stop);
+  }
+</script>

@@ -1,0 +1,100 @@
+{
+ "meta": {
+  "generatedBy": "scripts/sync-brand.mjs",
+  "files": 15,
+  "bytes": 705701,
+  "note": "Hashes verified against brand/ASSETS.md. Private preview only — photo rights are an open question."
+ },
+ "files": [
+  {
+   "file": "/brand/food-chicken-sandwich-fries.jpg",
+   "bytes": 21237,
+   "sha256_12": "cd26dbef2fb4",
+   "source": "brand/photos/food-chicken-sandwich-fries.jpg"
+  },
+  {
+   "file": "/brand/food-grilled-sandwich-fries.jpg",
+   "bytes": 21188,
+   "sha256_12": "2b06052dad46",
+   "source": "brand/photos/food-grilled-sandwich-fries.jpg"
+  },
+  {
+   "file": "/brand/food-tea-service.jpg",
+   "bytes": 16448,
+   "sha256_12": "52c834e7be8f",
+   "source": "brand/photos/food-tea-service.jpg"
+  },
+  {
+   "file": "/brand/google-g.png",
+   "bytes": 13993,
+   "sha256_12": "fc6013a69eda",
+   "source": "brand/third-party/google-g.png"
+  },
+  {
+   "file": "/brand/google-g.svg",
+   "bytes": 12686,
+   "sha256_12": "7075e0e69be1",
+   "source": "brand/third-party/google-g.svg"
+  },
+  {
+   "file": "/brand/habibi-haven-badge.jpg",
+   "bytes": 10753,
+   "sha256_12": "18c08c629d73",
+   "source": "brand/logo/habibi-haven-badge.jpg"
+  },
+  {
+   "file": "/brand/venue-courtyard-arches.jpg",
+   "bytes": 21433,
+   "sha256_12": "6017172feb07",
+   "source": "brand/photos/venue-courtyard-arches.jpg"
+  },
+  {
+   "file": "/brand/venue-facade-day.jpg",
+   "bytes": 39357,
+   "sha256_12": "54cf8713742f",
+   "source": "brand/photos/venue-facade-day.jpg"
+  },
+  {
+   "file": "/brand/venue-facade-night.jpg",
+   "bytes": 412252,
+   "sha256_12": "4b1258473cdf",
+   "source": "brand/photos/venue-facade-night.jpg"
+  },
+  {
+   "file": "/brand/venue-interior-teal-sofa.jpg",
+   "bytes": 33256,
+   "sha256_12": "923b0d90f524",
+   "source": "brand/photos/venue-interior-teal-sofa.jpg"
+  },
+  {
+   "file": "/brand/venue-table-branded-cup.jpg",
+   "bytes": 22134,
+   "sha256_12": "e9f2b4c7afe4",
+   "source": "brand/photos/venue-table-branded-cup.jpg"
+  },
+  {
+   "file": "/brand/venue-table-by-window.jpg",
+   "bytes": 13199,
+   "sha256_12": "e204258fb17a",
+   "source": "brand/photos/venue-table-by-window.jpg"
+  },
+  {
+   "file": "/brand/venue-table-mid-meal.jpg",
+   "bytes": 20238,
+   "sha256_12": "cff8811cb6e9",
+   "source": "brand/photos/venue-table-mid-meal.jpg"
+  },
+  {
+   "file": "/brand/venue-terrace-seating.jpg",
+   "bytes": 26520,
+   "sha256_12": "728e0804e6ff",
+   "source": "brand/photos/venue-terrace-seating.jpg"
+  },
+  {
+   "file": "/brand/venue-terrace-table-city.jpg",
+   "bytes": 21007,
+   "sha256_12": "eee7c9246085",
+   "source": "brand/photos/venue-terrace-table-city.jpg"
+  }
+ ]
+}

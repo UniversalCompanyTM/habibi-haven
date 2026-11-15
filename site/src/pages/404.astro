@@ -1,0 +1,33 @@
+---
+// site/src/pages/404.astro — a room with the lights off, not an error page.
+//
+// It carries the same rig as the rest of the site, so arriving here at 21:00 is dark and at noon is
+// not, and it offers the three things a lost guest can actually use. No joke copy: the guest is trying
+// to find a price or a phone number.
+import Base from "../layouts/Base.astro";
+import menu from "../data/menu.json";
+
+const f = menu.meta.facts;
+---
+
+<Base
+  title="Nothing at that address — Habibi Haven"
+  description="That page is not on the site. The menu, the table builder and the address are one click away."
+>
+  <section class="void">
+    <p class="eyebrow">404</p>
+    <h1 class="display">The lights are on, but nobody is home at that address</h1>
+    <p class="lede" style="text-wrap:pretty">
+      Nothing was written at this URL. The three that have something on them are below — and the menu
+      is the one with the {menu.meta.items} prices in it.
+    </p>
+    <div class="hero__actions" style="justify-content:center">
+      <a class="btn" href="/menu">The menu</a>
+      <a class="btn btn--ghost" href="/table">Set a table</a>
+      <a class="btn btn--ghost" href="/visit">Where it is</a>
+    </div>
+    <p class="meta dim">
+      Or call {f.phone}. That number answers the phone as well as it answers WhatsApp.
+    </p>
+  </section>
+</Base>

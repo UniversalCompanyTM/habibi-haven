@@ -1,0 +1,25 @@
+toolchain: {"node":"v24.21.0","npm":"11.19.0","headlessBrowser":"C:/Program Files/Google/Chrome/Application/chrome.exe"}
+plain fetch: {"status":200,"ct":"text/html","bytes":33628,"ms":459,"survey":{"bytes":33530,"priceMentions":0,"distinctPrices":0,"minPrice":null,"maxPrice":null,"imgTags":4,"hostedPhotoRefs":0,"hasKSh":true,"hasItemCardClass":true,"scriptTags":2}}
+rendered: {"bytes":39818,"priceMentions":6,"distinctPrices":5,"minPrice":800,"maxPrice":1400,"imgTags":22,"hostedPhotoRefs":6,"hasKSh":true,"hasItemCardClass":true,"scriptTags":2}
+photos sampled: 6
+  fetch   200 350609B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  fetch   200 816374B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  fetch   200 1000042B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  fetch   200 492384B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  fetch   200 1014426B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  fetch   200 716138B https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+  browser 1000x1000 https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/
+
+VERDICT: {
+  "readChannel": "neither channel yielded a readable menu",
+  "mirrorChannel": "fetch works for every sampled photo — mirroring is scriptable",
+  "renderedPriceMentions": 6,
+  "renderedDistinctPrices": 5,
+  "renderedHostedPhotoRefs": 6
+}
+written to C:\Users\USER\Documents\Qoder\2026-11-14\355d3de8\habibi-haven-site\research\probe-ingest.json

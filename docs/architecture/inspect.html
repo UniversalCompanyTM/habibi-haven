@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>board panel inspection</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #F6EFE2; }
+  #crop { position: absolute; top: 0; left: 0; }
+  #crop img { display: block; }
+</style>
+</head>
+<body>
+<div id="crop"><img src="board.svg" alt=""></div>
+<script>
+// Zooms one panel of board.svg to fill the viewport, for eyeball QA of the raster.
+//   ?p=0..4   which card    scale fixed at 2 so 12px footnotes stay readable.
+const SHELL_X0 = 60, SHELL_PITCH = 462, SHELL_W = 432, S = 2;
+const p = Math.min(4, Math.max(0, Number(new URLSearchParams(location.search).get("p") || 0)));
+const x0 = SHELL_X0 + p * SHELL_PITCH - 12, y0 = 178, w = SHELL_W + 24, h = 1084;
+const img = document.querySelector("#crop img");
+img.width = 2400 * S;
+img.height = 1350 * S;
+img.style.transform = `translate(${-x0 * S}px, ${-y0 * S}px)`;
+document.getElementById("crop").style.width = w * S + "px";
+document.getElementById("crop").style.height = h * S + "px";
+</script>
+</body>
+</html>

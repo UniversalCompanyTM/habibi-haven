@@ -1,0 +1,12 @@
+# Build output and dependency caches — regenerate with `npm --prefix site install && npm --prefix site run build`
+site/node_modules/
+site/dist/
+site/.astro/
+
+# Scratch: probe logs, screenshots, and the local servers' output live here and never belong in the repo
+.tmp/
+
+# Editors and OS noise
+.DS_Store
+Thumbs.db
+*.swp

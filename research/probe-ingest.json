@@ -1,0 +1,139 @@
+{
+  "ranAt": "2026-11-15T01:28:34.267Z",
+  "menuUrl": "https://menu.or.ke/Habibi_Haven/habibi-haven.html",
+  "samples": 6,
+  "toolchain": {
+    "node": "v24.21.0",
+    "npm": "11.19.0",
+    "headlessBrowser": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+  },
+  "plainFetch": {
+    "status": 200,
+    "ct": "text/html",
+    "bytes": 33628,
+    "ms": 341,
+    "survey": {
+      "bytes": 33530,
+      "priceMentions": 0,
+      "distinctPrices": 0,
+      "minPrice": null,
+      "maxPrice": null,
+      "imgTags": 4,
+      "hostedPhotoRefs": 0,
+      "hasKSh": true,
+      "hasItemCardClass": true,
+      "scriptTags": 2
+    }
+  },
+  "rendered": {
+    "bytes": 39823,
+    "priceMentions": 6,
+    "distinctPrices": 5,
+    "minPrice": 800,
+    "maxPrice": 1400,
+    "imgTags": 22,
+    "hostedPhotoRefs": 6,
+    "hasKSh": true,
+    "hasItemCardClass": true,
+    "scriptTags": 2
+  },
+  "photoSampleUrls": [
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793689502019-Liver-Malawa.jpg",
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793707487358-Habibi-Texas-Burger.jpg",
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793882347762-BBQ-Chicken-Wings.jpg",
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793776897494-Grilled-Chicken-Breast.jpg",
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793708835094-Sizzling-Fajita.jpg",
+    "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793692085626-Samosa-Platter.jpg"
+  ],
+  "photosViaFetch": [
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793689502019-Liver-Malawa.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 350609,
+      "ms": 1421
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793707487358-Habibi-Texas-Burger.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 816374,
+      "ms": 1980
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793882347762-BBQ-Chicken-Wings.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 1000042,
+      "ms": 1877
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793776897494-Grilled-Chicken-Breast.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 492384,
+      "ms": 1179
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793708835094-Sizzling-Fajita.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 1014426,
+      "ms": 1942
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793692085626-Samosa-Platter.jpg",
+      "status": 200,
+      "ct": "image/jpeg",
+      "bytes": 716138,
+      "ms": 1425
+    }
+  ],
+  "photosViaBrowser": [
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793689502019-Liver-Malawa.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793707487358-Habibi-Texas-Burger.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793882347762-BBQ-Chicken-Wings.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793692085626-Samosa-Platter.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793708835094-Sizzling-Fajita.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    },
+    {
+      "url": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793776897494-Grilled-Chicken-Breast.jpg",
+      "loaded": true,
+      "width": 1000,
+      "height": 1000
+    }
+  ],
+  "readChannel": "neither channel yielded a readable menu",
+  "mirrorChannel": "fetch works for every sampled photo — mirroring is scriptable",
+  "verdict": {
+    "readChannel": "neither channel yielded a readable menu",
+    "mirrorChannel": "fetch works for every sampled photo — mirroring is scriptable",
+    "renderedPriceMentions": 6,
+    "renderedDistinctPrices": 5,
+    "renderedHostedPhotoRefs": 6
+  }
+}

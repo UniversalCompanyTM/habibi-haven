@@ -1,0 +1,103 @@
+---
+// Footer.astro — where the site states its own sources.
+//
+// Most restaurant footers are a list of links and a copyright line. This one also carries the
+// provenance, because the brief said the content has to be legit: every number below is read from
+// the data files the build produced, and the two ratings are shown side by side rather than averaged
+// into a nicer single figure. Nothing here is typed into markup by hand.
+import menu from "../data/menu.json";
+import press from "../data/press.json";
+import SocialLinks from "./SocialLinks.astro";
+import { OPEN_LABEL, CLOSE_LABEL } from "../lib/hours.mjs";
+
+const { facts } = menu.meta;
+const captured = new Date(menu.meta.capturedAt);
+const capturedLabel = captured.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+const rooms = menu.families.map((f) => ({
+  href: `/menu#${f.id}`,
+  label: f.label,
+  count: f.sections.reduce((sum, s) => sum + s.count, 0),
+}));
+---
+
+<footer class="footer">
+  <div class="shell">
+    <div class="footer__grid">
+      <div>
+        <p class="footer__mark">Habibi<br />Haven</p>
+        <p class="lede" style="margin-top:0.9rem">
+          Coastal and Somali cooking, a courtyard under a green canopy, and chai from
+          {OPEN_LABEL} to {CLOSE_LABEL}, every day.
+        </p>
+        <address class="stack" style="margin-top:1.2rem;font-style:normal">
+          <a class="link-arrow" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(facts.mapsQuery)}`} target="_blank" rel="noopener noreferrer">
+            {facts.address}
+          </a>
+          <a class="link-arrow" href={`tel:+${facts.phone.replace(/[^\d]/g, "")}`}>{facts.phone}</a>
+          <span class="meta">{facts.plusCode} · Africa/Nairobi</span>
+        </address>
+      </div>
+
+      <div>
+        <h4>The menu, by room</h4>
+        <ul class="stack">
+          {
+            rooms.map((r) => (
+              <li>
+                <a class="link-arrow" href={r.href}>
+                  {r.label} <span class="dim num">({r.count})</span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+
+      <div>
+        <h4>Set your table</h4>
+        <ul class="stack">
+          <li><a class="link-arrow" href="/table">Build the order, then send it</a></li>
+          <li><a class="link-arrow" href="/visit">Hours, getting in, and the argument about them</a></li>
+          <li><a class="link-arrow" href="/menu">All {menu.meta.items} items, filterable</a></li>
+          <li>
+            <a class="link-arrow" href={facts.socials.order} target="_blank" rel="noopener noreferrer">
+              Order from their own site
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Follow the place</h4>
+        <SocialLinks facts={facts} size="stack" />
+        <h4 style="margin-top:1.6rem">How they rate</h4>
+        <ul class="stack">
+          {
+            press.ratings.map((r) => (
+              <li class="meta">
+                <a class="link-arrow" href={r.url} target="_blank" rel="noopener noreferrer">{r.panel}</a>{" "}
+                {r.score} over {r.reviews} review{r.reviews === 1 ? "" : "s"}
+                {r.rank ? ` · ${r.rank}` : ""}
+              </li>
+            ))
+          }
+        </ul>
+        <p class="meta">Two panels, shown as they are. The site does not average them.</p>
+      </div>
+    </div>
+
+    <div class="footer__legal">
+      <span>© {captured.getUTCFullYear()} Habibi Haven. Site built for the business.</span>
+      <span>
+        {menu.meta.items} items and {menu.meta.photos} photographs read from the restaurant&rsquo;s own menu system on {capturedLabel}
+        <span class="dim">(source fingerprint {menu.meta.sourceFingerprint})</span>. Prices as given, in KSh.
+      </span>
+      <span>
+        {menu.meta.placeholderPhotos} dishes are still on an &ldquo;image to be updated soon&rdquo; placeholder upstream; they are shown as
+        type cards rather than invented.
+      </span>
+      <span>Photographs belong to the restaurant and are served from local mirrors for speed, not republished as ours. Third-party video and reviews are linked and credited, never re-hosted.</span>
+    </div>
+  </div>
+</footer>

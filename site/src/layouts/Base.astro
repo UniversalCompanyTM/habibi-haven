@@ -1,0 +1,243 @@
+---
+// site/src/layouts/Base.astro — head, rig, chrome.
+//
+// The hour is computed at build time, not on first paint: `--hour` and `--night` go onto the `<html>`
+// style attribute from lib/hours.mjs, so the room is already lit for the right time of day in the
+// server HTML, and the WebGL door reads those same two numbers rather than a copy of them.
+// hours.mjs applies the Nairobi offset as arithmetic, so a build machine in any timezone gets the
+// same answer (tests/run.mjs pins it).
+import menu from "../data/menu.json";
+import { nairobiHour, rigFor } from "../lib/hours.mjs";
+import "../styles/tokens.css";
+import "../styles/global.css";
+
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import Ticker from "../components/Ticker.astro";
+import Cursor from "../components/Cursor.astro";
+import Preloader from "../components/Preloader.astro";
+
+const props = Astro.props;
+const f = menu.meta.facts;
+const rig = rigFor(nairobiHour());
+// The curtain is opt-in, because it is only polite in front of an entrance and only rude in front of
+// a menu. Home sets `loader`; /menu, /table and /visit do not.
+const loader = props.loader === true;
+
+const ORIGIN = Astro.site ?? new URL("https://habibi-haven.example");
+const path = Astro.url.pathname.replace(/\/$/, "") || "/";
+const canonical = new URL(path, ORIGIN).href;
+
+// Every factual claim in the block below traces to research/BRAND-FACTS.md or research/PRESS.md.
+// The description says "Coastal and Somali", which is how their own TripAdvisor listing frames it,
+// and the rating is Google's, with its count, because a schema rating without a source is fiction.
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Restaurant",
+  name: menu.meta.name,
+  description:
+    "Habibi Haven is a modern halal restaurant on Koinange Street in Nairobi CBD — Coastal and Somali cooking, goat mandy, karak chai, and a garden courtyard that opens at 06:30.",
+  telephone: f.phone,
+  priceRange: f.pricePerPerson,
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Koinange Street",
+    addressLocality: "Nairobi",
+    addressCountry: "KE",
+  },
+  hasMap: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.mapsQuery)}`,
+  openingHoursSpecification: [
+    {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+      opens: f.hoursOfRecord.open,
+      closes: f.hoursOfRecord.close,
+    },
+  ],
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: f.rating,
+    reviewCount: f.reviews,
+    bestRating: 5,
+  },
+  servesCuisine: ["Somali", "Kenyan", "International"],
+  sameAs: [f.socials.instagram, f.socials.tiktok, f.socials.facebook],
+  menu: new URL("/menu", ORIGIN).href,
+  url: canonical,
+};
+
+const title = props.title ?? "Habibi Haven — goat mandy and a garden courtyard on Koinange Street";
+const description =
+  props.description ??
+  "Habibi Haven Restaurant, Koinange Street, Nairobi CBD. 243 dishes read straight from the kitchen's own data, karak chai from 06:30, and a table you can set before you arrive.";
+const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
+---
+
+<!doctype html>
+<html lang="en" style={`--hour: ${rig.hour}; --night: ${rig.night.toFixed(3)}`}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content={rig.night > 0.5 ? "#04100e" : "#f3f1ec"} />
+    {
+      /* A preview deploy is not the site. Until the client owns a domain, only an explicitly
+         indexable build asks to be crawled. */
+      indexable ? null : <meta name="robots" content="noindex, nofollow" />
+    }
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600&display=swap"
+    />
+    <link rel="icon" type="image/jpeg" href="/brand/habibi-haven-badge.jpg" />
+    <link rel="apple-touch-icon" href="/brand/habibi-haven-badge.jpg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Habibi Haven" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/brand/venue-facade-night.jpg", ORIGIN).href} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="1200" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script is:inline>
+      document.documentElement.classList.add("js");
+    </script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(jsonLd)} />
+  </head>
+
+  <body data-hour={rig.hour} data-night={rig.night.toFixed(3)}>
+    <a class="skip-link" href="#main">Skip to content</a>
+    {loader ? <Preloader /> : null}
+    <Nav facts={f} rig={rig} current={path} />
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <Ticker />
+    <Footer />
+    <Cursor />
+  </body>
+</html>
+
+<script>
+  /* Reveal on scroll, once. Where IntersectionObserver is missing the fallback adds the class
+     immediately rather than never, so the failure mode is "no animation", not "invisible content". */
+  const seen = new WeakSet();
+  const watched = [];
+  const io =
+    "IntersectionObserver" in window
+      ? new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              // Reveal on entry — and on first sample if the element is already fully ABOVE the
+              // viewport. A jump (deep link to /menu#room, End key, restored scroll) never
+              // intersects the sections it skipped, and a card whose only other state is
+              // `opacity: 0` is copy the reader cannot get back without scrolling the whole way up.
+              // When in doubt this fails toward showing the content, which is the correct direction
+              // for a failure.
+              if (!e.isIntersecting && e.boundingClientRect.bottom > 0) continue;
+              e.target.classList.add("is-in");
+              io.unobserve(e.target);
+            }
+          },
+          { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
+        )
+      : null;
+
+  /* The comment above promises the jump case is handled, and at load it is: the first sample reports
+     every observed node, and the ones already above the fold are revealed there. It is not handled for
+     a jump that happens LATER. An observer only calls back on a threshold crossing, and a section that
+     used to be below you and is now far above you crosses nothing on the way past — End on /menu lands
+     at 39,000 px and measures 41 of 251 revealed, with 243 dishes invisible above you. So the observer
+     is not the only thing watching: on a displacement larger than a screen, sweep the registry and hand
+     back everything the jump stepped over. Small scrolls keep their animation. */
+  const showEverythingAbove = () => {
+    for (let i = watched.length - 1; i >= 0; i -= 1) {
+      const el = watched[i];
+      if (el.getBoundingClientRect().bottom > 0) continue;
+      el.classList.add("is-in");
+      if (io) io.unobserve(el);
+      watched.splice(i, 1);
+    }
+  };
+
+  let lastY = scrollY;
+  addEventListener(
+    "scroll",
+    () => {
+      if (Math.abs(scrollY - lastY) > innerHeight * 1.5) showEverythingAbove();
+      lastY = scrollY;
+    },
+    { passive: true }
+  );
+  addEventListener("pageshow", () => {
+    // a restored scroll position from the back/forward cache produces no crossing either
+    requestAnimationFrame(showEverythingAbove);
+  });
+
+  /* Headline words are lifted out of a mask one at a time. The split happens here instead of in the
+     markup so an author writes one sentence, and so a disabled-JS page still has that sentence. */
+  function kinify(el) {
+    if (el.dataset.kin === "done") return;
+    const words = (el.textContent ?? "").trim().split(/\s+/);
+    el.textContent = "";
+    el.classList.add("kin");
+    words.forEach((word, i) => {
+      const outer = document.createElement("span");
+      const inner = document.createElement("span");
+      inner.textContent = word;
+      inner.style.setProperty("--i", String(Math.min(i, 11)));
+      outer.append(inner);
+      el.append(outer, " ");
+    });
+    el.dataset.kin = "done";
+  }
+
+  function prep(root = document) {
+    root.querySelectorAll("[data-kin]").forEach(kinify);
+    root.querySelectorAll("[data-reveal]").forEach((n, i) => {
+      if (!n.style.getPropertyValue("--i")) n.style.setProperty("--i", String(i % 8));
+    });
+    const nodes = root.querySelectorAll("[data-reveal], .kin");
+    if (!io) {
+      nodes.forEach((n) => n.classList.add("is-in"));
+      return;
+    }
+    nodes.forEach((n) => {
+      if (!seen.has(n)) {
+        seen.add(n);
+        io.observe(n);
+        watched.push(n);
+      }
+    });
+  }
+
+  prep();
+  /* Islands (the menu explorer, the table builder) render after hydration and ask for a rescan. */
+  document.addEventListener("hh:prep", () => prep(document));
+
+  const nav = document.querySelector(".nav");
+  const onScroll = () => {
+    if (!nav) return;
+    nav.toggleAttribute("data-stuck", window.scrollY > 24);
+  };
+  onScroll();
+  addEventListener("scroll", onScroll, { passive: true });
+
+  /* One shared clock: the dial writes these two numbers, CSS interpolates the palette from --night,
+     and the WebGL door reads the same pair off the document element. The writing itself lives in
+     lib/rig-client.mjs so no second copy of the curve can exist — this file only exposes it as
+     `window.hhSetHour` for anything that would rather call than import. */
+  import { applyHour } from "../lib/rig-client.mjs";
+
+  window.hhSetHour = applyHour;
+</script>

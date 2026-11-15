@@ -1,0 +1,114 @@
+---
+// DishCard.astro — one dish, as the data knows it.
+//
+// Three rules this file exists to keep:
+//   * A placeholder photograph upstream is never shown as if it were the dish. Those 102 rows carry
+//     the text "Image to be updated soon"; rendering that as a photo would be the site lying about
+//     food. It renders as a type card instead — the name set in display type, and a line saying so.
+//   * width/height come from the mirrored files (measured by mirror-images.mjs), so a filtering pass
+//     that reflows 243 cards cannot shove the page around under someone's thumb (CLS).
+//   * The price is printed from the row. There is no "from KSh" and no rounding, because the kitchen
+//     gave an integer and a guest reads an integer.
+import { tagLabel, TAG_EMPHASIS } from "../lib/tags.mjs";
+import { money } from "../lib/table.mjs";
+
+const { item, priority = false } = Astro.props;
+const photo = item.photo;
+const isPlaceholder = photo.placeholder === true;
+const available = item.availability ? item.availability.open !== false && item.availability.inStock !== false : true;
+const acc = item.accompaniments ?? null;
+const media = photo.thumb ?? photo.local;
+const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.local} 800w` : null;
+---
+
+<article
+  class="card"
+  data-card
+  data-id={item.id}
+  data-family={item.family}
+  data-section={item.section}
+  data-tags={item.tags.join(" ") || null}
+  data-price={item.price}
+  data-name={item.name.toLowerCase()}
+  data-desc={(item.description || "").toLowerCase()}
+  data-available={available ? "true" : "false"}
+  data-signed={item.signatureRole ? "true" : null}
+  data-reveal
+>
+  <div class={`frame${isPlaceholder ? " frame--type" : ""}`} style={isPlaceholder ? null : `aspect-ratio: ${photo.width} / ${photo.height}`}>
+    {
+      isPlaceholder ? (
+        <>
+          <b>{item.name}</b>
+          <em>Photograph pending</em>
+        </>
+      ) : (
+        <img
+          src={media}
+          srcset={srcset}
+          sizes="(min-width: 60rem) 26vw, (min-width: 40rem) 40vw, 88vw"
+          width={photo.width}
+          height={photo.height}
+          alt={photo.alt || item.name}
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          data-critical={priority ? "" : null}
+        />
+      )
+    }
+  </div>
+
+  <div class="card__row">
+    <h3 class="card__name">{item.name}</h3>
+    <p class="card__price">{money(item.price)}</p>
+  </div>
+
+  {
+    item.description ? (
+      <p class="card__desc">{item.description}</p>
+    ) : (
+      <p class="card__desc dim">
+        No description on their menu — this is the item exactly as the kitchen lists it.
+      </p>
+    )
+  }
+
+  {
+    acc ? (
+      <fieldset class="acc" data-acc={item.id}>
+        <legend class="meta">Choose one — {acc.options.join(" / ")}</legend>
+        <div class="chips">
+          {acc.options.map((option, i) => (
+            <label class="acc__option">
+              <input
+                type="radio"
+                name={`acc-${item.id}`}
+                value={option}
+                checked={i === 0}
+                data-option={option}
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    ) : null
+  }
+
+  <div class="card__foot">
+    {
+      item.tags.map((tag) => (
+        <span class={`chip${TAG_EMPHASIS.has(tag) ? " chip--teal" : ""}`}>{tagLabel(tag)}</span>
+      ))
+    }
+    {!available ? <span class="chip chip--amber">Not on today</span> : null}
+    <button
+      type="button"
+      class="btn btn--small btn--ghost"
+      data-add={item.id}
+      aria-label={`Add ${item.name} to your table`}
+    >
+      Add to table
+    </button>
+  </div>
+</article>

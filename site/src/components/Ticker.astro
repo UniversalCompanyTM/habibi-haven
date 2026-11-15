@@ -1,0 +1,30 @@
+---
+// Ticker.astro — their caption language, moving.
+//
+// The words are their own Instagram captions (site/src/data/voice.json, transcribed in
+// research/BRAND-FACTS.md §4), which is the cheapest way to sound like the restaurant without
+// writing copy that sounds like a model. The `--ticker-dur` custom property is the speed dial: the
+// track is duplicated, and the keyframe in global.css moves it by exactly -50%, so duration controls
+// the walk without changing the seam. Hover pauses it (global.css) and reduced-motion stops it and
+// wraps the track instead.
+import voice from "../data/voice.json";
+
+const { items = voice.captions, speed = 46 } = Astro.props;
+const track = items.slice(0, 8);
+---
+
+<div class="ticker" style={`--ticker-dur: ${speed}s`}>
+  <div class="ticker__track" data-ticker>
+    {
+      // two copies of the same list: the animation translates -50%, so the second copy is the loop
+      [0, 1].map((copy) =>
+        track.map((line, i) => (
+          <span class="ticker__item" aria-hidden={copy === 1 ? "true" : null}>
+            {line}
+            {copy === 0 && i === 0 ? <span class="sr-only"> — captions from the restaurant&rsquo;s own Instagram</span> : null}
+          </span>
+        ))
+      )
+    }
+  </div>
+</div>

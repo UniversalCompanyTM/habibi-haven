@@ -1,0 +1,87 @@
+---
+// Cursor.astro — the pointer the room answers to.
+//
+// Two elements: a dot that tracks exactly, and a ring that trails it. That is the whole trick, and it
+// is only allowed to exist for people who can benefit from it: `pointer: fine` and no reduced-motion
+// request, checked in JavaScript as well as CSS, so the listeners never get attached on a phone.
+//
+// The ring also reports state rather than decorating: it swells over anything you can act on, and
+// anything marked `data-magnetic` is pulled a few pixels toward the pointer. Magnetic targets are
+// moved with `translate` on the element itself, and the transform is cleared on leaving, so a
+// keyboard or a screen reader never sees a shifted button.
+---
+
+<span class="cursor" aria-hidden="true" data-cursor></span>
+<span class="cursor-ring" aria-hidden="true" data-ring></span>
+
+<script>
+  const fine = matchMedia("(pointer: fine)").matches;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dot = document.querySelector<HTMLElement>("[data-cursor]");
+  const ring = document.querySelector<HTMLElement>("[data-ring]");
+
+  if (fine && !reduced && dot && ring) {
+    // Not "cursor-on" yet: the pair stays invisible until a real mouse actually moves, so nobody
+    // meets a dot parked in the middle of their screen that belongs to nobody.
+    const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
+    const ringPos = { ...pointer };
+    let raf = 0;
+    let visible = false;
+
+    const draw = () => {
+      dot.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`;
+      ringPos.x += (pointer.x - ringPos.x) * 0.18;
+      ringPos.y += (pointer.y - ringPos.y) * 0.18;
+      ring.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`;
+      raf = requestAnimationFrame(draw);
+    };
+
+    addEventListener(
+      "pointermove",
+      (event: PointerEvent) => {
+        if (event.pointerType !== "mouse") return;
+        pointer.x = event.clientX;
+        pointer.y = event.clientY;
+        if (!visible) {
+          visible = true;
+          document.body.classList.add("cursor-on");
+          raf = requestAnimationFrame(draw);
+        }
+        const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button, [data-magnetic], input, [tabindex]");
+        ring.toggleAttribute("data-hot", Boolean(target));
+        magnetise(target, event);
+      },
+      { passive: true }
+    );
+
+    // one magnetic element at a time; leaving it puts its own transform back
+    let magnetised: HTMLElement | null = null;
+    function magnetise(target: HTMLElement | null, event: PointerEvent) {
+      const magnet = target?.closest<HTMLElement>("[data-magnetic]") ?? null;
+      if (magnet !== magnetised) {
+        magnetised?.style.removeProperty("translate");
+        magnetised = magnet;
+      }
+      if (!magnet) return;
+      const box = magnet.getBoundingClientRect();
+      const pull = Number(magnet.dataset.magnetic) || 0.22;
+      const dx = event.clientX - (box.left + box.width / 2);
+      const dy = event.clientY - (box.top + box.height / 2);
+      const reach = Math.max(box.width, box.height) * 0.85;
+      const distance = Math.hypot(dx, dy);
+      if (distance > reach) {
+        magnet.style.removeProperty("translate");
+        return;
+      }
+      magnet.style.translate = `${dx * pull}px ${dy * pull}px`;
+    }
+
+    addEventListener("pointerdown", () => ring.setAttribute("data-hot", ""), { passive: true });
+    addEventListener("pointerup", () => ring.removeAttribute("data-hot"), { passive: true });
+    addEventListener("blur", () => {
+      document.body.classList.remove("cursor-on");
+      cancelAnimationFrame(raf);
+      visible = false;
+    });
+  }
+</script>

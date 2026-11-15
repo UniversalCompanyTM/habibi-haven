@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>board fit measurement</title></head>
+<body>
+<pre id="out"></pre>
+<script>
+// Measures every <text> in the board against its panel's inner right edge and reports
+// which ones overflow, so scripts/fit-board.mjs can pin them with textLength.
+// Measured from ?src (default board.svg) — the script passes a pin-free copy, because
+// getBBox() honours an existing textLength and would then report itself as fitting.
+// The SVG is removed from the DOM before the dump so the output stays small.
+const SHELL_X0 = 60, SHELL_W = 432, SHELL_PITCH = 462, INSET = 24;
+const rows = [];
+
+fetch(new URL(location.href).searchParams.get("src") || "board.svg")
+  .then((r) => r.text()).then(async (xml) => {
+  const doc = new DOMParser().parseFromString(xml, "image/svg+xml");
+  const svg = doc.documentElement;
+  document.body.appendChild(svg);
+  await document.fonts.ready;
+
+  const texts = [...svg.querySelectorAll("text")];
+  texts.forEach((el, i) => {
+    let bb;
+    try { bb = el.getBBox(); } catch { return; }
+    if (bb.y < 190 || bb.y > 1250) return;                       // header / footer bands
+    const idx = Math.round((bb.x - SHELL_X0) / SHELL_PITCH);
+    if (idx < 0 || idx > 4) return;                              // not inside a card
+    const limit = SHELL_X0 + idx * SHELL_PITCH + SHELL_W - INSET;
+    const right = bb.x + bb.width;
+    if (right <= limit + 0.5) return;
+    rows.push({
+      i,
+      textLength: +(limit - bb.x).toFixed(1),
+      was: +bb.width.toFixed(1),
+      over: +(right - limit).toFixed(1),
+      s: el.textContent.slice(0, 46),
+    });
+  });
+
+  svg.remove();
+  document.getElementById("out").textContent = "FITJSON" + JSON.stringify(rows) + "FITJSON";
+});
+</script>
+</body>
+</html>

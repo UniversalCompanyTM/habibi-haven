@@ -1,0 +1,108 @@
+{
+  "comment": "Third-party coverage. Every entry carries the URL it was read from and how it was read, so the page can cite instead of paraphrase. Full notes and the reason none of this is re-hosted: research/PRESS.md.",
+  "ratings": [
+    {
+      "panel": "Google Maps",
+      "score": 4.5,
+      "reviews": 541,
+      "signal": "pricePerPerson",
+      "price": "Ksh 1,000–2,000 per person, reported by 53 people",
+      "url": "https://www.google.com/maps/search/Habibi+Haven+Koinange+Street+Nairobi",
+      "read": "captured from the listing, 2026-11-14"
+    },
+    {
+      "panel": "TripAdvisor",
+      "score": 3.7,
+      "reviews": 3,
+      "rank": "#651 of 928 restaurants in Nairobi",
+      "price": null,
+      "url": "https://www.tripadvisor.com/Restaurant_Review-g294207-d34100284-Reviews-Habibi_Haven-Nairobi.html",
+      "read": "page is bot-gated; rating and depth from the search result line, 2026-11-14",
+      "note": "Shown at its real depth. Three reviews against five hundred and forty-one is a fact about the panel, not a defect to average away."
+    }
+  ],
+  "themes": [
+    { "theme": "welcoming staff", "mentions": 13, "panel": "Google Maps" },
+    { "theme": "friendly supervisor", "mentions": 11, "panel": "Google Maps" },
+    { "theme": "chicken biryani", "mentions": 2, "panel": "Google Maps, popular dishes" },
+    { "theme": "mandi", "mentions": 2, "panel": "Google Maps, popular dishes" }
+  ],
+  "positioning": [
+    {
+      "line": "a modern halal restaurant and cultural lifestyle destination in Nairobi CBD, offering a unique blend of Somali and international cuisine",
+      "source": "TripAdvisor listing",
+      "url": "https://www.tripadvisor.com/Restaurant_Review-g294207-d34100284-Reviews-Habibi_Haven-Nairobi.html",
+      "read": "search result line, page bot-gated"
+    },
+    {
+      "line": "Habibi Haven is a modern, posh restaurant located in the heart of Nairobi's Central Business District, along Koinange Street. With a stylish ambiance and a …",
+      "source": "Facebook about",
+      "url": "https://www.facebook.com/61575101935569/",
+      "read": "rendered page; the ellipsis is the source truncating its own text"
+    },
+    {
+      "line": "A Taste of Home, A World of Flavor",
+      "source": "their Instagram bio",
+      "url": "https://www.instagram.com/habibi.haven/",
+      "read": "rendered profile"
+    }
+  ],
+  "coverage": [
+    {
+      "kind": "video",
+      "title": "Nairobi CBD Habibi Haven is a Green Escape in the heart of Nairobi CBD",
+      "by": "food reviewer, Instagram reel",
+      "quote": "RESTAURANT REVIEW: @habibi.haven Koinange Street; Nairobi CBD — Habibi Haven is a Green Escape in the heart of Nairobi CBD; Tucked away on the …",
+      "url": "https://www.instagram.com/reel/DQlckpEDDKJ/",
+      "how": "Link out. The clip is the reviewer's work and Instagram bot-gates its media, so it is credited and quoted, never downloaded."
+    },
+    {
+      "kind": "video",
+      "title": "Habibi Haven Restaurant Review: Food & Prices on Koinange St.",
+      "by": "@johnson_valentis, TikTok",
+      "quote": "A visit to Habibi Haven on Koinange Street in Nairobi's CBD offers a unique dining experience, praised for its \"garden elegance\" ambience.",
+      "url": "https://www.tiktok.com/@johnson_valentis/video/7559881339999161656",
+      "how": "Link out, same reason."
+    },
+    {
+      "kind": "aggregate",
+      "title": "Habibi Haven Restaurant — what diners posted",
+      "by": "TikTok discovery for the name",
+      "quote": "Good ambience. Beautiful smiles. Great service. This is what dining at Habibi Haven feels like ✨ Come for the food, stay for the …",
+      "url": "https://www.tiktok.com/discover/habibi-haven-restaurant",
+      "how": "Link out to the aggregate of visitor clips."
+    }
+  ],
+  "phrases": {
+    "note": "How the place gets described by other people, kept so the site's copy stays in the same world as its coverage rather than inventing a register.",
+    "read": [
+      "garden elegance",
+      "aesthetic dining Nairobi",
+      "date night restaurants Nairobi",
+      "hidden gem in Nairobi CBD",
+      "Somali restaurants in Nairobi"
+    ]
+  },
+  "disagreements": [
+    {
+      "field": "Full Mandy",
+      "shipped": "KSh 2,300",
+      "others": ["Uber Eats store still lists KES 2,200"],
+      "why": "The live menu_items row is the system of record; the delivery listing is a cached copy of it.",
+      "url": "https://www.ubereats.com/ke/store/habib-haven-restaurant/0vCaJLbWXoa5xOoD97NtPQ"
+    },
+    {
+      "field": "Name on delivery",
+      "shipped": "Habibi Haven",
+      "others": ["Uber Eats: \"Habib Haven Restaurant\""],
+      "why": "Their own page, Google listing and Instagram all carry the second i.",
+      "url": "https://www.ubereats.com/ke/store/habib-haven-restaurant/0vCaJLbWXoa5xOoD97NtPQ"
+    }
+  ],
+  "gaps": [
+    "No press article, award or forum thread about the restaurant was found — the coverage that exists is social-video and review listings.",
+    "Venue photography in hand is real but small (nine of ten frames 300×225), so full-bleed imagery still needs a shoot or the client's originals.",
+    "No vector logo on hand: the badge is a 200×200 raster, so the wordmark is typeset rather than traced.",
+    "No booking system is evidenced anywhere in their stack; WhatsApp is the channel the site hands off to."
+  ]
+}

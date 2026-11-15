@@ -1,0 +1,28 @@
+{
+  "comment": "Words that already exist, so the site quotes the business instead of inventing a personality for it. `captions` are verbatim from Habibi Haven's own Instagram (@habibi.haven), transcribed in research/BRAND-FACTS.md §4 — light emoji were dropped where a caption is used as running text, never the wording. `lines` are the strongest sentences from the copy bank preserved in research/COPY-BANK.md. If a caption is edited, edit the research file first and regenerate this one.",
+  "source": {
+    "captions": "Instagram @habibi.haven",
+    "lines": "research/COPY-BANK.md"
+  },
+  "captions": [
+    "Welcome to Habibi Haven, where every visit feels like coming home.",
+    "Come and enjoy our signature dish today — goat mandy.",
+    "Sip, savor, and stay a while. Every drink is a vibe.",
+    "Peach, please! This one is irresistible.",
+    "Which is your favorite drink?",
+    "A Kenyan classic that never disappoints.",
+    "Warning: dangerously delicious.",
+    "You asked, we listened — delivery is now available.",
+    "Beauty captured in every angle.",
+    "October food dump."
+  ],
+  "lines": [
+    "A garden haven in the middle of the city.",
+    "A haven is not a place you pass through. It is a place you stay too long.",
+    "Three places to sit, and none of them rush you.",
+    "Come for the lamb chops. Stay for the third cup of chai.",
+    "541 reviews, and the same things keep coming up.",
+    "Find us on Koinange Street."
+  ],
+  "hashtagOwnership": ["#habibihaven", "#habibi", "#nairobirestaurants", "#nairobieats", "#goodfood", "#ambiance"]
+}

@@ -1,0 +1,127 @@
+{
+  "$comment": [
+    "The presentation layer over their menu data. Every 'source' key here is a verbatim",
+    "'category > subcategory' pair read from menu_items (see scripts/ingest.mjs); nothing in this",
+    "file invents a dish, a price or a group. Where a display label differs from the source string",
+    "the source string is still printed in the item's provenance and in content/drift.md.",
+    "scripts/build-content.mjs fails the build if a source pair is missing here, if a family claims",
+    "a category twice, or if the section counts do not sum to the row count of the ingest."
+  ],
+  "families": [
+    {
+      "id": "morning",
+      "label": "Morning",
+      "opens": "06:30",
+      "line": "The 6:30 opening is a real customer: chai, coffee, pastries and a full breakfast before the CBD fills the room.",
+      "categories": ["Breakfast"]
+    },
+    {
+      "id": "small-plates",
+      "label": "Small plates",
+      "line": "Starters, soups and the keto line — the part of the menu people order while the main table is still deciding.",
+      "categories": ["Starters", "Soups", "Salads", "Healthy Keto"]
+    },
+    {
+      "id": "kitchen",
+      "label": "The kitchen",
+      "line": "Local and international, said literally: biryani and curries beside pasta, Thai fusion and Mexican.",
+      "categories": [
+        "Biryani",
+        "Curries",
+        "Chicken",
+        "Fish",
+        "Grilled",
+        "Pasta",
+        "Mexican",
+        "Thai Fusion"
+      ]
+    },
+    {
+      "id": "handheld",
+      "label": "Handheld",
+      "line": "Shawarma in their own tortilla, sandwiches, burgers and wood-fired pizza.",
+      "categories": ["Shawarma", "Sandwiches", "Burgers", "Pizza"]
+    },
+    {
+      "id": "house",
+      "label": "The house",
+      "line": "The goat dishes the reviews keep naming, and the children's menu.",
+      "categories": ["Habibi Specials", "Kid’s menu"]
+    },
+    {
+      "id": "bar",
+      "label": "The bar",
+      "line": "A third of the menu is drink: 87 items across coffee, tea, lattes, cool specials, milkshakes, smoothies, dawas, nojitos, coladas and juices.",
+      "categories": ["Drinks"]
+    }
+  ],
+  "$sectionComment": "source pair -> display label. Order here is the order sections appear on /menu.",
+  "sections": {
+    "Breakfast > Breakfast Combo": { "label": "Breakfast combos" },
+    "Breakfast > Omelettes": { "label": "Omelettes" },
+    "Breakfast > Pancakes & Waffles": { "label": "Pancakes & waffles" },
+    "Breakfast > Fruit Salad": { "label": "Fruit & granola" },
+    "Breakfast > Fruit Salad/Add-ons & Upgrades": {
+      "label": "Sides & add-ons",
+      "note": "The source string calls this group Fruit Salad/Add-ons & Upgrades; the ten items in it are sides and upgrades, so the label says so."
+    },
+    "Breakfast > Sweet Tooth": { "label": "Cake slices & brownies" },
+    "Breakfast > Muffins": { "label": "Muffins" },
+    "Breakfast > Cookies": { "label": "Cookies" },
+    "Breakfast > CAKES": { "label": "Celebration cakes", "note": "Whole cakes sold by weight — 2KG and 3KG formats." },
+    "Breakfast > Cheese Cakes": { "label": "Cheesecakes" },
+
+    "Starters > Starters": { "label": "Starters" },
+    "Soups > Soups": { "label": "Soups" },
+    "Salads > Salads": { "label": "Salads" },
+    "Healthy Keto > Healthy Keto": { "label": "Healthy keto" },
+
+    "Biryani > Biryani": { "label": "Biryani" },
+    "Curries > Curries": { "label": "Curries" },
+    "Chicken > Chicken": { "label": "Chicken" },
+    "Fish > Fish": { "label": "Fish" },
+    "Grilled > Grilled": { "label": "Grilled" },
+    "Pasta > Pasta": { "label": "Pasta" },
+    "Mexican > Mexican": { "label": "Mexican" },
+    "Thai Fusion > Thai Fusion": { "label": "Thai fusion" },
+
+    "Shawarma > Shawarma": { "label": "Shawarma" },
+    "Sandwiches > Sandwiches": { "label": "Sandwiches" },
+    "Burgers > Burgers": { "label": "Burgers" },
+    "Pizza > Pizza": { "label": "Pizza" },
+
+    "Habibi Specials > Habibi Specials": { "label": "Habibi specials — the goat" },
+    "Kid’s menu > Kid’s menu": { "label": "Kid's menu" },
+
+    "Drinks > Habibi Coffee": { "label": "Coffee" },
+    "Drinks > Habibi Teas": { "label": "Teas & chai" },
+    "Drinks > Habibi Lattes": { "label": "Lattes" },
+    "Drinks > Habibi Cool Special": { "label": "Cool specials" },
+    "Drinks > Habibi Iced Lattes": { "label": "Iced lattes" },
+    "Drinks > Habibi Iced Teas": { "label": "Iced teas" },
+    "Drinks > Habibi Milkshakes": { "label": "Milkshakes" },
+    "Drinks > Habibi Smoothies": { "label": "Smoothies" },
+    "Drinks > Habibi Lemonades": { "label": "Lemonades" },
+    "Drinks > Habibi Dawas": { "label": "Dawas" },
+    "Drinks > Habibi Nojitos": { "label": "Nojitos" },
+    "Drinks > Habibi Coladas": { "label": "Coladas" },
+    "Drinks > Habibi Juices": { "label": "Juices" }
+  },
+  "$tagComment": [
+    "Tags are only ever set from a literal token in the item's own name, description, category or",
+    "subcategory. An empty match list means the tag is never asserted. build-content.mjs prints how",
+    "many items each rule touched, so an over-broad token is visible instead of silent."
+  ],
+  "tagRules": [
+    { "tag": "goat", "field": "text", "tokens": ["goat", "mandy", "malawa", "anjera", "deillo", "arosto", "sinia"] },
+    { "tag": "sharing", "field": "text", "tokens": ["platter", "family", "serves", "2kg", "3kg", "sinia", "combo"] },
+    { "tag": "spicy", "field": "text", "tokens": ["spicy", "chilli", "chili", "masala", "hot"] },
+    { "tag": "veg", "field": "text", "tokens": ["vegetarian", "veges", "fruit salad", "granola"] },
+    { "tag": "kids", "field": "category", "tokens": ["kid"] },
+    { "tag": "keto", "field": "category", "tokens": ["healthy keto"] },
+    { "tag": "chai", "field": "text", "tokens": ["chai", "tea pot", "karak"] },
+    { "tag": "coffee", "field": "subcategory", "tokens": ["habibi coffee", "habibi latte", "habibi iced latte"] },
+    { "tag": "cold", "field": "subcategory", "tokens": ["iced", "milkshake", "smoothie", "lemonade", "nojito", "colada", "juice", "cool special"] },
+    { "tag": "bakery", "field": "subcategory", "tokens": ["sweet tooth", "muffins", "cookies", "cakes", "cheese cakes"] }
+  ]
+}

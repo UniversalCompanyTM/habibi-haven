@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "House-written marks over the ingested data. This file deliberately contains no descriptions:",
+    "descriptions exist for 113 of the 243 items in their own data and inventing the other 130 is out",
+    "of bounds (docs/ARCHITECTURE.md, Risks). build-content.mjs resolves every name here against the",
+    "ingest and fails if a name matches nothing or matches more than one item."
+  ],
+
+  "$signatureComment": [
+    "The six dishes the architecture board places on the table, in board order. They are real rows,",
+    "and the board's prices were corrected against the database — see Amendment A5."
+  ],
+  "signature": [
+    { "name": "Full Mandy", "role": "the house goat, ordered most by regulars" },
+    { "name": "Sinia", "role": "the table feast" },
+    { "name": "Lamb Chops", "role": "the grill order" },
+    { "name": "Chicken Biryani", "role": "named in the Google review themes" },
+    { "name": "Karak Chai", "role": "the third cup" },
+    { "name": "White Forest Cake 2KG", "role": "bakery as a product line" }
+  ],
+
+  "$sharingComment": [
+    "Sharing formats are only asserted where the source string says so (platter / family / whole",
+    "cake weights). This list marks the ones the configurator offers as per-table groupings."
+  ],
+  "tableFormats": [
+    { "name": "Sinia", "basis": "table", "note": "one platter per table" },
+    { "name": "Full Mandy", "basis": "table", "note": "goat rice platter" },
+    { "name": "Half Mandy", "basis": "table", "note": "smaller platter" },
+    { "name": "White Forest Cake 2KG", "basis": "table", "note": "2KG format" },
+    { "name": "White Forest Cake 3KG", "basis": "table", "note": "3KG format" }
+  ],
+
+  "descriptions": {},
+  "extraTags": {}
+}

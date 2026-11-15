@@ -1,0 +1,120 @@
+/* site/src/styles/tokens.css
+ *
+ * The room, in numbers.
+ *
+ * The approved plan carried an espresso-and-gold set from the abandoned project. Amendment A1 put the
+ * restaurant's own badge, signage and neon in front of us instead: teal, a green canopy, timber,
+ * hanging lanterns and one yellow neon heart. So teal carries the room, amber is kept for the lantern
+ * and the neon heart, and gold/espresso survive as the warm dark underneath rather than the accent on
+ * top. Espresso #12100E stays as --ink-warm.
+ *
+ * Every ratio in the comments below was computed from the two hex values it labels, not asserted.
+ * tests/run.mjs pins the facts those numbers are printed from, and M6 adds scripts/verify-dist.mjs to
+ * re-run this arithmetic against the built CSS alongside the axe pass in a real page.
+ */
+
+:root {
+  /* ---- surfaces, evening (the default: this restaurant opens at 06:30 and closes at 23:00) ---- */
+  --bg-0: #04100e; /* the room at midnight */
+  --bg-1: #071a17;
+  --bg-2: #0b2621; /* raised surface */
+  --bg-3: #123129; /* card */
+  --ink-warm: #12100e; /* espresso, from the approved set — used under warm gradients only */
+
+  /* ---- ink on those surfaces ---- */
+  --mist: #e8f4f0; /* on bg-0 17.16:1, on bg-1 15.93:1 — body */
+  --mist-2: #b4ccc5; /* on bg-1 10.59:1 — secondary */
+  --mist-3: #7e9a93; /* on bg-1 5.93:1 — meta, still AA */
+
+  /* ---- the two accents ---- */
+  --teal: #22e3be; /* on bg-1 10.95:1 — text-safe, and the neon of the badge */
+  --teal-soft: #8df3df; /* on bg-1 13.70:1 — display */
+  --teal-deep: #0a6b5b; /* on paper 5.69:1 — the same hue readable on daylight */
+  --amber: #f7a93b; /* on bg-1 9.15:1 — lantern, the yellow neon heart */
+  --amber-deep: #8a4e0b; /* on paper 5.86:1 */
+
+  /* ---- the daylight end of the clock ---- */
+  --paper: #f3f1ec; /* chai and stone in the morning */
+  --paper-2: #e7e3da;
+  --ink: #0a1f1b; /* on paper 15.19:1 */
+  --grey-paper: #5e6b66; /* on paper 4.93:1 */
+
+  /* ---- forbidden pairs, stated so nobody rediscovers them ----
+     --mist on --teal   1.46:1  never. light text goes on --bg-0 over teal, dark text on teal.
+     --ink  on --paper-2 is fine; --teal on --paper is not (2.6:1) — use --teal-deep.            */
+
+  /* ---- the rig: one number, shared by CSS and the WebGL door ----
+     --hour is 6.5 → 23 in Africa/Nairobi; --night is the 0→1 curve lib/hours.mjs computes from it.
+     With no JavaScript --night keeps the value the media query chose, so the site still reads. */
+  --hour: 19;
+  --night: 1;
+
+  /* ---- type ---- */
+  --display: "Bricolage Grotesque", "Trebuchet MS", ui-sans-serif, sans-serif;
+  --text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --step--1: clamp(0.78rem, 0.76rem + 0.1vw, 0.86rem);
+  --step-0: clamp(0.95rem, 0.93rem + 0.11vw, 1.04rem);
+  --step-1: clamp(1.15rem, 1.08rem + 0.34vw, 1.4rem);
+  --step-2: clamp(1.45rem, 1.28rem + 0.72vw, 2rem);
+  --step-3: clamp(1.85rem, 1.5rem + 1.5vw, 3rem);
+  --step-4: clamp(2.4rem, 1.7rem + 3.2vw, 5rem);
+  --step-5: clamp(3.2rem, 1.6rem + 7vw, 9.5rem);
+
+  /* ---- space, radius, motion ---- */
+  --gutter: clamp(1.1rem, 0.6rem + 2.4vw, 3.4rem);
+  --measure: 68ch;
+  --radius: 18px;
+  --radius-sm: 10px;
+  --edge: 1px solid color-mix(in oklab, var(--teal) 22%, transparent);
+  --dur-1: 180ms;
+  --dur-2: 420ms;
+  --ease-out: cubic-bezier(0.16, 0.84, 0.24, 1);
+  --ease-spring: cubic-bezier(0.2, 1.24, 0.32, 1);
+
+  /* ---- elevation, built from teal light rather than grey shadow ---- */
+  --lift-1: 0 1px 0 color-mix(in oklab, var(--teal) 10%, transparent), 0 18px 40px -28px #000;
+  --lift-2: 0 1px 0 color-mix(in oklab, var(--teal) 22%, transparent), 0 40px 80px -40px #000;
+  color-scheme: dark;
+}
+
+/* Morning is a real service, not a theme: the restaurant opens at 06:30 for chai and pastries, and a
+   screen in a Nairobi daylight is a different object from a screen in the lounge at ten. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-0: var(--paper);
+    --bg-1: #faf8f4;
+    --bg-2: #ffffff;
+    --bg-3: #ffffff;
+    --mist: var(--ink);
+    --mist-2: #26403a;
+    --mist-3: var(--grey-paper);
+    --teal: var(--teal-deep);
+    --teal-soft: #06473d;
+    --amber: var(--amber-deep);
+    --night: 0;
+    color-scheme: light;
+  }
+}
+
+/* The rig interpolates between the two, but only where color-mix exists; elsewhere the media query
+   above already chose a coherent scheme and the dial changes light rather than hue. */
+@supports (color: color-mix(in oklab, red, blue)) {
+  :root {
+    --bg-0: color-mix(in oklab, var(--paper), #04100e calc(var(--night) * 100%));
+    --bg-1: color-mix(in oklab, #faf8f4, #071a17 calc(var(--night) * 100%));
+    --bg-2: color-mix(in oklab, #ffffff, #0b2621 calc(var(--night) * 100%));
+    --bg-3: color-mix(in oklab, #ffffff, #123129 calc(var(--night) * 100%));
+    --teal: color-mix(in oklab, var(--teal-deep), #22e3be calc(var(--night) * 100%));
+    --amber: color-mix(in oklab, var(--amber-deep), #f7a93b calc(var(--night) * 100%));
+    --mist: color-mix(in oklab, var(--ink), #e8f4f0 calc(var(--night) * 100%));
+    --mist-2: color-mix(in oklab, #26403a, #b4ccc5 calc(var(--night) * 100%));
+    --mist-3: color-mix(in oklab, var(--grey-paper), #7e9a93 calc(var(--night) * 100%));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 1ms;
+    --dur-2: 1ms;
+  }
+}

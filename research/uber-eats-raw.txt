@@ -1,0 +1,624 @@
+Uber Eats store page — verbatim innerText tail (chars 1200–4917)
+URL: https://www.ubereats.com/ke/store/habib-haven-restaurant/0vCaJLbWXoa5xOoD97NtPQ
+Captured: 2026-11-14 via in-app browser render (evaluate_script, document.body.innerText)
+Note: store name on Uber Eats is "Habib Haven Restaurant" (missing the second "i").
+Head of page (chars 0–1200) read earlier:
+  Title: "Order Habib Haven Restaurant Menu Delivery Online | Nairobi | Menu & Prices | Uber Eats"
+  Header: "Habib Haven Restaurant • African • Comfort Food • Steak • $$"
+  "Currently unavailable"
+  "Koinange Street, Nairobi, EMEA 00100"
+  "Group order" / "KES0 delivery fee (new users)"
+  "Open until 5:00 PM / Every Day / 9:00 - 17:00" / "Menu 9:00 AM – 5:00 PM"
+--- VERBATIM TAIL ---
+
+Black Forest Cake
+KES 3,200.00
+Layers of chocolate sponge, cherries, and cream creating a classic dessert experience.
+Blueberry Cake
+KES 3,200.00
+Light cake featuring blueberry notes, suitable for a variety of occasions.
+Red Velvet Cake
+KES 4,700.00
+Classic layered cake with a smooth cream cheese finish, known for its distinctive red hue and balanced texture.
+Carrot Cake
+KES 4,500.00
+Moist cake with a blend of grated carrots and subtle spices, finished with a smooth cream cheese topping.
+Chocolate Fudge Cake
+KES 3,600.00
+Rich chocolate dessert with a smooth, dense texture and layered fudge.
+Lemon Loaf Cake
+KES 3,200.00
+Moist cake with a subtle citrus taste, offering a balanced lemon essence in every slice.
+Marble Loaf Cake
+KES 3,200.00
+A classic cake featuring a blend of light and dark batter creating a distinctive marbled pattern.
+Breakfast Combos
+Liver Malawax Combo
+KES 1,000.00
+3 pieces malawax pancakes and liver sautéed with mixed peppers, onions and coriander.
+Beef, Steak and Egg Combo
+KES 1,000.00
+Beef steak, 2 sausages, 2 eggs, home fries and a salad garnish.
+Habibi Power Big Combo
+KES 1,100.00
+2 eggs, 2 sausages, home fries, baked beans, crepes and beef macon.
+Anjera Somali with Kidney Combo
+KES 1,000.00
+Kidney sautéed with mixed pepper, onions and 3 pieces of anjera.
+Cheese Cakes
+Passion Cheese Cake
+KES 500.00
+Smooth cheesecake with a hint of passion fruit for a balanced finish.
+Blueberry Cheese Cake
+KES 500.00
+Smooth cheesecake layered with blueberry topping for a balanced dessert experience.
+Oreo Cheese Cake
+KES 500.00
+Creamy cheesecake layered with crushed Oreo cookies for a balanced texture and taste.
+Strawberry Cheese Cake
+KES 500.00
+Smooth and creamy dessert topped with strawberry, combining rich cheese and a delicate base.
+Double Chocolate Muffin
+KES 280.00
+Rich chocolate muffin with double the chocolate for an indulgent treat.
+Vanilla Coconut Muffin
+KES 280.00
+Light muffin with vanilla and coconut flavours.
+Cookies
+Ginger Cookies (3 pieces)
+KES 100.00
+Three spiced cookies with a hint of ginger, perfect for a light snack.
+Oatmeal Cookies (3 pieces)
+KES 100.00
+Three soft cookies made with oats for a simple snack.
+Choco Chip Cookies (3 pieces)
+KES 100.00
+Three classic cookies with chocolate chips for a simple, familiar treat.
+Muffins
+Vanilla Muffin
+KES 280.00
+Soft, light muffin with a subtle vanilla essence.
+Banana Muffin
+KES 280.00
+Soft, moist treat with a mild banana essence, ideal for a quick snack or light breakfast.
+Vanilla Choco Chip Muffin
+KES 280.00
+Soft muffin with vanilla and chocolate chips.
+Pancakes and Waffles
+Strawberry Banana Cake
+KES 750.00
+Butter milk fluffy pancakes with fresh strawberries and banana.
+Plain Waffles
+KES 750.00
+Plain waffles served with icing sugar and whipped cream.
+Buttermilk Pancakes
+KES 700.00
+Fluffy pancakes made from butter milk with icing sugar.
+Fruit Salad
+Tropical Granola Breakfast
+KES 850.00
+A heap of assorted fruits, granola and vanilla yoghurt.
+Fruit Salad
+KES 800.00
+Assorted selected fruits with nuts and vanillla yoghurt.
+Omelettes
+Spanish and Mushroom Omelette
+KES 800.00
+Spanish omelette and grilled mushroom served with toast.
+Spinach Omelette
+KES 650.00
+Spinach omelette and sorted with onions served with toast.
+Plain Omelette
+KES 650.00
+3 pieces of egg and toasted bread with a garnish of habibi garden salad with butter.
+Shak Shuka Omelette
+KES 650.00
+Tomato sauce, egg and toast garnished with salad.
+French Toast Omelette
+KES 700.00
+A slice of bread dipped in egg batter infused with cinnamon and cooked till golden. Served with maple syrup, a sprinkle of icing sugar and a side of fruits.
+Vegetarian Breakfast
+KES 500.00
+Toasted bread, baked beans, fried mushrooms and roasted vegetables.
+Sweet Tooths
+Red Velvet Cake (slice)
+KES 530.00
+Moist layered cake with a smooth cream cheese topping.
+Blackforest Cake (slice)
+KES 500.00
+Layers of chocolate sponge, cherries, and cream in a classic dessert slice.
+Whiteforest Cake (slice)
+KES 500.00
+Light and creamy slice with layers of white sponge and smooth frosting.
+Orange Poppy Cake (slice)
+KES 500.00
+Moist cake slice infused with citrus and poppy seeds for a balanced texture and flavour.
+Blueberry and Lemon Cake (slice)
+KES 500.00
+A slice combining the tartness of lemon with the subtle sweetness of blueberry.
+Ginger Bread (slice)
+KES 350.00
+A spiced slice with ginger notes, offering a balanced and comforting taste.
+Brownie
+KES 350.00
+Rich chocolate dessert with a dense, fudgy texture.
+Brownie Indulgence with Ice Cream
+KES 550.00
+Rich chocolate brownie served with a scoop of ice cream.
+Habibi Coffees
+House Coffee
+KES 250.00
+Smooth and balanced coffee, brewed to provide a classic taste experience.
+Cappuccino
+KES 250.00
+Smooth blend of espresso and steamed milk with a light layer of foam.
+Cubano
+KES 220.00
+Sweetened espresso shot with bold flavour and a smooth finish.
+Espresso
+KES 200.00
+A concentrated coffee shot with a rich aroma and bold taste.
+Macchiato
+KES 200.00
+Espresso topped with a small amount of steamed milk, offering a balanced coffee experience.
+Mochaccino
+KES 350.00
+A rich blend of espresso and chocolate with steamed milk for a smooth, balanced coffee experience.
+Americano
+KES 200.00
+Smooth, hot coffee with a balanced taste, ideal for a simple caffeine boost.
+Habibi Kahawa
+KES 350.00
+A traditional coffee blend offering a balanced and smooth taste experience.
+Habibi Lattes
+Latte
+KES 250.00
+Smooth blend of espresso and steamed milk creating a balanced, creamy coffee experience.
+Matcha Green Latte
+KES 350.00
+Smooth blend of finely ground green tea and milk, served warm for a comforting drink.
+Lotus Biscoff Latte
+KES 350.00
+Smooth latte infused with the distinctive caramelised biscuit flavour of Lotus Biscoff.
+Caramel Latte
+KES 350.00
+Smooth blend of espresso and steamed milk with a touch of caramel syrup.
+Vanilla Latte
+KES 350.00
+Smooth blend of espresso and steamed milk with a hint of vanilla flavour.
+Cinnamon Latte
+KES 350.00
+Warm beverage blending espresso with cinnamon for a comforting taste.
+Mocha
+KES 300.00
+A rich blend of espresso and chocolate with steamed milk, offering a smooth and balanced taste.
+Habibi Teas
+Habibi Tea
+KES 300.00
+Traditional tea blend served warm, offering a comforting and familiar taste.
+African Tea Pot
+KES 300.00
+Traditional African tea served in a classic pot, offering a warm and comforting beverage experience.
+Ginger Tea
+KES 300.00
+Warm infusion with a subtle hint of ginger, perfect for a soothing beverage.
+English Tea
+KES 300.00
+Traditional brewed black tea served hot.
+Herbal Tea
+KES 300.00
+A warm infusion crafted from a blend of herbs, offering a soothing and calming experience.
+Camel Tea
+KES 350.00
+Traditional tea brewed with a unique blend, offering a distinctive taste inspired by local customs.
+Karak Chai
+KES 350.00
+Traditional spiced tea brewed with strong black tea and aromatic spices.
+Habibi Cool Special
+Mango Chilli
+KES 350.00
+A blend of mango and chilli offering a unique combination of flavours.
+Spicy
+Passion Kick
+KES 350.00
+A refreshing blend with a vibrant tropical twist.
+Caramel Affogato
+KES 350.00
+Creamy ice cream combined with rich caramel and espresso for a smooth, indulgent treat.
+Matcha Yuzu
+KES 350.00
+A refreshing blend combining the earthy notes of matcha with the citrusy zest of yuzu.
+Orange Presso
+KES 350.00
+A refreshing blend of orange and espresso with bright citrus flavour and a smooth finish.
+Habibi Iced Teas
+Habibi Berry Vanilla Iced Tea
+KES 480.00
+Chilled iced tea blending berry and vanilla flavors for a refreshing drink.
+Passion Iced Tea
+KES 480.00
+Refreshing iced tea with a passion fruit twist, served chilled for a cool, revitalising drink.
+Strawberry Iced Tea
+KES 480.00
+Chilled tea infused with strawberry essence for a refreshing beverage.
+Peach Iced Tea
+KES 480.00
+Chilled beverage with a balanced blend of tea and peach essence.
+Lemon Iced Tea
+KES 480.00
+Chilled beverage with a refreshing lemon taste, perfect for cooling down.
+Habibi Milkshakes
+Lotus Biscoff Milkshake
+KES 550.00
+Smooth milkshake blending the unique taste of Lotus Biscoff with creamy milk.
+Kinder Buenos Milkshake
+KES 550.00
+Creamy milkshake blending smooth milk with Kinder Bueno chocolate for a rich, indulgent taste.
+Brownie Milkshake
+KES 550.00
+Creamy milkshake blended with rich chocolate brownie pieces for a smooth, indulgent treat.
+Peanut Butter Milkshake
+KES 550.00
+Smooth and creamy blend with rich peanut butter notes.
+Oreo Milkshake
+KES 500.00
+Creamy milkshake blended with crushed Oreo cookies for a smooth, chocolatey taste.
+Red Velvet Milkshake
+KES 550.00
+Smooth and creamy milkshake with a distinctive red velvet taste.
+Strawberry Milkshake
+KES 500.00
+Smooth and creamy blend with a classic strawberry taste.
+Vanilla Milkshake
+KES 500.00
+Smooth and creamy blend with classic vanilla essence.
+Chocolate Milkshake
+KES 500.00
+Smooth and creamy blend with rich chocolate notes, served chilled.
+Mint Milkshake
+KES 550.00
+Chilled milkshake with a refreshing hint of mint.
+Habibi Smoothies
+Habibi Acai Smoothie
+KES 500.00
+A refreshing blend featuring acai berries, perfect for a nutritious and energizing boost.
+Raspberry Peach Smoothie
+KES 500.00
+A blend of raspberry and peach for a refreshing and smooth drink.
+Blueberry, Pineapple and Kale Smoothie
+KES 500.00
+A blend of blueberry, pineapple, and kale for a balanced and refreshing drink.
+Strawberry, Mango and Banana Smoothie
+KES 500.00
+A blend of strawberry, mango, and banana for a smooth, fruity drink.
+Peanut Butter and Spinach Smoothie
+KES 500.00
+A blend of creamy peanut butter and leafy spinach for a smooth, nutritious drink.
+Habibi Fit and Wellness Smoothie
+KES 500.00
+A blend designed to support fitness and wellness goals with balanced nutrients.
+Habibi Dawas
+Habibi Classic Dawa
+KES 350.00
+Warm infusion of ginger, lemon and honey prepared in the classic dawa style.
+Mint Dawa
+KES 350.00
+A refreshing blend featuring mint, crafted to offer a cool and soothing taste experience.
+Cinnamon Garlic Dawa
+KES 350.00
+A blend of cinnamon and garlic creating a distinctive and aromatic flavour profile.
+Kinywaji Chakula Dawa
+KES 350.00
+Traditional dawa beverage offering a comforting, remedy-inspired experience.
+Habibi Iced Lattes
+Habibi Iced Latte
+KES 350.00
+Chilled coffee beverage with milk and ice, offering a smooth and refreshing taste.
+Iced Caramel Latte
+KES 370.00
+Chilled espresso blended with caramel and milk for a smooth, refreshing coffee experience.
+Iced Spanish Latte
+KES 380.00
+Chilled espresso blended with milk and ice for a smooth, refreshing coffee experience.
+Iced Lotus Biscoff Latte
+KES 380.00
+Chilled latte infused with the distinctive taste of Lotus Biscoff, served over ice.
+Iced Matcha Latte
+KES 350.00
+Chilled green tea latte with a smooth blend of matcha and milk.
+Iced Oreo Latte
+KES 380.00
+Chilled coffee blended with Oreo cookies for a smooth, refreshing drink.
+Habibi Lemonades
+Watermelon Lemonade
+KES 520.00
+A refreshing blend of watermelon and lemon for a cool, thirst-quenching drink.
+Orange Lemonade
+KES 520.00
+A refreshing blend of citrus flavours combining orange and lemon for a crisp, cool drink.
+Peach Lemonade
+KES 500.00
+A refreshing blend of peach and lemon flavours, chilled for a crisp and tangy drink.
+Kiwi Lemonade
+KES 500.00
+A refreshing blend of kiwi and lemon for a crisp, citrusy drink.
+Habibi Nojitos
+Habibi Classic Nojito
+KES 500.00
+A refreshing blend of mint, lime, and soda for a classic, non-alcoholic mojito experience.
+Passion Nojito
+KES 500.00
+A refreshing blend with tropical passion fruit and zesty lime notes.
+Kiwi Nojito
+KES 500.00
+A refreshing blend featuring kiwi with classic mojito elements for a cool, crisp drink.
+Strawberry Nojito
+KES 500.00
+A refreshing blend of strawberry and mint with a hint of lime, served chilled.
+Habibi Coladas
+Habibi Pina Colada
+KES 500.00
+A tropical blend of pineapple and coconut flavours in a refreshing beverage.
+Passion Colada
+KES 500.00
+A tropical blend with passion fruit and coconut for a refreshing taste.
+Strawberry Colada
+KES 500.00
+A refreshing blend of tropical flavours with a hint of strawberry.
+Peach Colada
+KES 500.00
+A tropical blend combining peach and coconut flavours for a refreshing drink.
+Habibi Juices
+Passion Juice
+KES 360.00
+Refreshing juice with a tropical taste, perfect for a revitalising drink.
+Mango Juice
+KES 360.00
+Refreshing juice made from ripe mangoes, served chilled.
+Pineapple Juice
+KES 360.00
+Refreshing juice made from ripe pineapple, offering a tropical taste.
+Orange Juice
+KES 500.00
+Refreshing citrus beverage served chilled.
+Carrot Juice
+KES 360.00
+Refreshing juice made from carrots, offering a natural and smooth taste.
+Orange Carrot Juice
+KES 500.00
+A refreshing blend of orange and carrot juice, offering a balanced and natural taste.
+Pineapple and Mint Juice
+KES 360.00
+Refreshing blend of pineapple and mint for a cool, revitalising drink.
+Watermelon Juice
+KES 360.00
+Refreshing juice made from ripe watermelon, served chilled.
+Turmeric Juice
+KES 360.00
+A refreshing juice known for its vibrant colour and earthy taste.
+Beetroot, Mango and Carrot Juice
+KES 400.00
+A refreshing blend of beetroot, mango, and carrot juice offering a balanced and natural taste.
+Kiddies Menu
+Mini Kiddy Pancakes
+KES 550.00
+3 layers of mini pancakes, bananas, strawberries and topped up with strawberry sauce and whipped cream.
+Sausages World Breakfast
+KES 550.00
+2 sausages, an egg, baked beans and salad.
+Kiddy Fish Fingers
+KES 600.00
+3 pieces fish fingers served with unseasoned chips.
+Kiddy Fish Fillet
+KES 600.00
+Fish fillet served with mashed potatoes, green peas with carrots and tartar sauce.
+Spaghetti Bolognese
+KES 600.00
+Spaghetti sauce infused and tossed with minced beef rouge topped with Parmesan cheese served with garlic bread.
+Sandwiches
+Steak Sandwich
+KES 1,300.00
+Well marinated soft and tender fillet, organic lettuce, cheese, spread of mayonnaise and tomatoes served with chips.
+Club Triple Decker Sandwich
+KES 1,350.00
+Triple decker sandwich filled with organic lettuce, tomatoes, cucumber, chicken steak and fried egg with chips.
+Chicken Teriyaki Sandwich
+KES 1,200.00
+Teriyaki chicken steak with lettuce, tomatoes, onions and mayonnaise and served with chips.
+Vegetarian Sandwich
+KES 500.00
+Onion, lettuce, tomatoes and avocado sandwich served with chips.
+Chicken
+Grilled Chicken Breast
+KES 1,300.00
+Well marinated grilled chicken breast served with a choice of accompaniment.
+Half Roast Chicken
+KES 1,550.00
+Well marinated chicken roasted served with an accompaniment of your choice.
+Chicken Drumsticks
+KES 1,450.00
+Crispy on the outside juicy on the inside drumstick bursting with flavour choice of BBQ or oven roasted served with chips.
+Biryani Dishes
+Chicken Biryani
+KES 1,200.00
+Well marinated spicy chicken served with biryani rice and garnished with banana.
+Mutton Biryani
+KES 1,400.00
+Tender beef mutton cooked in infused biryani sauce, served with rice and garnished with banana and salsa salad.
+Beef Biryani
+KES 1,400.00
+Cubed beef fillet cooked in infused biryani sauce, served with rice and garnished with banana and salsa salad.
+Pastas
+Spaghetti Saldato
+KES 1,250.00
+Spaghetti sauce infused and tossed with minced beef rouge topped with Parmesan cheese served with garlic bread.
+Pesto Pasta
+KES 1,250.00
+A blend of basil leaves, cashew nuts, parmesan cheese, chicken, garlic tossed with pasta. Tagliabella served with garlic bread.
+Mushroom Alfredo
+KES 1,300.00
+Grilled mushrooms, chicken enriched in a creamy mushroom sauce with garlic bread topped with parmesan cheese.
+Pennne Arabiata
+KES 1,100.00
+tagliatella pasta fused with red peppers, black olives, red onions, chilly with tomato pamodara sauce served with garlic bread.
+Curries
+Honey Mustard Chicken Curry
+KES 1,450.00
+Savory rich butter curry reduced to well marinated chicken cooked in honey mustard curry sauce, add dried pineapple and mustard curry. Served with choice of accompaniment.
+Pineapple Fish Curry
+KES 1,450.00
+Curry incorporated with well diced pineapple braised with coated fish fillet with perfection.
+Vegetable Curry
+KES 1,300.00
+Seasonal vegetable reduced in curry sauce served with an accompaniment of your choice.
+Beef Curry
+KES 1,450.00
+Spicy tender beef curry rich in flavor and reduced to perfection served with mixed vegetables and an accompaniment of your choice.
+Goat Dishes
+Half Mandy
+KES 1,200.00
+Goat meat boiled and dipped in mandy marination then grilled in oven served with mandy rice.
+Full Mandy
+KES 2,200.00
+Goat meat boiled and dipped in mandy marination then over cooked served with mandy rice.
+Deillo
+KES 1,300.00
+Goat meat tossed in pepper, onions, and coriander. Served with an accompaniment of your choice.
+Arosto
+KES 1,400.00
+Goat meat dry fry tossed in pepper, onions and coriander. Served with accompaniment of your choice.
+Sinia
+KES 5,000.00
+Goat mandy, grilled chicken breast, served with mandy rice, pilau, spaghetti, chutney sauce.
+Fish Dishes
+Battered Fish Fillet and Chips
+KES 1,350.00
+Traditional battered fish served with chips, lemon wedge and our house garden salad.
+Grilled Fish Fillet
+KES 1,350.00
+Part served steak of fish fillet basted with butter, dill and garlic served on lemon, thyme sauce and choice of accompaniment.
+Grilled Salmon
+KES 2,500.00
+Fresh lemon salmon with herbed sauce served with c hoice of accompaniment with seasoned veges.
+Whole Tilapia Fish (Half)
+KES 1,350.00
+Fresh from lake whole tilapia with a choice of accompaniment.
+Pizzas
+Habibi Chicken Pizza
+KES 900.00
+Well marinated chicken chunks with a spread of pomodoro sauce and assorted vegetables topped with Mozzarella cheese.
+BBQ Chicken Pizza
+Priced by add-ons
+Nicely marinated chicken chunks flavoured with onions and BBQ sauce topped with Mozzarella cheese and a sprinkle of dry oregano.
+Burgers
+Vegetable Burger
+KES 1,150.00
+Vegetable burger which has a combination of potatoes, carrot, baby marrow, broccoli, and garden peas. Served with chips.
+Fried Asian Burger
+KES 1,200.00
+A crispy chicken coated burger topped with Asian salad and a drizzle of BBQ sauce served on a burger bun and served with chips.
+Creamy Mushroom Soup
+KES 550.00
+Mushroom soup with chopped coriander.
+Mexican Wrap
+KES 600.00
+Shawarma in our in-housetortilla, and veggies mixed with cream garlic.
+Salads
+Greek Salad
+KES 1,100.00
+Classical health salad of aromatic, tomatoes, cucumber, sweet pepper, onions, lettuce, black olives, Feta cheese, oregano, and capers vinaigrette.
+Caesar Salad
+KES 1,200.00
+Lettuce, Parmesan cheese, croutons and anchovies and with either chicken or tuna served with caesar dressings topped with chicken or beef macon.
+Habibi Chicken Salad
+KES 1,300.00
+A combination of vegetable rice, iceberg, and red soft lettuce. Avocado slices, rosemary, grilled chicken, hawaii grilled pineapple, cherry tomatoes with crunchy sweetcorn served with a sweer dressing teriyaki vinaigrette dressing.
+Starters
+Mixcan Chips and Guacamole
+KES 1,000.00
+mixed vegetables carrots,mixed peppers, and baby marrow, and garnished with salad.
+Plain Chicken Wings
+KES 1,000.00
+Six baked chicken wings toasted in BBQ sauce, garnished with sesame seeds.
+BBQ Chicken Wings
+KES 1,300.00
+Ten baked chicken wings, toasted in BBQ sauce, garnished with sesame, served with chips.
+Chicken Nuggests
+KES 1,000.00
+Chicken marinated ina salt solution and coated with bread crumbs served fries.
+Samosa Platter
+KES 750.00
+Two pcs each of beef samosas, chicken samosas, and vegetable spring rolls served with a honey mustard dip.
+Mixcan chips and Guacamole
+KES 600.00
+Wheat tortilla fried and sprinked with cayenna and guacamole.
+Spicy Samosa Beef/Chicken
+KES 300.00
+Three mini beef or chicken samosas served with a sweet chilli sauce dip.
+Spicy
+Coated Fried Plantains
+KES 500.00
+Nicely shallow-fried coated plantains served with honey dressing and cole slaw.
+Vegetable Spring Rolls
+KES 300.00
+Nicely marinated mixed vegetables (carrots, mixed peppers, and baby marrow). Served with salad.
+Fish Fingers
+KES 1,350.00
+Well coated fish fingers with savery nerbs and lemon zest with a lemon zest dip and choice of accompaniment.
+Shawarma Section
+Chicken Shawarma
+KES 600.00
+Our In-house tortilla filled with chicken garlic and coleslaw.
+Chicken Wrap
+KES 1,200.00
+Chicken diced in our in house tortila with cheddar served with chips.
+Shawarma Family
+KES 1,000.00
+Chicken shawarma with juicy and tender meat wrapped in our in-house tortilla, topped with fresh veggies and tzatziki sauce.
+Hawaiian Chicken Pizza
+KES 1,000.00
+A spread pf pomodoro sauce, diced chicken chunks, beef, macon, cubed pineapples and topped with mozzarella cheese.
+Claasic Margarita Pizza
+KES 900.00
+A spread of pomodoro sauce, topped with mozzarella cheese, basil leaves and dry oregano.
+Habibi Texas Burger
+KES 1,300.00
+A monster burger with lettuce, tomatoes, gherkin, smoked Macon, well melted pate with cheese and fried egg. Served with chips.
+Classic Burger
+KES 1,200.00
+A choice of either beef or chicken patty layer in ice burg lettuce, tomatoes, gherkins, caramelised onions and cheese. Served with chips.
+Soups
+Chinese Chicken and Noodle Soup
+KES 550.00
+Traditional Chinese soup with a touch of sweetcorn.
+Cream of Butternut Soup
+KES 550.00
+A creamy textured squash soup.
+Steaks
+Lamb Chops
+KES 1,350.00
+Well marinated lamb chops with mint leaves. Served with beetroot mashes potatoes steamed vegetables.
+Pepper Beef Steak
+KES 1,450.00
+Grilled pepper steak served with pepper sauce served with steamed vegetables and an accompaniment of your choice.
+T. Bone Steak
+KES 1,550.00
+Well marinated T.Bone beef steak with garlic, oil, soy sauce, and rosemary served with seasonal vegetables, and an accompaniment of your choice.
+Beef and Chicken BBQ Platter
+KES 1,550.00
+Marinated beef and chicken strips tossed in BBQ sauce and served on a bed of chips, avocado, salsa salad and a thousand Island sauce.
+Mushroom Beef Steak
+KES 1,450.00
+Well marinated veef fillet served with out in-house mushroom sauce served with seasonal vegetablesa and choice of accompaniment.
+Ribeye Steak
+KES 1,550.00
+Ribeye steak marinated with garlic, oil, oyster sauce and served with seasonal vegetables and an accompaniment of your choice.
+Frequently asked questions
+Can I order Habib Haven Restaurant delivery in Nairobi with Uber Eats?
+Is Habib Haven Restaurant delivery available near me?
+How do I order Habib Haven Restaurant delivery online in Nairobi?
+Where can I find Habib Haven Restaurant online menu prices?
+How do I get free delivery on my Habib Haven Restaurant order?
+How do I pay for my Habib Haven Restaurant order?
+More to explore
+Tomoca, Gigiri 50 min; Pili Restaurant; Sippers and Diners; 4.4 Qaffeespot Restaurant 19 min; 4.6 Mbuzi Munch 58 min 4.2 (20% off select items); The Green Table 50 min 4.4; The Node Jacaranda Hotel 27 min

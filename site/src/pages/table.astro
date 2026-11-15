@@ -1,0 +1,67 @@
+---
+// site/src/pages/table.astro — the configurator, on its own page, because it is the argument.
+//
+// A guest arrives here with a table already half-built (from /menu, through localStorage) or with one
+// someone sent them (`?t=`). Both cases are handled inside lib/table-client.mjs, which is why this
+// page has no logic — it is a frame around the component and the honest disclaimer.
+import Base from "../layouts/Base.astro";
+import menu from "../data/menu.json";
+import press from "../data/press.json";
+import { money } from "../lib/table.mjs";
+import TableBuilder from "../components/TableBuilder.astro";
+
+const f = menu.meta.facts;
+---
+
+<Base
+  title="Set your table — Habibi Haven"
+  description="Compose a table at Habibi Haven from their own menu data — party size, dishes, sides and prices in Kenyan shillings — then send it to the restaurant on WhatsApp as one message."
+>
+  <section class="stage stage--tight">
+    <div class="shell">
+      <p class="eyebrow">Ordering</p>
+      <h1 class="display" data-kin>Set your table</h1>
+      <p class="lede">
+        Pick a party, pick the dishes, and the sheet on the right prices them from the kitchen's own
+        data — {menu.meta.items} items, a median of {money(menu.meta.median)}. When it looks like dinner,
+        it goes to {f.phone} as one message you send, in your name.
+      </p>
+    </div>
+  </section>
+
+  <section class="stage stage--tight">
+    <div class="shell">
+      <TableBuilder />
+    </div>
+  </section>
+
+  <section class="stage stage--tight">
+    <div class="shell grid-2">
+      <div class="stack">
+        <h2 class="display--h3">Why this is not a booking form</h2>
+        <p class="measure meta">
+          Nothing in their stack looks like a reservations system, and a website that pretend-booked a
+          table would send the floor staff an order they never received. So the site does the part it
+          can actually do — compose the table, price it correctly, and put it in front of the people
+          who can say yes — and says out loud that the answer comes from them.
+        </p>
+        <p class="meta dim">
+          The only thing that needs confirming upstream is the hours: {f.hoursOfRecord.open}–{f.hoursOfRecord.close}
+          is what the Google listing says, and two other numbers exist elsewhere on this page's sources.
+        </p>
+      </div>
+      <div class="panel" style="padding:1.1rem">
+        <h2 class="display--h3">The prices, as they are</h2>
+        <p class="meta">
+          Median dish {money(menu.meta.median)} · the range runs {money(menu.meta.priceRange.min)} to {" "}
+          {money(menu.meta.priceRange.max)}. Their own reported spend is {f.pricePerPerson} per person, which
+          the sheet uses as guidance and never as a surcharge.
+        </p>
+        <p class="meta dim" style="margin-top:0.7rem">
+          {press.disagreements[0].field}: this page prints {press.disagreements[0].shipped} —{" "}
+          {press.disagreements[0].others.join("; ")}. {press.disagreements[0].why}
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>

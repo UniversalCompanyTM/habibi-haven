@@ -1,0 +1,207 @@
+---
+// HoursClock.astro — the day, as a dial.
+//
+// This is the light rig turned into a control. Dragging it rewrites `--hour` and `--night` on the
+// document element through lib/rig-client.mjs — the only writer — and everything else follows from
+// there: CSS interpolates the palette, the hero photograph changes how it is lit, and the WebGL door
+// is handed the same two numbers. Nothing in this file computes what 20:30 looks like; it renders
+// whatever `rigFor()` answered, and it repaints from the `hh:hour` event, so the labels and the room
+// can never be showing different times.
+//
+// The dial is not a booking control. It does not touch the table and the copy says so, because there
+// is no availability data upstream to check a reservation against.
+import { CLOSE_LABEL, DIAL_MAX, DIAL_MIN, OPEN_LABEL, hourToLabel, nairobiHour, nextChange, rigFor } from "../lib/hours.mjs";
+
+// `name` makes the id unique per call site. `Astro.uid` does not exist in Astro 5.18 — it is an
+// island-HMR prop, not context — so every dial used to render `id="dial-undefined"`, and the home
+// page mounts two of them: duplicate ids, and the second dial's label pointed at the first one.
+const { minimal = false, name = "day" } = Astro.props;
+const dialId = `dial-${name}`;
+const noteId = `dial-note-${name}`;
+
+// The same build-time hour Base.astro writes onto <html>, from the same function — so the server HTML
+// and this component agree without either one hardcoding a time.
+const rig = rigFor(nairobiHour());
+const countdown = nextChange();
+
+// Stops are the phase boundaries from hours.mjs, not tidy round numbers, and they start at midnight
+// because the dial covers the whole day rather than only the service. Eight is the limit of what
+// stays legible across a panel; the compact variant keeps the four that frame it.
+const STOP_HOURS = minimal ? [0, 8, 13, 20] : [DIAL_MIN, 6.5, 9, 11.5, 15, 17.5, 19.5, 22];
+const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: rigFor(hour).name }));
+---
+
+<div class:list={['dial', { 'dial--minimal': minimal }]} data-dial>
+  <div class="dial__now">
+    <time datetime={rig.label} data-clock>{rig.label}</time>
+    <p data-phase>{rig.name}</p>
+    <span class="chip" class:list={[{ "chip--amber": !rig.open }]} data-state>
+      {rig.open ? "Open" : "Closed"}
+    </span>
+  </div>
+
+  <p class="meta" data-line>{rig.line}</p>
+
+  <div class="dial__track">
+    <label class="sr-only" for={dialId}>Hour of the day in Nairobi, by half hour</label>
+    <input
+      type="range"
+      id={dialId}
+      min={String(DIAL_MIN)}
+      max={String(DIAL_MAX)}
+      step="0.5"
+      value={rig.hour}
+      data-dial-input
+      aria-describedby={minimal ? null : noteId}
+    />
+  </div>
+
+  <div class="dial__stops" aria-hidden="true">
+    {
+      stops.map((s) => (
+        <span data-phase-stop data-hour={s.hour}>
+          {s.label}
+          <em data-stop-name>{s.name}</em>
+        </span>
+      ))
+    }
+  </div>
+
+  {
+    minimal ? null : (
+      <div class="row-wrap">
+        <button type="button" class="btn btn--small btn--ghost" data-dial-now>Back to now</button>
+        <button type="button" class="btn btn--small btn--ghost" data-dial-play aria-pressed="false">
+          Watch the day go
+        </button>
+        <span class="chip" data-countdown title={countdown.kind === "closes" ? "Until the kitchen closes" : "Until it opens"}>
+          {countdown.label}
+        </span>
+      </div>
+    )
+  }
+
+  <p class="meta dial__note" id={noteId}>
+    The dial runs the whole day; {OPEN_LABEL}–{CLOSE_LABEL} are the hours of record, and the chip says
+    which side of them you are on. It changes the light in the room, not the menu, and it books nothing.
+  </p>
+</div>
+
+<script>
+  import { applyHour, currentHour, HOUR_EVENT } from "../lib/rig-client.mjs";
+  // DIAL_MIN/DIAL_MAX are used by the playback wrap below. The frontmatter has its own import list, and
+  // adding them there is what made this block throw `DIAL_MAX is not defined` on the first tick of
+  // "Watch the day go" while `astro build` reported success — a script block resolves names at click
+  // time, not build time. Both lists have to be edited together.
+  import { DIAL_MAX, DIAL_MIN, nairobiHour, nextChange, rigFor } from "../lib/hours.mjs";
+
+  // Every dial on the page gets wired, because a hero carries a small one and the rig section a full
+  // one, and a `document.querySelector` would silently leave the second dead.
+  document.querySelectorAll<HTMLElement>("[data-dial]").forEach(wire);
+
+  function wire(dial: HTMLElement) {
+    const input = dial.querySelector<HTMLInputElement>("[data-dial-input]");
+    const clock = dial.querySelector<HTMLElement>("[data-clock]");
+    const phase = dial.querySelector<HTMLElement>("[data-phase]");
+    const line = dial.querySelector<HTMLElement>("[data-line]");
+    const state = dial.querySelector<HTMLElement>("[data-state]");
+    const stopNodes = Array.from(dial.querySelectorAll<HTMLElement>("[data-phase-stop]"));
+    const countdownEl = dial.querySelector<HTMLElement>("[data-countdown]");
+
+    if (!input) return;
+
+    // Wherever the build left the room is where the handle belongs, even if a script dialled it first.
+    input.value = String(currentHour());
+
+    const paint = (hour: number) => {
+      const r = rigFor(hour);
+      input.value = String(r.hour); // the play loop advances from here, so it has to move
+      if (clock) {
+        clock.textContent = r.label;
+        clock.setAttribute("datetime", r.label);
+      }
+      if (phase) phase.textContent = r.name;
+      if (line) line.textContent = r.line;
+      if (state) {
+        state.textContent = r.open ? "Open" : "Closed";
+        state.classList.toggle("chip--amber", !r.open);
+      }
+      // The last stop at or before the dialled hour is the one the room is currently in.
+      let active = 0;
+      stopNodes.forEach((node, i) => {
+        if (r.hour >= Number(node.dataset.hour ?? 0)) active = i;
+      });
+      stopNodes.forEach((node, i) => {
+        node.classList.toggle("is-active", i === active);
+        const name = node.querySelector<HTMLElement>("[data-stop-name]");
+        if (name) name.textContent = i === active ? r.name : "";
+      });
+    };
+
+    function tickCountdown() {
+      if (!countdownEl) return;
+      const next = nextChange();
+      countdownEl.textContent = next.label;
+      countdownEl.title = next.kind === "closes" ? "Until the kitchen closes" : "Until it opens";
+    }
+
+    // One listener. The handle, the labels and the countdown all repaint from the event the writer
+    // fired, so there is no second copy of this rendering to drift out of step with the first.
+    document.addEventListener(HOUR_EVENT, (event) => paint((event as CustomEvent).detail.hour));
+    paint(Number(input.value));
+    tickCountdown();
+
+    input.addEventListener("input", () => {
+      stop();
+      applyHour(Number(input.value));
+    });
+
+    dial.querySelector("[data-dial-now]")?.addEventListener("click", () => {
+      stop();
+      // The wall clock, not the show. At 02:00 the handle goes to 02:00, the chip reads Closed and the
+      // countdown says when it opens — the hour is never rounded up to opening time to look better.
+      applyHour(nairobiHour());
+      tickCountdown();
+    });
+
+    /* The day, played. Same writer as the slider, so the room and the handle cannot disagree. */
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const play = dial.querySelector<HTMLButtonElement>("[data-dial-play]");
+
+    function stop() {
+      if (timer === null) return;
+      clearInterval(timer);
+      timer = null;
+      if (play) {
+        play.setAttribute("aria-pressed", "false");
+        play.textContent = "Watch the day go";
+      }
+    }
+
+    play?.addEventListener("click", () => {
+      if (timer !== null) {
+        stop();
+        return;
+      }
+      play.setAttribute("aria-pressed", "true");
+      play.textContent = "Stop";
+      timer = setInterval(() => {
+        const next = Number(input.value) + 0.5;
+        // Midnight wraps to midnight, so the playback is a day rather than a segment of one.
+        applyHour(next > DIAL_MAX ? DIAL_MIN : next);
+      }, 1100);
+      if (Number(input.value) >= DIAL_MAX) applyHour(DIAL_MIN);
+    });
+
+    // A looping timer in a hidden tab is nobody's idea of motion, and reduced-motion gets no autoplay.
+    addEventListener("pagehide", stop);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stop();
+    });
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) play?.setAttribute("hidden", "");
+
+    // The countdown is the wall clock; the dial is the show. They are allowed to disagree, and saying
+    // which is which is the whole point of putting both on the panel.
+    setInterval(tickCountdown, 60_000);
+  }
+</script>

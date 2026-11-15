@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="goldRamp" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FBF4E8"/>
+      <stop offset="1" stop-color="#0A0702"/>
+    </linearGradient>
+    <pattern id="hatch" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#F6EFE2"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#B3261E" stroke-width="1.1" stroke-opacity="0.5"/>
+    </pattern>
+  </defs>
+
+  <rect width="2400" height="1350" fill="#F6EFE2"/>
+
+  <!-- ============ HEADER ============ -->
+  <rect x="0" y="0" width="2400" height="150" fill="#12100E"/>
+  <rect x="0" y="146" width="2400" height="4" fill="#CB9235"/>
+  <text x="60" y="72" fill="#F6EFE2" font-size="42" font-weight="700" letter-spacing="6">HABIBI HAVEN — ARCHITECTURE BOARD</text>
+  <text x="60" y="112" fill="#CB9235" font-size="21" letter-spacing="1.4">Set your table · immersive door, fast interior · Astro + islands + Three.js · static output · private preview · every string copied from the approved plan</text>
+
+  <!-- ============ CARD SHELLS ============ -->
+  <g fill="#FBF4E8" stroke="#12100E" stroke-width="1.6">
+    <rect x="60" y="190" width="432" height="1060" rx="14"/>
+    <rect x="522" y="190" width="432" height="1060" rx="14"/>
+    <rect x="984" y="190" width="432" height="1060" rx="14"/>
+    <rect x="1446" y="190" width="432" height="1060" rx="14"/>
+    <rect x="1908" y="190" width="432" height="1060" rx="14"/>
+  </g>
+
+  <!-- ================= PANEL 01 · THE SPINE ================= -->
+  <g>
+    <text x="84" y="236" fill="#CB9235" font-size="20" font-weight="700">01</text>
+    <text x="118" y="236" fill="#12100E" font-size="24" font-weight="700" letter-spacing="2.6">THE SPINE</text>
+    <text x="84" y="270" fill="#7C5920" font-size="19" textLength="384" lengthAdjust="spacingAndGlyphs">Set your table — one evening, five movements</text>
+
+    <g font-size="18" fill="#12100E">
+      <rect x="84" y="296" width="384" height="74" rx="9" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="100" y="326" fill="#CB9235" font-weight="700">01</text>
+      <text x="130" y="326" font-weight="700">Arriving</text>
+      <text x="130" y="352" font-size="16" fill="#7C5920">the 3D door</text>
+
+      <path d="M276 370 L276 388 M270 382 L276 390 L282 382" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="84" y="392" width="384" height="74" rx="9" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="100" y="422" fill="#CB9235" font-weight="700">02</text>
+      <text x="130" y="422" font-weight="700">Sitting</text>
+      <text x="130" y="448" font-size="16" fill="#7C5920">build your table</text>
+
+      <path d="M276 466 L276 484 M270 478 L276 486 L282 478" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="84" y="488" width="384" height="74" rx="9" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="100" y="518" fill="#CB9235" font-weight="700">03</text>
+      <text x="130" y="518" font-weight="700">Ordering</text>
+      <text x="130" y="544" font-size="16" fill="#7C5920">243 dishes, 173 photos</text>
+
+      <path d="M276 562 L276 580 M270 574 L276 582 L282 574" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="84" y="584" width="384" height="74" rx="9" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="100" y="614" fill="#CB9235" font-weight="700">04</text>
+      <text x="130" y="614" font-weight="700">Staying</text>
+      <text x="130" y="640" font-size="16" fill="#7C5920">541 reviews · welcoming staff 13</text>
+
+      <path d="M276 658 L276 676 M270 670 L276 678 L282 670" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="84" y="680" width="384" height="74" rx="9" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="100" y="710" fill="#CB9235" font-weight="700">05</text>
+      <text x="130" y="710" font-weight="700">Coming back</text>
+      <text x="130" y="736" font-size="16" fill="#7C5920">hours · map · WhatsApp</text>
+    </g>
+
+    <text x="84" y="792" fill="#12100E" font-size="17" font-weight="700" letter-spacing="2">ROUTES (v1)</text>
+    <g font-size="18" font-family="'Cascadia Mono', Consolas, monospace">
+      <rect x="84" y="808" width="184" height="52" rx="8" fill="#12100E"/>
+      <text x="100" y="840" fill="#F6EFE2">/</text>
+      <rect x="284" y="808" width="184" height="52" rx="8" fill="#12100E"/>
+      <text x="300" y="840" fill="#F6EFE2">/table</text>
+      <rect x="84" y="870" width="184" height="52" rx="8" fill="#12100E"/>
+      <text x="100" y="902" fill="#F6EFE2">/menu</text>
+      <rect x="284" y="870" width="184" height="52" rx="8" fill="#12100E"/>
+      <text x="300" y="902" fill="#F6EFE2">/visit</text>
+    </g>
+
+    <text x="84" y="958" fill="#7C5920" font-size="16">Deferred seams, not deleted:</text>
+    <text x="84" y="982" fill="#12100E" font-size="16">/events — Sinia feast, private dining</text>
+    <text x="84" y="1004" fill="#12100E" font-size="16">/gallery — 12 real photos, card size</text>
+
+    <rect x="84" y="1040" width="384" height="170" rx="10" fill="#12100E"/>
+    <text x="104" y="1074" fill="#CB9235" font-size="15" font-weight="700" letter-spacing="2">THESIS</text>
+    <text x="104" y="1106" fill="#F6EFE2" font-size="17">"A haven is not a place you</text>
+    <text x="104" y="1130" fill="#F6EFE2" font-size="17">pass through. It is a place</text>
+    <text x="104" y="1154" fill="#F6EFE2" font-size="17">you stay too long."</text>
+    <text x="104" y="1188" fill="#CB9235" font-size="14">deleted capture → COPY-BANK.md + brand/</text>
+  </g>
+
+  <!-- ================= PANEL 02 · THE LAYER STACK ================= -->
+  <g>
+    <text x="546" y="236" fill="#CB9235" font-size="20" font-weight="700">02</text>
+    <text x="580" y="236" fill="#12100E" font-size="24" font-weight="700" letter-spacing="2.6">THE LAYER STACK</text>
+    <text x="546" y="270" fill="#7C5920" font-size="19">One direction, never runtime-coupled</text>
+
+    <g font-size="16" fill="#12100E" font-family="'Cascadia Mono', Consolas, monospace">
+      <rect x="546" y="292" width="384" height="48" rx="7" fill="#CB9235"/>
+      <text x="562" y="322" font-size="16" fill="#12100E">menu.or.ke (system of record)</text>
+      <path d="M738 340 L738 352 M732 346 L738 354 L744 346" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="354" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="384">ingest.mjs</text>
+      <path d="M738 402 L738 414 M732 408 L738 416 L744 408" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="416" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="446">menu.source.json · drift.md</text>
+      <path d="M738 464 L738 476 M732 470 L738 478 L744 470" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="478" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="508">taxonomy.json + overrides.json</text>
+      <path d="M738 526 L738 538 M732 532 L738 540 L744 532" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="540" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="570">build-content.mjs</text>
+      <path d="M738 588 L738 600 M732 594 L738 602 L744 594" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="602" width="384" height="48" rx="7" fill="#081511"/>
+      <text x="562" y="632" fill="#F6EFE2">src/data/menu.json</text>
+      <text x="820" y="632" fill="#CB9235" font-size="15">243 · 173</text>
+      <path d="M738 650 L738 662 M732 656 L738 664 L744 656" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="664" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="694">mirror-images.mjs</text>
+      <path d="M738 712 L738 724 M732 718 L738 726 L744 718" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="726" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="756">Astro static build</text>
+      <path d="M738 774 L738 786 M732 780 L738 788 L744 780" stroke="#12100E" stroke-width="1.6" fill="none"/>
+
+      <rect x="546" y="788" width="384" height="48" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.2"/>
+      <text x="562" y="818">Home · Table · Menu · Visit</text>
+    </g>
+
+    <text x="546" y="856" fill="#7C5920" font-size="12" font-family="'Cascadia Mono', Consolas, monospace">taxonomy: 2 over-collected headings → 37 sections</text>
+    <text x="546" y="878" fill="#12100E" font-size="13" font-family="'Cascadia Mono', Consolas, monospace">brand/ (logo + 12 photos) · COPY-BANK.md → build</text>
+
+    <rect x="546" y="892" width="384" height="318" rx="10" fill="#F6EFE2" stroke="#12100E" stroke-width="1.4" stroke-dasharray="6 5"/>
+    <text x="566" y="922" fill="#CB9235" font-size="15" font-weight="700" letter-spacing="2">RUNTIME — AFTER THE GATE</text>
+    <g font-size="15" fill="#12100E" font-family="'Cascadia Mono', Consolas, monospace">
+      <rect x="566" y="936" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="964">gate.mjs → tier</text>
+      <rect x="566" y="994" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1022">DoorScene (three, lazy)</text>
+      <rect x="566" y="1052" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1080">2D fallback — same data</text>
+      <rect x="566" y="1110" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1138">table.mjs (pure math)</text>
+      <rect x="566" y="1168" width="344" height="28" rx="7" fill="#12100E"/>
+      <text x="580" y="1187" fill="#CB9235">wa.me/254116880000</text>
+    </g>
+    <text x="546" y="1236" fill="#7C5920" font-size="14">No backend. No admin. No second source of truth.</text>
+  </g>
+
+  <!-- ================= PANEL 03 · THE DOOR WIREFRAME ================= -->
+  <g>
+    <text x="1008" y="236" fill="#CB9235" font-size="20" font-weight="700">03</text>
+    <text x="1042" y="236" fill="#12100E" font-size="24" font-weight="700" letter-spacing="2.6">THE DOOR</text>
+    <text x="1008" y="270" fill="#7C5920" font-size="19">Wireframe — top-down, procedural</text>
+
+    <rect x="1130" y="340" width="140" height="260" rx="14" fill="#F6EFE2" stroke="#12100E" stroke-width="2.2"/>
+    <rect x="1148" y="368" width="104" height="204" rx="8" fill="none" stroke="#7C5920" stroke-width="1" stroke-dasharray="4 4"/>
+    <g fill="#CB9235" stroke="#12100E" stroke-width="1.4" font-size="13" font-weight="700" text-anchor="middle">
+      <circle cx="1102" cy="388" r="15"/><text x="1102" y="393" fill="#12100E" stroke="none">1</text>
+      <circle cx="1102" cy="470" r="15"/><text x="1102" y="475" fill="#12100E" stroke="none">2</text>
+      <circle cx="1102" cy="552" r="15"/><text x="1102" y="557" fill="#12100E" stroke="none">3</text>
+      <circle cx="1298" cy="388" r="15"/><text x="1298" y="393" fill="#12100E" stroke="none">4</text>
+      <circle cx="1298" cy="470" r="15"/><text x="1298" y="475" fill="#12100E" stroke="none">5</text>
+      <circle cx="1298" cy="552" r="15"/><text x="1298" y="557" fill="#12100E" stroke="none">6</text>
+    </g>
+    <text x="1200" y="462" fill="#7C5920" font-size="12" text-anchor="middle">woven cloth</text>
+    <text x="1200" y="480" fill="#7C5920" font-size="12" text-anchor="middle">brass · ceramic</text>
+    <path d="M1200 338 L1200 314 M1194 322 L1200 312 L1206 322" stroke="#081511" stroke-width="1.6" fill="none"/>
+    <text x="1200" y="302" fill="#081511" font-size="12" text-anchor="middle">steam: hot items only</text>
+
+    <g font-size="16" fill="#12100E">
+      <text x="1008" y="638" fill="#CB9235" font-weight="700">1</text><text x="1026" y="638">Full Mandy KSh 2,200</text>
+      <text x="1008" y="662" fill="#CB9235" font-weight="700">2</text><text x="1026" y="662">Sinia KSh 5,000</text>
+      <text x="1008" y="686" fill="#CB9235" font-weight="700">3</text><text x="1026" y="686">Lamb Chops KSh 1,350</text>
+      <text x="1008" y="710" fill="#CB9235" font-weight="700">4</text><text x="1026" y="710">Chicken Biryani KSh 1,300</text>
+      <text x="1008" y="734" fill="#CB9235" font-weight="700">5</text><text x="1026" y="734">Karak Chai KSh 350</text>
+      <text x="1008" y="758" fill="#CB9235" font-weight="700">6</text><text x="1026" y="758">White Forest Cake 2KG</text>
+    </g>
+
+    <rect x="1008" y="784" width="384" height="120" rx="10" fill="#12100E"/>
+    <text x="1028" y="812" fill="#CB9235" font-size="14" font-weight="700" letter-spacing="1.6">CONTROLS</text>
+    <text x="1028" y="838" fill="#F6EFE2" font-size="15">hover → lift + real name, section, price</text>
+    <text x="1028" y="862" fill="#F6EFE2" font-size="15">click → add to table · orbit ±35°</text>
+    <text x="1028" y="886" fill="#F6EFE2" font-size="15">live KSh total · Intl.NumberFormat en-KE</text>
+
+    <text x="1008" y="936" fill="#7C5920" font-size="14" font-weight="700">PARTY SIZE — scales real sharing formats</text>
+    <g font-size="16" fill="#12100E" text-anchor="middle">
+      <rect x="1008" y="948" width="88" height="42" rx="8" fill="#F6EFE2" stroke="#12100E" stroke-width="1.3"/><text x="1052" y="975">2</text>
+      <rect x="1106" y="948" width="88" height="42" rx="8" fill="#F6EFE2" stroke="#12100E" stroke-width="1.3"/><text x="1150" y="975">4</text>
+      <rect x="1204" y="948" width="88" height="42" rx="8" fill="#12100E"/><text x="1248" y="975" fill="#F6EFE2">6</text>
+      <rect x="1302" y="948" width="90" height="42" rx="8" fill="#F6EFE2" stroke="#12100E" stroke-width="1.3"/><text x="1347" y="975">8</text>
+    </g>
+
+    <text x="1008" y="1022" fill="#7C5920" font-size="14" font-weight="700">LIGHT RIG AS A CLOCK — the opening window</text>
+    <line x1="1008" y1="1052" x2="1392" y2="1052" stroke="#12100E" stroke-width="2"/>
+    <circle cx="1120" cy="1052" r="9" fill="#CB9235" stroke="#12100E" stroke-width="1.4"/>
+    <text x="1008" y="1080" fill="#12100E" font-size="15">06:30</text>
+    <text x="1352" y="1080" fill="#12100E" font-size="15">23:00</text>
+    <text x="1344" y="1080" fill="#7C5920" font-size="14" text-anchor="end">one variable drives palette + scene</text>
+
+    <text x="1008" y="1118" fill="#7C5920" font-size="14" font-weight="700">TIERS</text>
+    <rect x="1008" y="1128" width="384" height="46" rx="8" fill="#081511"/>
+    <text x="1028" y="1157" fill="#F6EFE2" font-size="15" font-family="'Cascadia Mono', Consolas, monospace">full · lite · 2d · poster</text>
+    <text x="1008" y="1204" fill="#12100E" font-size="14">Every tier keeps the same data, the same</text>
+    <text x="1008" y="1226" fill="#12100E" font-size="14">price math, the same checkout. Never a blank canvas.</text>
+  </g>
+
+  <!-- ================= PANEL 04 · DESIGN TOKENS ================= -->
+  <g>
+    <text x="1470" y="236" fill="#CB9235" font-size="20" font-weight="700">04</text>
+    <text x="1504" y="236" fill="#12100E" font-size="24" font-weight="700" letter-spacing="2.6">DESIGN TOKENS</text>
+    <text x="1470" y="270" fill="#7C5920" font-size="19">Authored CSS — now in COPY-BANK.md</text>
+
+    <g font-size="16" fill="#12100E">
+      <rect x="1470" y="292" width="58" height="58" rx="7" fill="#12100E" stroke="#7C5920" stroke-width="1"/>
+      <text x="1544" y="316" font-weight="700">espresso</text><text x="1544" y="340" font-family="'Cascadia Mono', Consolas, monospace">#12100E</text>
+      <rect x="1470" y="364" width="58" height="58" rx="7" fill="#CB9235" stroke="#7C5920" stroke-width="1"/>
+      <text x="1544" y="388" font-weight="700">gold</text><text x="1544" y="412" font-family="'Cascadia Mono', Consolas, monospace">#CB9235</text>
+      <rect x="1470" y="436" width="58" height="58" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1544" y="460" font-weight="700">cream</text><text x="1544" y="484" font-family="'Cascadia Mono', Consolas, monospace">#F6EFE2</text>
+      <rect x="1470" y="508" width="58" height="58" rx="7" fill="#7C5920" stroke="#7C5920" stroke-width="1"/>
+      <text x="1544" y="532" font-weight="700">bronze</text><text x="1544" y="556" font-family="'Cascadia Mono', Consolas, monospace">#7C5920</text>
+      <rect x="1470" y="580" width="58" height="58" rx="7" fill="#081511" stroke="#7C5920" stroke-width="1"/>
+      <text x="1544" y="604" font-weight="700">deep green</text><text x="1544" y="628" font-family="'Cascadia Mono', Consolas, monospace">#081511</text>
+    </g>
+
+    <text x="1470" y="676" fill="#12100E" font-size="16" font-weight="700" letter-spacing="1.6">CONTRAST — MEASURED PAIRS</text>
+
+    <g font-size="15" fill="#12100E">
+      <rect x="1470" y="688" width="384" height="40" rx="6" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1486" y="714">espresso on cream</text><text x="1760" y="714" text-anchor="end" font-weight="700">16.6:1</text><text x="1790" y="714" fill="#1B6B3A" font-weight="700">✓ body</text>
+
+      <rect x="1470" y="732" width="384" height="40" rx="6" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1486" y="758">bronze on cream</text><text x="1760" y="758" text-anchor="end" font-weight="700">5.6:1</text><text x="1790" y="758" fill="#1B6B3A" font-weight="700">✓ link</text>
+
+      <rect x="1470" y="776" width="384" height="40" rx="6" fill="url(#hatch)" stroke="#B3261E" stroke-width="1.6"/>
+      <text x="1486" y="802" fill="#B3261E" font-weight="700">gold on cream</text><text x="1760" y="802" text-anchor="end" fill="#B3261E" font-weight="700">2.4:1</text><text x="1790" y="802" fill="#B3261E" font-weight="700">✗ text</text>
+
+      <rect x="1470" y="820" width="384" height="40" rx="6" fill="#12100E"/>
+      <text x="1486" y="846" fill="#CB9235">gold on espresso</text><text x="1760" y="846" text-anchor="end" fill="#CB9235" font-weight="700">7.0:1</text><text x="1790" y="846" fill="#7BE0A4" font-weight="700">✓</text>
+
+      <rect x="1470" y="864" width="384" height="40" rx="6" fill="#081511"/>
+      <text x="1486" y="890" fill="#CB9235">gold on deep green</text><text x="1760" y="890" text-anchor="end" fill="#CB9235" font-weight="700">6.8:1</text><text x="1790" y="890" fill="#7BE0A4" font-weight="700">✓</text>
+
+      <rect x="1470" y="908" width="384" height="40" rx="6" fill="url(#hatch)" stroke="#B3261E" stroke-width="1.6"/>
+      <text x="1486" y="934" fill="#B3261E" font-weight="700">espresso on deep green</text><text x="1760" y="934" text-anchor="end" fill="#B3261E" font-weight="700">1.0:1</text><text x="1790" y="934" fill="#B3261E" font-weight="700">✗ pair</text>
+    </g>
+
+    <text x="1470" y="976" fill="#12100E" font-size="16" font-weight="700" letter-spacing="1.6">TYPE</text>
+    <text x="1470" y="1002" fill="#12100E" font-size="19" font-weight="700">Bricolage Grotesque — display</text>
+    <text x="1470" y="1026" fill="#12100E" font-size="17">Inter — text</text>
+
+    <text x="1470" y="1062" fill="#12100E" font-size="16" font-weight="700" letter-spacing="1.6">GOLD RAMP</text>
+    <rect x="1470" y="1074" width="384" height="20" rx="4" fill="url(#goldRamp)"/>
+    <text x="1470" y="1114" fill="#7C5920" font-size="14" font-family="'Cascadia Mono', Consolas, monospace">#FBF4E8 → #0A0702</text>
+
+    <text x="1470" y="1150" fill="#12100E" font-size="15" font-weight="700">60 / 30 / 10</text>
+    <text x="1470" y="1172" fill="#12100E" font-size="14">cream + espresso dominant · gold accent</text>
+    <text x="1470" y="1194" fill="#12100E" font-size="14">deep green third — no utility framework</text>
+
+    <text x="1470" y="1220" fill="#CB9235" font-size="12" font-weight="700" letter-spacing="1.6">AMENDMENT A1 — OBSERVED IN THEIR OWN ASSETS</text>
+    <text x="1470" y="1240" fill="#12100E" font-size="13" font-family="'Cascadia Mono', Consolas, monospace" textLength="384" lengthAdjust="spacingAndGlyphs">real badge + signage read teal — re-measure before M2</text>
+  </g>
+
+  <!-- ================= PANEL 05 · BUDGET AND PROOF ================= -->
+  <g>
+    <text x="1932" y="236" fill="#CB9235" font-size="20" font-weight="700">05</text>
+    <text x="1966" y="236" fill="#12100E" font-size="24" font-weight="700" letter-spacing="2.6">BUDGET AND PROOF</text>
+    <text x="1932" y="270" fill="#7C5920" font-size="19">The budget and the proof</text>
+
+    <g font-size="15" fill="#12100E">
+      <rect x="1932" y="292" width="384" height="50" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1948" y="322" font-size="18" font-weight="700">LCP ≤ 2.0s</text><text x="2300" y="322" text-anchor="end" fill="#7C5920">Slow-4G, Moto-class</text>
+
+      <rect x="1932" y="350" width="384" height="50" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1948" y="380" font-size="18" font-weight="700">CLS ≤ 0.1 · INP ≤ 200ms</text>
+
+      <rect x="1932" y="408" width="384" height="50" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1948" y="438" font-size="18" font-weight="700">JS ≤ 400KB door</text><text x="2300" y="438" text-anchor="end" fill="#7C5920">≤ 60KB no door</text>
+
+      <rect x="1932" y="466" width="384" height="50" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1"/>
+      <text x="1948" y="496" font-size="18" font-weight="700">Payload ≤ 1.2MB</text><text x="2300" y="496" text-anchor="end" fill="#7C5920">AVIF/WebP + srcset</text>
+
+      <rect x="1932" y="524" width="384" height="50" rx="7" fill="#12100E"/>
+      <text x="1948" y="554" fill="#F6EFE2" font-size="17" font-weight="700">243 items · KSh 100–6,000</text>
+      <text x="2300" y="554" text-anchor="end" fill="#CB9235">median 550</text>
+
+      <rect x="1932" y="582" width="384" height="50" rx="7" fill="#12100E"/>
+      <text x="1948" y="612" fill="#F6EFE2" font-size="17" font-weight="700">4.5 ★ · 541 reviews</text>
+      <text x="2300" y="612" text-anchor="end" fill="#CB9235">welcoming staff 13</text>
+
+      <rect x="1932" y="640" width="384" height="50" rx="7" fill="#081511"/>
+      <text x="1948" y="670" fill="#F6EFE2" font-size="17" font-weight="700">06:30–23:00 daily</text>
+      <text x="2300" y="670" text-anchor="end" fill="#CB9235">hours of record</text>
+    </g>
+
+    <text x="1932" y="726" fill="#12100E" font-size="16" font-weight="700" letter-spacing="1.6">HOW EACH IS PROVEN</text>
+    <g font-size="14" fill="#12100E">
+      <text x="1932" y="754">probe-ingest.mjs — can we read headlessly?</text>
+      <text x="1932" y="780">build-content — asserts 243 in / 243 out / 173 photos</text>
+      <text x="1932" y="806">table.mjs — party scaling, cake formats, payload escape</text>
+      <text x="1932" y="832">hours.mjs — 06:29 · 06:30 · 22:59 · 23:00, TZ frozen</text>
+      <text x="1932" y="858">Playwright — 1440×900, 1280×800, 390×844</text>
+      <text x="1932" y="884">all four gate tiers forced, each still checks out</text>
+      <text x="1932" y="910">axe-core — 0 AA violations · Lighthouse budgets</text>
+      <text x="1932" y="936">check-drift.mjs — non-zero on unreviewed change</text>
+    </g>
+
+    <rect x="1932" y="958" width="384" height="292" rx="10" fill="#12100E"/>
+    <text x="1952" y="988" fill="#CB9235" font-size="15" font-weight="700" letter-spacing="2">MILESTONES</text>
+    <g font-size="15" fill="#F6EFE2">
+      <text x="1952" y="1016">M0 probes — ingest reachability</text>
+      <text x="1952" y="1042">M1 content spine + taxonomy + drift</text>
+      <text x="1952" y="1068">M2 fast interior — Menu · Visit · Home</text>
+      <text x="1952" y="1094">M3 the door — scene, rig, gate, fallback</text>
+      <text x="1952" y="1120">M4 the table — math, URL, WhatsApp</text>
+      <text x="1952" y="1146">M5 the clock — hour drives palette</text>
+      <text x="1952" y="1172">M6 hardening + unlisted preview</text>
+    </g>
+    <text x="1952" y="1206" fill="#CB9235" font-size="14">M0–M2 ship a usable site before</text>
+    <text x="1952" y="1228" fill="#CB9235" font-size="14">any pixel of WebGL exists.</text>
+  </g>
+
+  <!-- ============ FOOTER ============ -->
+  <text x="60" y="1292" fill="#7C5920" font-size="16" font-weight="700">Sources verified 2026-11-14: Google Maps · menu.or.ke · Uber Eats · Instagram · Facebook · the abandoned project, distilled and deleted</text>
+  <text x="60" y="1322" fill="#12100E" font-size="16">Deterministic board drawn from the approved plan — no invented dish, price, feature, award or venue photograph. Relume connection: cut.</text>
+  <text x="2340" y="1292" text-anchor="end" fill="#CB9235" font-size="16" font-weight="700">HABIBI HAVEN · SET YOUR TABLE</text>
+</svg>

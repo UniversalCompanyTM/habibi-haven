@@ -1,0 +1,112 @@
+---
+// Preloader.astro — the curtain that opens on the door.
+//
+// It is only rendered where a page asks for it (Base.astro gates it on the `loader` prop, and the
+// home page is the only page that sets it), because a splash screen in front of the menu is an
+// insult to someone trying to find the price of fish.
+//
+// Two rules, both about not trapping anyone:
+//   1. The number is a real signal when one exists — the two webfonts, then the images the first
+//      screen needs — and a ramp that stops at 88 when it doesn't. It cannot reach 100 before both
+//      signals have reported, so the count never claims a completion that did not happen.
+//   2. A ceiling timer is scheduled the moment the script starts, so a page whose assets never
+//      resolve still opens. Reduced-motion and print skip the curtain entirely.
+---
+
+<div class="preloader" data-preloader aria-hidden="true">
+  <p class="preloader__word">Habibi Haven</p>
+  <p class="preloader__count num" data-count>0</p>
+  <div class="preloader__rail"><span class="preloader__fill" data-fill></span></div>
+  <p class="preloader__note dim">Koinange Street · chai on at 06:30</p>
+</div>
+
+<script>
+  const html = document.documentElement;
+  const curtain = document.querySelector<HTMLElement>("[data-preloader]");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function openNow() {
+    html.classList.add("loaded");
+    document.dispatchEvent(new CustomEvent("hh:ready", { detail: { instant: true } }));
+  }
+
+  if (!curtain || reduced) {
+    curtain?.setAttribute("data-done", "");
+    openNow();
+  } else {
+    const count = curtain.querySelector<HTMLElement>("[data-count]");
+    const fill = curtain.querySelector<HTMLElement>("[data-fill]");
+
+    // Each signal is 0 → 1. Fonts get 40 points, the first-screen images 48, and the last 12 is the
+    // ramp's ceiling while a signal is still outstanding — so an instant cache hit reads 88 rather
+    // than 100 for a moment, and a slow one never reads 100 at all until it is actually done.
+    const signals = { fonts: 0, media: 0 };
+    const ready = () => signals.fonts === 1 && signals.media === 1;
+    const earned = () => signals.fonts * 40 + signals.media * 48;
+
+    let lastPainted = -1;
+    const paint = (value: number) => {
+      const v = Math.max(0, Math.min(100, Math.round(value)));
+      if (v === lastPainted) return;
+      lastPainted = v;
+      if (count) count.textContent = String(v);
+      if (fill) fill.style.width = `${v}%`;
+    };
+
+    function settled<T>(p: Promise<T>): Promise<boolean> {
+      return p.then(() => true).catch(() => false);
+    }
+
+    const fontJob = "fonts" in document ? settled((document as Document & { fonts: FontFaceSet }).fonts.ready) : Promise.resolve(true);
+    // A font that failed is still a font that stopped taking time, so both outcomes clear the signal.
+    fontJob.then(() => {
+      signals.fonts = 1;
+    });
+
+    // `data-critical` is set by the pages on the images the first screen paints with. An empty list
+    // means there is nothing to wait for, not that we should wait forever.
+    const media = Array.from(document.querySelectorAll<HTMLImageElement>("img[data-critical]"));
+    if (media.length === 0) signals.media = 1;
+    else
+      Promise.all(
+        media.map((img) =>
+          settled(
+            typeof img.decode === "function"
+              ? img.decode()
+              : img.complete
+                ? Promise.resolve()
+                : new Promise<void>((resolve) => {
+                    img.addEventListener("load", () => resolve(), { once: true });
+                    img.addEventListener("error", () => resolve(), { once: true });
+                  })
+          )
+        )
+      ).then(() => {
+        signals.media = 1;
+      });
+
+    let raf = 0;
+    const started = performance.now();
+
+    const finish = () => {
+      cancelAnimationFrame(raf);
+      paint(100);
+      curtain!.setAttribute("data-done", "");
+      openNow();
+      // out of the tree after the wipe, so a fixed overlay can never eat a click
+      window.setTimeout(() => curtain!.remove(), 700);
+    };
+
+    const tick = (now: number) => {
+      const seconds = (now - started) / 1000;
+      const ramp = 88 * (1 - Math.exp(-seconds / 0.55));
+      paint(ready() ? 100 : Math.max(earned(), ramp));
+      if (ready()) finish();
+      else raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    // The ceiling. Whatever has or has not loaded, the site opens.
+    window.setTimeout(finish, 2600);
+  }
+</script>
