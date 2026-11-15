@@ -50,6 +50,52 @@ for (const route of expected) {
 for (const stray of all.filter(([r]) => !expected.includes(r))) bad("routes", `unexpected page built: ${stray[0]}`);
 if (!fails.length) ok("routes", expected.join(" "));
 
+// The host this artefact ships to turns a slash-free path that names a directory into a 308 to the
+// slashed form, which is a second URL for every page and an address bar that disagrees with the
+// canonical tag. site/public/_redirects rewrites those paths to the file instead. Two things can go
+// wrong with it silently: the file stops existing (someone deletes it, or public/ stops being copied),
+// or a route is renamed and its rule starts pointing at a path with no bytes behind it — a rewrite to
+// nothing is a blank page, which is worse than the redirect it replaced.
+const redirectRules = [];
+try {
+  const text = await readFile(join(dist, "_redirects"), "utf8");
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length !== 3) {
+      bad("redirects", `not "source destination status": ${trimmed}`);
+      continue;
+    }
+    redirectRules.push(parts);
+  }
+} catch {
+  bad("redirects", "dist/_redirects is missing — the slash-free routes would 308 to the slashed form");
+}
+for (const [source, destination, status] of redirectRules) {
+  if (status !== "200") {
+    bad("redirects", `${source} is a ${status}, not a rewrite — a redirect here can bounce against the host's own trailing-slash 308`);
+  }
+  if (!destination.startsWith("/") || destination.includes("..")) {
+    bad("redirects", `${source} → ${destination}: destination must be an absolute path inside the build`);
+    continue;
+  }
+  const target = join(dist, destination.replace(/^\//, ""));
+  try {
+    if (!(await stat(target)).isFile()) bad("redirects", `${source} → ${destination}: not a file in dist`);
+  } catch {
+    bad("redirects", `${source} → ${destination}: no such file in dist`);
+  }
+}
+for (const route of expected.filter((r) => r !== "/" && r !== "/404")) {
+  if (!redirectRules.some(([source]) => source === route)) {
+    bad("redirects", `${route} has no rewrite rule — that link takes a 308 hop on the hosted site`);
+  }
+}
+if (!fails.some((f) => f.includes("redirects"))) {
+  ok("redirects", `${redirectRules.length} slash-free rewrites, every destination present`);
+}
+
 // ---------------------------------------------------------------- entry graph
 // ARCHITECTURE.md decision 5: three is never in the entry graph. The one honest test is that the entry
 // HTML of every page contains no reference to the three chunk — not a `<script src>`, not a

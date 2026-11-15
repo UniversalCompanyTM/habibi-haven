@@ -7,6 +7,10 @@ site/.astro/
 .tmp/
 docs/screenshots/
 
+# wrangler's local state: account cache and the tmp dir a Pages deploy stages through. It is machine
+# state for a logged-in session, not project source.
+.wrangler/
+
 # Editors and OS noise
 .DS_Store
 Thumbs.db
