@@ -335,6 +335,19 @@ html.js [data-reveal].is-in {
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 
+/* Focus waits for nobody. The fade-up above is driven by an IntersectionObserver crossing, and with
+   `scroll-behavior: smooth` a keyboard guest can arrive in the section while it is still travelling — a
+   tab stop that is present in the order, painted at opacity 0, in a page the guest cannot see out of.
+   That is the reveal failing at its one job: hiding content from a scroll, not from a person. Listing
+   `:focus-within` after `.is-in` (same specificity, later) also means the guest who is standing in the
+   section gets there faster than the staggered 70 ms delay would allow. */
+html.js [data-reveal]:focus-within {
+  opacity: 1;
+  transform: none;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+  transition-delay: 0ms;
+}
+
 /* --------------------------------------------------------------- surfaces */
 
 .panel {

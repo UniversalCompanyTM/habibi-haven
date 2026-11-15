@@ -1228,6 +1228,37 @@ for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit",
       return r.top < innerHeight && r.bottom > 0;
     });
     const sample = pending[0] ?? null;
+    // The page sets scroll-behavior: smooth, so every focus is a scroll ANIMATION, and a 24-press Tab walk
+    // leaves one still in flight when this audit starts (three frames a second on this runner). Measuring
+    // against a moving scroller decided the check below on where the leftover animation happened to be, not
+    // on what the page does: a control recorded at top 408 was reported as left "off screen" with the page
+    // parked at 6,608 and the reveal long since applied. So wait for the scroller to be still before taking
+    // the "before" numbers — from there the only movement left is the browser bringing the control into view.
+    const waitStill = async () => {
+      let previous = -1;
+      let still = 0;
+      for (let i = 0; i < 50; i += 1) {
+        const y = Math.round(scrollY);
+        still = y === previous ? still + 1 : 0;
+        previous = y;
+        if (still >= 2) return y;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return Math.round(scrollY);
+    };
+    let focusReveal = null;
+    if (sample) {
+      const settledAt = await waitStill();
+      const before = sample.getBoundingClientRect();
+      sample.focus();
+      focusReveal = {
+        tag: sample.tagName.toLowerCase(),
+        label: (sample.getAttribute("aria-label") || sample.textContent || "").trim().slice(0, 28),
+        was: [Math.round(before.top), Number(getComputedStyle(sample.closest("[data-reveal], .kin")).opacity)],
+        settledAt,
+        pendingOnPage: pending.length,
+      };
+    }
     return {
       tabbable: tabbable.length,
       srControls: invisible.filter((el) => el.closest("label")).length,
@@ -1238,18 +1269,7 @@ for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit",
       // Focus is what the keyboard guest brings; measuring the pending case means actually focusing one.
       // The browser scrolls a focused control into view, the IntersectionObserver sees it, the class lands
       // and the transition runs — so give it the transition's own time and then ask what is on screen.
-      focusReveal: sample
-        ? (() => {
-            const before = sample.getBoundingClientRect();
-            sample.focus();
-            return {
-              tag: sample.tagName.toLowerCase(),
-              label: (sample.getAttribute("aria-label") || sample.textContent || "").trim().slice(0, 28),
-              was: [Math.round(before.top), Number(getComputedStyle(sample.closest("[data-reveal], .kin")).opacity)],
-              pendingOnPage: pending.length,
-            };
-          })()
-        : null,
+      focusReveal,
     };
   `);
   const { errors, warnings } = drain();
@@ -1263,7 +1283,9 @@ for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit",
     ? await (async () => {
         let read = null;
         const began = Date.now();
-        while (Date.now() - began < 3200) {
+        let previous = -1;
+        let still = 0;
+        while (Date.now() - began < 5000) {
           read = await evaluate(`
             const el = document.activeElement;
             if (!el || el === document.body) return null;
@@ -1279,7 +1301,13 @@ for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit",
               ring: getComputedStyle(el).outlineStyle !== "none" && parseFloat(getComputedStyle(el).outlineWidth) > 0,
             };
           `);
-          if (!read || (read.inViewport && read.opacity >= 0.9)) break;
+          if (!read) break;
+          still = read.scrollY === previous ? still + 1 : 0;
+          previous = read.scrollY;
+          // Good and parked: done. Parked anywhere else for four samples (about a second of stillness): that
+          // settled position IS the answer, so report it rather than waiting out a deadline.
+          if (still >= 1 && read.inViewport && read.opacity >= 0.9) break;
+          if (still >= 4) break;
           await sleep(250);
         }
         return read ? { ...read, waitedMs: Date.now() - began } : null;
