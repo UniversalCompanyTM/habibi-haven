@@ -29,6 +29,7 @@ const gate = await lib("site/src/lib/gate.mjs");
 const schema = await lib("site/src/content-schema.mjs");
 const tags = await lib("site/src/lib/tags.mjs");
 const { localPhotoName, slugify } = await lib("scripts/lib/photo-name.mjs");
+const { createPage } = await lib("site/src/lib/page.mjs");
 
 const menu = JSON.parse(await readFile(MENU_PATH, "utf8"));
 const overrides = JSON.parse(await readFile(join(ROOT, "content/menu.overrides.json"), "utf8"));
@@ -62,6 +63,9 @@ function check(what, fn) {
 
 const eq = (actual, expected, label) =>
   actual === expected || `${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`;
+// Note for whoever writes the next check: `eq` returns TRUE or an error STRING, and a string is truthy.
+// Chaining two of them with `&&` therefore reports the second result while a first failure is silently
+// discarded. Guard each one (`if (x !== true) return x`) or return only the last.
 
 /* -------------------------------------------------------------------- hours */
 
@@ -670,6 +674,145 @@ check("the dial can represent every hour the rig can arrive at", () => {
   if (late.night < 0.95) return `00:24 is not dark (${late.night})`;
 });
 
+/* -------------------------------------------------------------------- page */
+
+describe("page — one mount per host across a swap");
+
+// The reason these tests exist is not the module, it is a rule inside Astro's own router
+// (astro/dist/transitions/swap-functions.js): an incoming script whose URL has already been executed is
+// stamped `data-astro-exec` and never evaluates again. So a component's init code runs exactly once per
+// browsing session, not once per page — which either leaves the swapped-in page dead or, with the
+// `data-astro-rerun` escape hatch, re-binds every global listener it contains. lib/page.mjs is the third
+// option, and this fake document is what proves it behaves: mount once, dispose when the host leaves,
+// rebuild when it comes back, and never bind the same listener twice.
+class FakeDoc {
+  constructor() {
+    this.handlers = new Map();
+    this.found = new Set();
+  }
+  addEventListener(type, fn) {
+    if (!this.handlers.has(type)) this.handlers.set(type, []);
+    this.handlers.get(type).push(fn);
+  }
+  querySelector(sel) {
+    return this.found.has(sel) ? { sel } : null;
+  }
+  fire(type) {
+    for (const fn of this.handlers.get(type) ?? []) fn({ type });
+  }
+  count(type) {
+    return (this.handlers.get(type) ?? []).length;
+  }
+}
+
+check("a component mounts once, however many page-loads follow", () => {
+  const doc = new FakeDoc();
+  doc.found.add("[data-door]");
+  const page = createPage(doc);
+  let mounts = 0;
+  const c = page.component("[data-door]", { mount: () => (mounts += 1) });
+  doc.fire("astro:page-load");
+  doc.fire("astro:page-load");
+  doc.fire("astro:after-swap");
+  const m = eq(mounts, 1, "mounts");
+  if (m !== true) return m;
+  return eq(c.isLive(), true, "live");
+});
+
+check("the host leaving with the swapped-out page disposes it exactly once", () => {
+  const doc = new FakeDoc();
+  doc.found.add("[data-door]");
+  const page = createPage(doc);
+  let mounts = 0;
+  let unmounts = 0;
+  const c = page.component("[data-door]", {
+    mount: () => (mounts += 1),
+    unmount: () => (unmounts += 1),
+  });
+  doc.found.delete("[data-door]");
+  doc.fire("astro:after-swap");
+  doc.fire("astro:after-swap");
+  if (eq(unmounts, 1, "unmounts") !== true) return eq(unmounts, 1, "unmounts");
+  if (eq(c.isLive(), false, "live") !== true) return eq(c.isLive(), false, "live");
+  return true;
+});
+
+check("navigating back home rebuilds it, because the module will not run again", () => {
+  const doc = new FakeDoc();
+  doc.found.add("[data-door]");
+  const page = createPage(doc);
+  let mounts = 0;
+  const c = page.component("[data-door]", { mount: () => (mounts += 1) });
+  doc.found.delete("[data-door]");
+  doc.fire("astro:after-swap");
+  doc.found.add("[data-door]");
+  doc.fire("astro:page-load");
+  const rebuilt = eq(mounts, 2, "mounts after returning home");
+  if (rebuilt !== true) return rebuilt;
+  return eq(c.isLive(), true, "live");
+});
+
+check("a mount that returns nothing is still tracked and disposable", () => {
+  const doc = new FakeDoc();
+  doc.found.add("[data-cursor]");
+  const page = createPage(doc);
+  let unmounted = "not called";
+  const c = page.component("[data-cursor]", {
+    mount: () => undefined,
+    unmount: (api) => (unmounted = `got ${String(api)}`),
+  });
+  if (eq(c.isLive(), true, "live after a void mount") !== true) return eq(c.isLive(), true, "live");
+  doc.found.delete("[data-cursor]");
+  doc.fire("astro:after-swap");
+  if (eq(unmounted, "got undefined", "unmount argument") !== true) return eq(unmounted, "got undefined", "unmount");
+  return eq(c.isLive(), false, "live after disposal");
+});
+
+check("a component with no unmount hook is not an error", () => {
+  const doc = new FakeDoc();
+  doc.found.add("[data-dial]");
+  const page = createPage(doc);
+  const c = page.component("[data-dial]", { mount: () => ({ ok: true }) });
+  doc.found.delete("[data-dial]");
+  doc.fire("astro:after-swap");
+  return eq(c.isLive(), false, "live");
+});
+
+check("onPage is for rescans: once at registration, again on every load", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  let scans = 0;
+  page.onPage(() => (scans += 1));
+  if (eq(scans, 1, "registered scan") !== true) return eq(scans, 1, "registered");
+  doc.fire("astro:page-load");
+  doc.fire("astro:page-load");
+  return eq(scans, 3, "scans after two loads");
+});
+
+check("three components share one pair of listeners", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  page.component("[data-door]", { mount: () => 1 });
+  page.component("[data-cursor]", { mount: () => 1 });
+  page.onPage(() => {});
+  if (eq(doc.count("astro:page-load"), 1, "page-load listeners") !== true)
+    return eq(doc.count("astro:page-load"), 1, "page-load listeners");
+  return eq(doc.count("astro:after-swap"), 1, "after-swap listeners");
+});
+
+check("a finder function is allowed where a selector cannot express the host", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  let seen = null;
+  const c = page.component(() => doc.querySelector("[data-menu]"), {
+    mount: (el) => (seen = el.sel),
+  });
+  if (eq(c.isLive(), false, "not present yet") !== true) return eq(c.isLive(), false, "not present");
+  doc.found.add("[data-menu]");
+  doc.fire("astro:page-load");
+  return eq(seen, "[data-menu]", "mounted host");
+});
+
 /* ----------------------------------------------------------------- summary */
 
 console.log(`\n${"─".repeat(64)}`);
@@ -678,4 +821,4 @@ if (failures.length) {
   for (const f of failures) console.log(`  ${f.group}\n    ${f.what}: ${f.message}`);
   process.exit(1);
 }
-console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity`);
+console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity, page lifecycle`);
