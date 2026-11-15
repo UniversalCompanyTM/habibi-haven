@@ -15,7 +15,23 @@ export default defineConfig({
   output: "static",
   site: SITE,
   trailingSlash: "never",
-  build: { inlineStylesheets: "auto" },
+  build: {
+    // Emit /menu as dist/menu.html rather than dist/menu/index.html.
+    //
+    // Cloudflare Pages answers a slash-free path that names a *directory* with a 308 to the slashed
+    // form, so the link in the nav bar and the address in the browser bar disagreed with the canonical
+    // tag, which says /menu. A site/public/_redirects rewrite (`/menu /menu/index.html 200`) was built,
+    // deployed and measured on 2026-11-15: the file uploaded, and /menu still returned 308 — Pages' own
+    // directory redirect runs in front of those rules, so the rewrite never got a chance. Flat files
+    // remove the condition instead of fighting it: /menu is no longer a directory, so there is nothing
+    // to redirect and both shapes of the old argument disappear. Internal links are unaffected — they
+    // were always slash-free strings — and the dish photos copied from public/menu/ keep their paths,
+    // because menu.html and menu/ are different names, not the same one twice.
+    //
+    // scripts/verify-dist.mjs pins this: it fails if a route comes back as a nested index.html.
+    format: "file",
+    inlineStylesheets: "auto",
+  },
   // No experimental flags: `env` was valid in an earlier 5.x and 5.18 rejects the key outright, which
   // is a build failure rather than a warning. The one public value the site needs is injected below
   // with `define`, so nothing depends on an experiment being on.

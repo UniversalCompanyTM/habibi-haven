@@ -50,50 +50,28 @@ for (const route of expected) {
 for (const stray of all.filter(([r]) => !expected.includes(r))) bad("routes", `unexpected page built: ${stray[0]}`);
 if (!fails.length) ok("routes", expected.join(" "));
 
-// The host this artefact ships to turns a slash-free path that names a directory into a 308 to the
-// slashed form, which is a second URL for every page and an address bar that disagrees with the
-// canonical tag. site/public/_redirects rewrites those paths to the file instead. Two things can go
-// wrong with it silently: the file stops existing (someone deletes it, or public/ stops being copied),
-// or a route is renamed and its rule starts pointing at a path with no bytes behind it — a rewrite to
-// nothing is a blank page, which is worse than the redirect it replaced.
-const redirectRules = [];
-try {
-  const text = await readFile(join(dist, "_redirects"), "utf8");
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const parts = trimmed.split(/\s+/);
-    if (parts.length !== 3) {
-      bad("redirects", `not "source destination status": ${trimmed}`);
-      continue;
-    }
-    redirectRules.push(parts);
-  }
-} catch {
-  bad("redirects", "dist/_redirects is missing — the slash-free routes would 308 to the slashed form");
-}
-for (const [source, destination, status] of redirectRules) {
-  if (status !== "200") {
-    bad("redirects", `${source} is a ${status}, not a rewrite — a redirect here can bounce against the host's own trailing-slash 308`);
-  }
-  if (!destination.startsWith("/") || destination.includes("..")) {
-    bad("redirects", `${source} → ${destination}: destination must be an absolute path inside the build`);
-    continue;
-  }
-  const target = join(dist, destination.replace(/^\//, ""));
-  try {
-    if (!(await stat(target)).isFile()) bad("redirects", `${source} → ${destination}: not a file in dist`);
-  } catch {
-    bad("redirects", `${source} → ${destination}: no such file in dist`);
-  }
-}
+// Cloudflare Pages answers a slash-free request that names a directory with a 308 to the slashed form,
+// so building /menu as menu/index.html would make every nav link take a hop and put /menu/ in the
+// address bar while the canonical tag says /menu. A site/public/_redirects rewrite was tried first,
+// built and deployed, and measured on 2026-11-15: /menu still returned 308, because Pages' directory
+// redirect runs in front of those rules. build.format = "file" removes the condition instead — /menu is
+// a file, so there is nothing to redirect. This fails if the build ever goes back to nested indexes,
+// because that regression is invisible in the HTML and only shows up on the hosted site.
 for (const route of expected.filter((r) => r !== "/" && r !== "/404")) {
-  if (!redirectRules.some(([source]) => source === route)) {
-    bad("redirects", `${route} has no rewrite rule — that link takes a 308 hop on the hosted site`);
-  }
+  const flat = join(dist, `${route.slice(1)}.html`);
+  const nested = join(dist, route.slice(1), "index.html");
+  const isFlat = await stat(flat)
+    .then((s) => s.isFile())
+    .catch(() => false);
+  const isNested = await stat(nested)
+    .then((s) => s.isFile())
+    .catch(() => false);
+  if (!isFlat) bad("route shape", `${route} is not built as ${route.slice(1)}.html at the dist root`);
+  if (isNested)
+    bad("route shape", `${route} is also a directory holding index.html — Pages will 308 the slashed-free link to ${route}/`);
 }
-if (!fails.some((f) => f.includes("redirects"))) {
-  ok("redirects", `${redirectRules.length} slash-free rewrites, every destination present`);
+if (!fails.some((f) => f.includes("route shape"))) {
+  ok("route shape", "every route is one flat file, so the host has no directory to redirect to");
 }
 
 // ---------------------------------------------------------------- entry graph
