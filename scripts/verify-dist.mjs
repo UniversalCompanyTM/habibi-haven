@@ -53,8 +53,8 @@ if (!fails.length) ok("routes", expected.join(" "));
 // Cloudflare Pages answers a slash-free request that names a directory with a 308 to the slashed form,
 // so building /menu as menu/index.html would make every nav link take a hop and put /menu/ in the
 // address bar while the canonical tag says /menu. A site/public/_redirects rewrite was tried first,
-// built and deployed, and measured on 2026-11-15: /menu still returned 308, because Pages' directory
-// redirect runs in front of those rules. build.format = "file" removes the condition instead — /menu is
+// built and deployed, and measured on 2026-11-15: /menu still returned 308 — the measurement does not
+// say why, and does not need to. build.format = "file" removes the condition instead — /menu is
 // a file, so there is nothing to redirect. This fails if the build ever goes back to nested indexes,
 // because that regression is invisible in the HTML and only shows up on the hosted site.
 for (const route of expected.filter((r) => r !== "/" && r !== "/404")) {
@@ -68,11 +68,34 @@ for (const route of expected.filter((r) => r !== "/" && r !== "/404")) {
     .catch(() => false);
   if (!isFlat) bad("route shape", `${route} is not built as ${route.slice(1)}.html at the dist root`);
   if (isNested)
-    bad("route shape", `${route} is also a directory holding index.html — Pages will 308 the slashed-free link to ${route}/`);
+    bad("route shape", `${route} is also a directory holding index.html — Pages will 308 the slash-free link to ${route}/`);
 }
 if (!fails.some((f) => f.includes("route shape"))) {
   ok("route shape", "every route is one flat file, so the host has no directory to redirect to");
 }
+
+// ---------------------------------------------------------------- canonical
+//
+// The canonical is the address the site tells Google it lives at, and it is the one head field a robot
+// reads instead of a person. It has to be the URL a visitor actually lands on: origin + route, with no
+// trailing slash (trailingSlash: "never") and no build extension (build.format: "file"). The first flat
+// deploy was measured publishing …/menu.html — the pathname Astro.url carries mid-build is the name of
+// the file being written, and layouts/Base.astro has to strip it. Nothing failed, because no check
+// compared the canonical to the route it belonged to. This is that check.
+//
+// The origin is spelled out again here on purpose rather than imported from site/astro.config.mjs: a
+// gate that asks the thing under test where it thinks it lives agrees with it even when it is wrong.
+const ORIGIN = process.env.SITE_URL ?? "https://habibihavenpreview.pages.dev";
+for (const [route, src] of all) {
+  const want = route === "/" ? `${ORIGIN}/` : `${ORIGIN}${route}`;
+  const canonical = src.match(/<link rel="canonical" href="([^"]*)"/)?.[1];
+  const ogUrl = src.match(/<meta property="og:url" content="([^"]*)"/)?.[1];
+  if (canonical !== want)
+    bad("canonical", `${route}: canonical is ${canonical ?? "missing"}, expected ${want}`);
+  if (ogUrl !== want) bad("canonical", `${route}: og:url is ${ogUrl ?? "missing"}, expected ${want}`);
+}
+if (!fails.some((f) => f.includes("canonical")))
+  ok("canonical", `${all.length} pages publish their own slash-free, extension-free address`);
 
 // ---------------------------------------------------------------- entry graph
 // ARCHITECTURE.md decision 5: three is never in the entry graph. The one honest test is that the entry

@@ -27,7 +27,18 @@ const rig = rigFor(nairobiHour());
 const loader = props.loader === true;
 
 const ORIGIN = Astro.site ?? new URL("https://habibi-haven.example");
-const path = Astro.url.pathname.replace(/\/$/, "") || "/";
+// The address this page publishes as canonical is the route, not the build's file name.
+//
+// During a static build Astro.url.pathname is the path of the file being written, and with
+// build.format = "file" the /menu route is written as /menu.html. Measured on the hosted site
+// 2026-11-15: taking the pathname at face value published `rel=canonical` as …/menu.html on four
+// routes. That is not a duplicate page — Pages 308s …/menu.html back to /menu — but a canonical that
+// names a redirect asks Google to index the address that only exists to move, and it is the one field
+// on this page that is read by somebody other than a person. The extension is stripped here, and
+// scripts/verify-dist.mjs now compares every page's canonical and og:url against the route it was
+// built from, so the two can never disagree quietly again.
+const path =
+  Astro.url.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "").replace(/\/$/, "") || "/";
 const canonical = new URL(path, ORIGIN).href;
 
 // Every factual claim in the block traces to research/BRAND-FACTS.md or research/PRESS.md — the same

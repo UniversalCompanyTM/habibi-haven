@@ -392,12 +392,39 @@ file or the rule is ignored for a source that also names a directory; the measur
 distinguish the two, and it does not need to. The file and its gate are gone.
 
 **What actually works:** `build.format: "file"` — routes are emitted as `menu.html` rather than
-`menu/index.html`, so there is no directory for the host to redirect to. `/menu` is 200, the canonical
-and the address bar agree, and nothing about the source links had to change because they were always
-slash-free strings. `scripts/verify-dist.mjs` gained a **route shape** gate that fails if a route comes
-back nested, and its reference-resolution check now counts `<path>.html` as a hit for `/path`, which is
-what the host does — the first flat build failed CI on exactly that, three "broken references" for the
-routes themselves.
+`menu/index.html`, so there is no directory for the host to redirect to. Nothing about the source links
+had to change, because they were always slash-free strings. `scripts/verify-dist.mjs` gained a **route
+shape** gate that fails if a route comes back nested, and its reference-resolution check now counts
+`<path>.html` as a hit for `/path`, which is what the host does — the first flat build failed CI on
+exactly that, three "broken references" for the routes themselves.
+
+Re-measured on the live host after that build went up, and the re-measurement found a second defect that
+the fix itself had created:
+
+| request | result |
+| --- | --- |
+| `/`, `/menu`, `/table`, `/visit` | 200, no `Location` header |
+| `/menu?party=4` | 200 — the query that used to cost a hop |
+| `/menu/`, `/table/`, `/visit/` | **308 to the slash-free form**, i.e. converging on the canonical |
+| `/menu/…jpg` (a dish photo) | 200 — `menu/` as a photo folder still resolves |
+| `/menu.html` | 308 → `/menu` — the extension form is not a second copy of the page |
+| `/nope` | 404 with the styled page |
+| served `/menu` HTML | `noindex, nofollow`, `@type Restaurant`, Koinange Street, `openingHoursSpecification`, `tel:+254116880000`, Maps links, numeric KES prices |
+
+The routing half was clean. The head half was not: the canonical on all four flat routes read
+`https://habibihavenpreview.pages.dev/menu.html`. The cause is in the fix, not in the host — during a
+static build `Astro.url.pathname` is the path of the file being written, so `format: "file"` hands the
+template `/menu.html` where the directory build had handed it `/menu`. A canonical naming the extension
+form asks a crawler to index the address whose only job is to redirect, and the address a person sees is
+the one without it. `Base.astro` now strips the extension (and an `/index.html`) before building the
+canonical and `og:url`.
+
+**Why this one got through a green pipeline:** the artifact audit checked the origin for staleness — no
+`netlify.app`, no `.example` — but never compared a page's canonical to the route it was built from, so
+a canonical with a correct host and a wrong tail was passing. `verify-dist.mjs` now has a **canonical**
+gate that asserts, per route, that both `rel=canonical` and `og:url` equal `SITE_URL + route` exactly,
+and it is written against the origin spelled out in the script rather than read from `astro.config.mjs`,
+so it cannot simply agree with whatever the build believed.
 
 ### Milestones
 

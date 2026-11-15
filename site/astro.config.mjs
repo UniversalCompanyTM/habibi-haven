@@ -28,6 +28,12 @@ export default defineConfig({
     // and the dish photos copied from public/menu/ keep their paths, because menu.html and menu/ are
     // different names, not the same one twice.
     //
+    // One consequence needed its own fix: with format "file" the build renders the /menu route while
+    // Astro.url.pathname is /menu.html — the name of the file being written, not the address a person
+    // uses. layouts/Base.astro strips that extension before building the canonical, and the canonical
+    // gate in scripts/verify-dist.mjs pins the result, because the first flat deploy published
+    // rel=canonical as …/menu.html — a canonical naming a URL that only exists to redirect.
+    //
     // scripts/verify-dist.mjs pins this: it fails if a route comes back as a nested index.html.
     format: "file",
     inlineStylesheets: "auto",
