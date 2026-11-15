@@ -62,15 +62,14 @@ jobs:
         continue-on-error: true
         run: node scripts/check-drift.mjs 2>&1 | tee drift.log || echo "::warning::drift check could not complete from a runner; run npm run check locally"
 
+      # The preview server, the readiness probe and the browser all sit on one address, in one script.
+      # Run #1 failed here: `astro preview` binds `localhost`, which on a runner resolves to ::1 before
+      # 127.0.0.1, so forty seconds of curl questioned the wrong interface while a healthy server was
+      # listening. Keeping that logic in scripts/ci-runtime.mjs also means the next tuning pass is an
+      # ordinary git push rather than a workflow-scope edit, and the browser lookup no longer needs
+      # HH_CHROME because verify-runtime.mjs resolves google-chrome off PATH by itself.
       - name: Runtime harness (headless Chrome on this runner, not on a laptop)
-        run: |
-          npm --prefix site run preview -- --port 4321 > .tmp-preview.log 2>&1 &
-          for i in $(seq 1 40); do
-            curl -fsS http://127.0.0.1:4321/ >/dev/null 2>&1 && break
-            sleep 1
-            if [ "$i" = 40 ]; then echo "preview server never answered"; cat .tmp-preview.log; exit 1; fi
-          done
-          HH_CHROME="$(command -v google-chrome || command -v chromium || command -v microsoft-edge)" node scripts/verify-runtime.mjs --base http://127.0.0.1:4321
+        run: node scripts/ci-runtime.mjs
 
       - uses: actions/upload-artifact@v4
         with:
