@@ -426,6 +426,101 @@ gate that asserts, per route, that both `rel=canonical` and `og:url` equal `SITE
 and it is written against the origin spelled out in the script rather than read from `astro.config.mjs`,
 so it cannot simply agree with whatever the build believed.
 
+### Amendment A11 — the pages started swapping instead of loading, and the rig had to be told the document never changed
+
+Approved as "yes, verify narrow": `<ClientRouter />` in `Base.astro` (line 110), so a nav click fetches the
+next route and swaps its `<body>` rather than paying for a cold load — the single change that makes the
+site feel like one continuous space during the pitch. Everything else about routing stayed
+server-authoritative: the same flat files, the same 200s, the same canonicals, and a direct link or a
+dead script still gets a complete page.
+
+A swap is not a load, and five things the site had been doing once per document quietly became bugs:
+
+**The `js` class disappears.** `swapRootAttributes` removes every attribute from the live `<html>` and
+copies the incoming one's, so the class the inline head script adds is gone the moment the swap lands —
+and because that inline script is keyed by its own text inside Astro's swap function, it is marked as
+already run and never adds it again. Every `[data-reveal]` and `.kin` on the incoming page would then sit
+in its no-JavaScript state. **The hour disappears with it**: `--hour` and `--night` live on the root
+element, written by `lib/rig-client.mjs`, and a visitor who dialled 3 a.m. on the home page would walk
+into a midday menu. `reassert()` (`Base.astro:256`) puts both back, bound to `astro:after-swap` — the
+earliest instant the incoming document exists, which matters because the router awaits its script imports
+*after* the swap, so a component painting in that window would show the unstyled page and snap back a beat
+later. It also runs from `onPage`, which is what keeps the same code correct on a first arrival and with
+the router switched off. It repaints only when the root disagrees with what the visitor dialled, because
+the two callers mean it runs twice per navigation and `applyHour` broadcasts to the door and both dials.
+
+Three behaviours were read out of the installed package rather than assumed (`site/node_modules/astro/dist/transitions/`):
+`triggerEvent` dispatches on **`document`** (`router.js:17`), so a listener bound to the Document survives
+every swap; `after-swap` fires inside `updateDOM` (`router.js:216`) and `page-load` fires after the script
+imports resolve (`router.js:354-358`), so the order the two names above depend on is guaranteed; and when
+`document.startViewTransition` is missing Astro builds a shim (`router.js:327`) that still drives
+`runScripts → page-load → announce` — the island lifecycle is not hostage to View Transition support, which
+is the difference between a working demo and a blank one on an older iPhone at the table.
+
+**The fade was not ours.** Enabling the router turns on View Transitions, and Astro ships a cross-fade
+whose default UA timing is slower than this site's motion budget. `global.css:1850-1863` pins
+`::view-transition-{old,new,group}(root)` to 180 ms and cancels it outright under
+`prefers-reduced-motion: reduce`. The harness counts the authored rules rather than trusting the intent:
+`vtRules = { total: 2, medias: [null, "(prefers-reduced-motion: reduce)"], inMedia: 1 }`.
+
+Measured on the runner (headless Chrome, `verify-runtime`, run 43760830456). Four clicked navigations plus
+one reduced-motion navigation, each counted with handlers that attach once per step and detach after the
+settle window:
+
+| step | swapped | loaded | announcer elements | `--hour` after | other evidence |
+| --- | --- | --- | --- | --- | --- |
+| `/ → /menu` | 1 | 1 | 1 | "3" | menu search, reset and category chips usable |
+| `/menu → /table` | 1 | 1 | 1 | "3" | party steppers usable |
+| `/table → /` | 1 | 1 | 1 | "3" | 1 door canvas, `live: true`, curtain settled |
+| back, then forward | 1 | 1 | 1 | "3" both ways | landed `/table` → `/`, `mark: "router"` |
+| `/ → /menu` (reduced motion) | 1 | 1 | 1 | — | `animation: none` path taken |
+
+`window.__hhMark` — set before the first click — was still readable after all five swaps, which is the
+cheap proof that the JS world persisted and nothing silently fell back to a full load. The route announcer
+matched `<title>` on every step (`announced === title`); `announce()` (`router.js:19-33`) creates a fresh
+`div.astro-route-announcer` each time, and because the body swap `replaceWith`s the old one there is
+exactly one, never a stack of stale announcements.
+
+**Four errors in my own harness, all disclosed rather than quietly patched.** Passing `drain()`'s
+`{errors, warnings}` object straight into a report row crashed the reporter on a green battery
+(`TypeError: r.errors is not iterable`). A `cameForward` assertion read a `mark` field the step never
+returned, so a *correct* back/forward pair was reported as "the router does not handle popstate" while
+every number beside it passed. Counters bound with `{ once: true }` could only ever read 0 or 1, making a
+duplicate sweep unfalsifiable — hence the named handlers above. And twice, a backtick inside a comment
+inside a template literal truncated the literal, which `node --check` caught locally before the runner did.
+
+**The no-JavaScript claim in the harness had been measuring the wrong thing.** The old `/ (scripts
+removed)` row deleted `<script>` tags from a page that had already loaded, so `html.js` was set, the
+observer was gone, and `[data-reveal]` sat at `opacity: 0` — it measured a bundle dying mid-session, not a
+browser without JavaScript, and it counted cards by `offsetParent !== null`, which is true at opacity 0.
+The row is kept and relabelled (that *is* a real failure mode: a chunk 404ing on a flaky hotel Wi-Fi), and a
+genuine probe was added: `Emulation.setScriptExecutionDisabled` before the load, with the styles read
+through the CDP DOM and CSS domains instead of `page.evaluate`, which is reported unreliable under that
+flag. Run 43761717485:
+
+| route | `html.js` on root | reveal nodes | sampled `opacity` | probe error |
+| --- | --- | --- | --- | --- |
+| `/` | 0 | 10 | 1, 1, 1 | none |
+| `/menu` | 0 | 243 | 1, 1, 1 | none |
+
+A browser that cannot run scripts never gets the class, so the CSS never hides anything: 253 content
+regions across the two heaviest routes, all visible. The probe reports `probeError` as a failure worded
+"unmeasured, not confirmed", so a tooling gap cannot masquerade as a pass.
+
+The same run exposed that the verdict line promised more than the code enforced — it printed "no console
+errors on any route" while per-row errors were only echoed. Rows are now gated (`loudRows`), so a route
+that logs cannot also be called clean.
+
+Live after upload (381 files from the runner's artifact, direct upload, nothing compiled on the laptop):
+production `habibihavenpreview.pages.dev` is byte-identical to the deployment preview (same SHA-1 of
+served `/`), `/`, `/menu`, `/table`, `/visit` all 200, `/menu.html` 308 → `/menu`, `/nope` 404 with the
+styled page, `_astro/ClientRouter.astro_…js` plus `astro-view-transitions-enabled` and `-fallback` in the
+head, the `Restaurant` / `Menu` / `MenuItem` / `Offer` / `OpeningHoursSpecification` / `PostalAddress` /
+`AggregateRating` graph intact, `tel:+254116880000`, and `noindex, nofollow` still on every route.
+
+*(Numbering note: there is no A9 — the sequence skipped it, and the gap is left rather than back-filled so
+the amendment order keeps matching the commit order.)*
+
 ### Milestones
 
 1. **M0 — probes** (headless ingest, image reachability, toolchain availability). No UI.
