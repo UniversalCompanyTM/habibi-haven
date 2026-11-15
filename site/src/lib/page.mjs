@@ -25,6 +25,14 @@
 //                                          every swap. Use this for anything that owns a loop, a WebGL
 //                                          context, or a listener: the door, the cursor, the dial, the
 //                                          two islands. `host` may be a selector or a finder function.
+//                                          Identity is the element, not its absence: a router swap does
+//                                          not take the old body out and put the new one in as two
+//                                          observable steps — after-swap fires once, with the incoming
+//                                          document already installed. So "the element I mounted is not
+//                                          the element at this selector now" is the disposal trigger, and
+//                                          a rule that waited for `find()` to return null would leave the
+//                                          instance wired to a detached node: a dead explorer one click
+//                                          after it worked.
 //   collection(host, { mount, unmount })  — the same contract for a host that appears more than once on a
 //                                          page. The home hero carries a compact dial and the rig section
 //                                          a full one, so a primitive that could only track one element
@@ -77,22 +85,26 @@ export function createPage(doc) {
     const find = typeof host === "function" ? host : () => doc.querySelector(host);
     // A wrapper object, not the instance: `mount` may legitimately return nothing, and `null`/`false`
     // as "not mounted" would then read as already-mounted or not, depending on what the author returned.
+    // It carries `el` as well as `api` because the element is the thing that has to be compared — see the
+    // header. Without it, a swap that replaces the host reads as "still there" and the old instance keeps
+    // serving a node that is no longer in the document.
     let inst = null;
 
     const sync = () => {
       const el = find();
-      if (el && inst === null) {
-        inst = { api: mount(el) };
-      } else if (!el && inst !== null) {
-        const previous = inst;
-        inst = null;
-        if (unmount) unmount(previous.api);
-      }
+      if (inst !== null && inst.el === el) return;
+      const previous = inst;
+      inst = null;
+      // Released before the replacement is built, for the same reason `collection` orders it that way:
+      // on the door those two operations are "dispose a WebGL context" and "create one", and the peak has
+      // to stay at one context on exactly the devices lib/gate.mjs exists to protect.
+      if (previous && unmount) unmount(previous.api);
+      if (el) inst = { el, api: mount(el) };
     };
 
     syncers.add(sync);
     sync();
-    return { sync, isLive: () => inst !== null, instance: () => inst && inst.api };
+    return { sync, isLive: () => inst !== null, instance: () => inst && inst.api, host: () => inst && inst.el };
   }
 
   function collection(host, { mount, unmount }) {

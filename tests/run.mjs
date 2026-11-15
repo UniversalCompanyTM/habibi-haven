@@ -688,18 +688,32 @@ describe("page — one mount per host across a swap");
 class FakeDoc {
   constructor() {
     this.handlers = new Map();
-    this.found = new Set();
+    this.one = new Map();
     this.many = new Map();
   }
   addEventListener(type, fn) {
     if (!this.handlers.has(type)) this.handlers.set(type, []);
     this.handlers.get(type).push(fn);
   }
+  // Stable per selector, the way a real document is: two `querySelector` calls in the same DOM state hand
+  // back the same node. A fake that minted a fresh object per call would make every identity check in the
+  // module look like a replaced host, and the tests would then be asserting a property of the fake.
   querySelector(sel) {
-    return this.found.has(sel) ? { sel } : null;
+    return this.one.get(sel) ?? null;
   }
   querySelectorAll(sel) {
     return this.many.get(sel) ?? [];
+  }
+  // Put a host at this selector, or replace the one already there. Replacing returns a NEW node object,
+  // which is what a view-transition swap does: the incoming page's markup is different elements that
+  // match the same selectors.
+  setHost(sel) {
+    const node = { sel };
+    this.one.set(sel, node);
+    return node;
+  }
+  clearHost(sel) {
+    this.one.delete(sel);
   }
   // Swap the live set for a selector, the way a body swap replaces the nodes under it. Returns the new
   // node objects so a test can hold one of them and prove identity survives.
@@ -718,7 +732,7 @@ class FakeDoc {
 
 check("a component mounts once, however many page-loads follow", () => {
   const doc = new FakeDoc();
-  doc.found.add("[data-door]");
+  doc.setHost("[data-door]");
   const page = createPage(doc);
   let mounts = 0;
   const c = page.component("[data-door]", { mount: () => (mounts += 1) });
@@ -732,7 +746,7 @@ check("a component mounts once, however many page-loads follow", () => {
 
 check("the host leaving with the swapped-out page disposes it exactly once", () => {
   const doc = new FakeDoc();
-  doc.found.add("[data-door]");
+  doc.setHost("[data-door]");
   const page = createPage(doc);
   let mounts = 0;
   let unmounts = 0;
@@ -740,7 +754,7 @@ check("the host leaving with the swapped-out page disposes it exactly once", () 
     mount: () => (mounts += 1),
     unmount: () => (unmounts += 1),
   });
-  doc.found.delete("[data-door]");
+  doc.clearHost("[data-door]");
   doc.fire("astro:after-swap");
   doc.fire("astro:after-swap");
   if (eq(unmounts, 1, "unmounts") !== true) return eq(unmounts, 1, "unmounts");
@@ -750,22 +764,68 @@ check("the host leaving with the swapped-out page disposes it exactly once", () 
 
 check("navigating back home rebuilds it, because the module will not run again", () => {
   const doc = new FakeDoc();
-  doc.found.add("[data-door]");
+  doc.setHost("[data-door]");
   const page = createPage(doc);
   let mounts = 0;
   const c = page.component("[data-door]", { mount: () => (mounts += 1) });
-  doc.found.delete("[data-door]");
+  doc.clearHost("[data-door]");
   doc.fire("astro:after-swap");
-  doc.found.add("[data-door]");
+  doc.setHost("[data-door]");
   doc.fire("astro:page-load");
   const rebuilt = eq(mounts, 2, "mounts after returning home");
   if (rebuilt !== true) return rebuilt;
   return eq(c.isLive(), true, "live");
 });
 
+check("a host replaced in one step is released and rebuilt, not left on the detached node", () => {
+  // The case "navigating back home" above cannot reach. A view-transition swap never offers a moment where
+  // the selector matches nothing: `astro:after-swap` fires once, with the incoming body already installed,
+  // so `find()` goes from the old element straight to a different element. A component keyed on "is there a
+  // host at all" stays mounted to the node that just left the document — which is an explorer whose filters
+  // stop answering after one click, and a clock whose interval repaints nothing. Keying on the element is
+  // what turns that into a disposal followed by a fresh mount.
+  const doc = new FakeDoc();
+  const first = doc.setHost("[data-explorer]");
+  const page = createPage(doc);
+  const order = [];
+  const c = page.component("[data-explorer]", {
+    mount: (el) => {
+      order.push(`mount ${el === first ? "first" : "second"}`);
+      return el;
+    },
+    unmount: (api) => order.push(`unmount ${api === first ? "first" : "second"}`),
+  });
+  const second = doc.setHost("[data-explorer]"); // same selector, different element: the swap
+  doc.fire("astro:after-swap");
+  // Three entries and the middle pair is the claim: the departing instance is released before the incoming
+  // one is built, so a door never has two WebGL contexts alive at once on a gated device.
+  if (eq(order.join(" → "), "mount first → unmount first → mount second", "order") !== true)
+    return eq(order.join(" → "), "mount first → unmount first → mount second", "order");
+  return eq(c.host(), second, "the live instance is bound to the incoming element");
+});
+
+check("a host that survives the swap untouched is not remounted", () => {
+  // The other half of identity: `data-astro-transition-persist` keeps an element across a swap, and a
+  // primitive that rebuilt on every event would tear down a running scene for no reason.
+  const doc = new FakeDoc();
+  const kept = doc.setHost("[data-explorer]");
+  const page = createPage(doc);
+  let mounts = 0;
+  page.component("[data-explorer]", {
+    mount: () => {
+      mounts += 1;
+      return kept;
+    },
+    unmount: () => (mounts -= 100),
+  });
+  doc.fire("astro:after-swap");
+  doc.fire("astro:page-load");
+  return eq(mounts, 1, "mounts across a swap that kept the element");
+});
+
 check("a mount that returns nothing is still tracked and disposable", () => {
   const doc = new FakeDoc();
-  doc.found.add("[data-cursor]");
+  doc.setHost("[data-cursor]");
   const page = createPage(doc);
   let unmounted = "not called";
   const c = page.component("[data-cursor]", {
@@ -773,7 +833,7 @@ check("a mount that returns nothing is still tracked and disposable", () => {
     unmount: (api) => (unmounted = `got ${String(api)}`),
   });
   if (eq(c.isLive(), true, "live after a void mount") !== true) return eq(c.isLive(), true, "live");
-  doc.found.delete("[data-cursor]");
+  doc.clearHost("[data-cursor]");
   doc.fire("astro:after-swap");
   if (eq(unmounted, "got undefined", "unmount argument") !== true) return eq(unmounted, "got undefined", "unmount");
   return eq(c.isLive(), false, "live after disposal");
@@ -781,10 +841,10 @@ check("a mount that returns nothing is still tracked and disposable", () => {
 
 check("a component with no unmount hook is not an error", () => {
   const doc = new FakeDoc();
-  doc.found.add("[data-dial]");
+  doc.setHost("[data-dial]");
   const page = createPage(doc);
   const c = page.component("[data-dial]", { mount: () => ({ ok: true }) });
-  doc.found.delete("[data-dial]");
+  doc.clearHost("[data-dial]");
   doc.fire("astro:after-swap");
   return eq(c.isLive(), false, "live");
 });
@@ -819,7 +879,7 @@ check("a finder function is allowed where a selector cannot express the host", (
     mount: (el) => (seen = el.sel),
   });
   if (eq(c.isLive(), false, "not present yet") !== true) return eq(c.isLive(), false, "not present");
-  doc.found.add("[data-menu]");
+  doc.setHost("[data-menu]");
   doc.fire("astro:page-load");
   return eq(seen, "[data-menu]", "mounted host");
 });
