@@ -1614,16 +1614,27 @@ const navStep = (expected) =>
       document.querySelector('main a[href="${expected}"]') ||
       document.querySelector('a[href="${expected}"]');
     if (!link) return { clicked: false, expected: ${JSON.stringify(expected)} };
-    let swapped = 0, loaded = 0;
     // document, not window: astro/dist/transitions/router.js fires these with
     // document.dispatchEvent(new Event(name)), and a plain Event does not bubble — a window listener
     // here would sit out every navigation and report a router that never ran.
-    document.addEventListener("astro:after-swap", () => { swapped += 1; }, { once: true });
-    document.addEventListener("astro:page-load", () => { loaded += 1; }, { once: true });
+    // And not with once: true. A listener that detaches itself on its first firing can only ever report 0 or 1,
+    // which makes "exactly one page-load per navigation" unfalsifiable: the duplicate it exists to catch
+    // would be invisible by construction. Count every firing, then unbind — the Document object survives a
+    // swap (swapBodyElement replaces the <body> element, not the document), so the removal is real and the
+    // next step starts from zero.
+    let swapped = 0, loaded = 0;
+    const onSwap = () => { swapped += 1; };
+    const onLoad = () => { loaded += 1; };
+    document.addEventListener("astro:after-swap", onSwap);
+    document.addEventListener("astro:page-load", onLoad);
     link.click();
     const t0 = Date.now();
     while (Date.now() - t0 < 9000 && !(swapped && loaded)) await wait(40);
+    // announce() runs after astro:page-load and sets its text in a further 60ms timeout, so this settle
+    // window is also what makes announced and announcers mean anything.
     await wait(700);
+    document.removeEventListener("astro:after-swap", onSwap);
+    document.removeEventListener("astro:page-load", onLoad);
     const root = getComputedStyle(document.documentElement);
     const curtain = document.querySelector("[data-preloader]");
     return {
@@ -1634,6 +1645,7 @@ const navStep = (expected) =>
       loaded,
       title: document.title,
       announced: (document.querySelector(".astro-route-announcer") || {}).textContent ?? null,
+      announcers: document.querySelectorAll(".astro-route-announcer").length,
       mark: window.__hhMark ?? null,
       jsOn: document.documentElement.classList.contains("js"),
       hour: root.getPropertyValue("--hour").trim(),
@@ -1754,6 +1766,7 @@ const cameForward = await evaluate(`
   await wait(800);
   return {
     landed: location.pathname,
+    mark: window.__hhMark ?? null,
     canvas: document.querySelectorAll("[data-door] canvas").length,
     live: !!document.querySelector("[data-door] canvas[data-live]"),
     hour: getComputedStyle(document.documentElement).getPropertyValue("--hour").trim(),
@@ -1786,6 +1799,11 @@ for (const step of [toMenu, toTable, backHome]) {
   if (!step.jsOn)
     failures.push(`${step.expected}: html.js is missing after the swap — every [data-reveal] rule on this page is gated on it, so the content is showing in its no-JavaScript state`);
   if (!step.title) failures.push(`${step.expected}: the document title is empty after the swap`);
+  // Run 43760030228 measured this holding on a real swap — router.js announce() reads document.title 60ms
+  // after astro:page-load — so it is a claim and not a guess: the page a screen reader is told about has to
+  // be the page that arrived.
+  if (step.announced !== step.title)
+    failures.push(`${step.expected}: the route announcer said ${JSON.stringify(step.announced)} while the title is ${JSON.stringify(step.title)} — assistive tech is announced a different page than the one that landed`);
 }
 // The door belongs to one page, and it must not follow the visitor around or arrive twice.
 if (toMenu.canvases !== 0)
@@ -1811,7 +1829,7 @@ if (wentBack.rows === 0)
 if (wentBack.landed !== "/table" || cameForward.landed !== "/")
   failures.push(`history back/forward landed on ${JSON.stringify([wentBack.landed, cameForward.landed])}, expected /table then /`);
 if (wentBack.mark !== "router" || cameForward.mark !== "router")
-  failures.push("back/forward tore the document down (window.__hhMark gone) — the router is not handling popstate in this build");
+  failures.push(`back/forward tore the document down (window.__hhMark reads ${JSON.stringify([wentBack.mark, cameForward.mark])}) — the router is not handling popstate in this build`);
 if (wentBack.hour !== "3" || cameForward.hour !== "3")
   failures.push(`back/forward reset --hour to ${JSON.stringify([wentBack.hour, cameForward.hour])} — the restored document's own attributes won over the dialled hour`);
 if (!menuLive.mounted) failures.push("/menu after a click has no [data-q] — the explorer arrived as dead markup, which is the exact failure lib/page.mjs exists to prevent");
