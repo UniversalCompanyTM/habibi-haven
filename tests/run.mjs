@@ -689,6 +689,7 @@ class FakeDoc {
   constructor() {
     this.handlers = new Map();
     this.found = new Set();
+    this.many = new Map();
   }
   addEventListener(type, fn) {
     if (!this.handlers.has(type)) this.handlers.set(type, []);
@@ -696,6 +697,16 @@ class FakeDoc {
   }
   querySelector(sel) {
     return this.found.has(sel) ? { sel } : null;
+  }
+  querySelectorAll(sel) {
+    return this.many.get(sel) ?? [];
+  }
+  // Swap the live set for a selector, the way a body swap replaces the nodes under it. Returns the new
+  // node objects so a test can hold one of them and prove identity survives.
+  setHosts(sel, count) {
+    const nodes = Array.from({ length: count }, (_, i) => ({ sel, i }));
+    this.many.set(sel, nodes);
+    return nodes;
   }
   fire(type) {
     for (const fn of this.handlers.get(type) ?? []) fn({ type });
@@ -811,6 +822,99 @@ check("a finder function is allowed where a selector cannot express the host", (
   doc.found.add("[data-menu]");
   doc.fire("astro:page-load");
   return eq(seen, "[data-menu]", "mounted host");
+});
+
+// `collection` exists because the home page mounts two dials — a compact one in the hero and a full one in
+// the rig section. A single-host primitive wired to `[data-dial]` would take the first and leave the second
+// as a slider that moves a handle and changes nothing, which is the exact defect the comment in
+// HoursClock.astro already complains about once. These checks are what stop it coming back through the
+// router, where the second dial arrives from a swapped-in body rather than from a fresh script.
+
+check("two hosts on one page get two instances", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  doc.setHosts("[data-dial]", 2);
+  const mounted = [];
+  let unmounts = 0;
+  const c = page.collection("[data-dial]", {
+    mount: (el) => (mounted.push(el.i), el),
+    unmount: () => (unmounts += 1),
+  });
+  if (eq(mounted.join(","), "0,1", "mounted indices") !== true) return eq(mounted.join(","), "0,1", "mounted");
+  if (eq(c.size(), 2, "live size") !== true) return eq(c.size(), 2, "live size");
+  return eq(unmounts, 0, "unmounts");
+});
+
+check("a page with no hosts disposes every instance", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  doc.setHosts("[data-dial]", 2);
+  const gone = [];
+  const c = page.collection("[data-dial]", {
+    mount: (el) => el,
+    unmount: (api) => gone.push(api.i),
+  });
+  doc.setHosts("[data-dial]", 0);
+  doc.fire("astro:after-swap");
+  if (eq(gone.join(","), "0,1", "disposed in order") !== true) return eq(gone.join(","), "0,1", "disposed");
+  return eq(c.size(), 0, "live size");
+});
+
+check("identity is the element: a surviving host is not remounted, a replaced one is", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  const [a] = doc.setHosts("[data-dial]", 2);
+  let mounts = 0;
+  const unmounted = [];
+  const c = page.collection("[data-dial]", {
+    mount: (el) => {
+      mounts += 1;
+      return el;
+    },
+    unmount: (api) => unmounted.push(api.i),
+  });
+  if (eq(mounts, 2, "both mounted at registration") !== true) return eq(mounts, 2, "registration mounts");
+  // The swap keeps `a` (a persisted host) and replaces `b` with a new node `d`.
+  const d = { sel: "[data-dial]", i: 3 };
+  doc.many.set("[data-dial]", [a, d]);
+  doc.fire("astro:after-swap");
+  if (eq(unmounted.length, 1, "only the departed host disposed") !== true)
+    return eq(unmounted.length, 1, "disposals");
+  if (eq(unmounted[0], 1, "the disposed host was b") !== true) return eq(unmounted[0], 1, "which host");
+  if (eq(mounts, 3, "the survivor was not remounted") !== true) return eq(mounts, 3, "mounts");
+  return eq(c.size(), 2, "live size");
+});
+
+check("disposal runs before the mount that replaces it", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  doc.setHosts("[data-door]", 1);
+  const order = [];
+  // The reason this ordering is pinned: two WebGL contexts alive at once on a device that was gated down
+  // to one. Freeing first keeps the peak at one.
+  page.collection("[data-door]", {
+    mount: (el) => {
+      order.push(`mount ${el.i}`);
+      return el;
+    },
+    unmount: (el) => order.push(`unmount ${el.i}`),
+  });
+  doc.setHosts("[data-door]", 1);
+  doc.fire("astro:after-swap");
+  // Three entries, not two: registering mounts the host that is already there. The claim under test is
+  // the middle pair — the old one is released before the new one is created.
+  return eq(order.join(" → "), "mount 0 → unmount 0 → mount 0", "order");
+});
+
+check("a collection and a component share the one pair of listeners", () => {
+  const doc = new FakeDoc();
+  const page = createPage(doc);
+  page.collection("[data-dial]", { mount: () => 1 });
+  page.component("[data-door]", { mount: () => 1 });
+  doc.fire("astro:page-load");
+  if (eq(doc.count("astro:page-load"), 1, "page-load listeners") !== true)
+    return eq(doc.count("astro:page-load"), 1, "page-load listeners");
+  return eq(doc.count("astro:after-swap"), 1, "after-swap listeners");
 });
 
 /* ----------------------------------------------------------------- summary */

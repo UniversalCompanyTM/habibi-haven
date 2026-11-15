@@ -25,6 +25,12 @@
 //                                          every swap. Use this for anything that owns a loop, a WebGL
 //                                          context, or a listener: the door, the cursor, the dial, the
 //                                          two islands. `host` may be a selector or a finder function.
+//   collection(host, { mount, unmount })  — the same contract for a host that appears more than once on a
+//                                          page. The home hero carries a compact dial and the rig section
+//                                          a full one, so a primitive that could only track one element
+//                                          would leave the second dead or, worse, wire both to one
+//                                          instance. Identity is the element, so a node that survives a
+//                                          swap via `data-astro-transition-persist` is not remounted.
 //   onPage(fn)                           — for rescans only. It calls fn once now and again on each page
 //                                          load, so fn will run twice on the very first load whenever this
 //                                          module evaluates before the router fires. That is a deliberate
@@ -89,7 +95,37 @@ export function createPage(doc) {
     return { sync, isLive: () => inst !== null, instance: () => inst && inst.api };
   }
 
-  return { onPage, component, wired: () => wired };
+  function collection(host, { mount, unmount }) {
+    wire();
+    const findAll = typeof host === "function" ? host : () => Array.from(doc.querySelectorAll(host));
+    // Keyed by element rather than by index: two dials swapping places between pages is a rename under an
+    // index key and a no-op under an element key, and the element key is the one that matches what the
+    // browser actually did to the DOM.
+    const live = new Map();
+
+    const sync = () => {
+      const found = findAll();
+      const list = found ? (Array.isArray(found) ? found : [found]) : [];
+      const present = new Set(list);
+      // Dispose before mounting. A swap from one WebGL host to another is the case this ordering is for:
+      // releasing the old context first means the peak is one context, not two, on exactly the devices the
+      // gate in lib/gate.mjs exists to protect.
+      for (const [el, inst] of Array.from(live)) {
+        if (present.has(el)) continue;
+        live.delete(el);
+        if (unmount) unmount(inst.api);
+      }
+      for (const el of list) {
+        if (!live.has(el)) live.set(el, { api: mount(el) });
+      }
+    };
+
+    syncers.add(sync);
+    sync();
+    return { sync, size: () => live.size, instances: () => Array.from(live.values(), (i) => i.api) };
+  }
+
+  return { onPage, component, collection, wired: () => wired };
 }
 
 let shared = null;
@@ -97,3 +133,4 @@ const singleton = () => (shared ??= createPage(document));
 
 export const onPage = (...args) => singleton().onPage(...args);
 export const component = (...args) => singleton().component(...args);
+export const collection = (...args) => singleton().collection(...args);
