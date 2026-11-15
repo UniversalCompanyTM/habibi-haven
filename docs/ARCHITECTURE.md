@@ -312,6 +312,61 @@ between 20:00 and 14:00; cross-hour distance against the four-frame-per-hour noi
 lit at both hours — and partly the statistic, which compares luminance only, while the visible difference
 between those two frames is mostly colour temperature. The margin stays printed rather than tuned upward.
 
+### Amendment A8 — M6: the site was measured with a keyboard and a stopwatch, and four defects came out of it
+
+The gates before this one read the built HTML and the pixels. Neither of them could answer the two questions
+that decide whether the site is usable: whether the whole thing can be operated without a mouse, and what it
+costs per frame on the machine doing the running. `scripts/verify-runtime.mjs` gained both — real `Tab`
+presses through `Input.dispatchKeyEvent` (not an audit of `href` and `aria-label`), the `/` and `Escape`
+shortcuts the menu page promises in its own copy, `Enter` on the party stepper, and a `requestAnimationFrame`
+wrapper installed at document start that reports frames, callbacks-per-frame, and p50/p95/worst frame times per
+window. 92 Tab stops across four routes, and every route passes with `unnamed 0 · blind 0 · ghosts 0 ·
+sinks 0 · positives 0`: no control whose accessible name is empty, no stop with no visible indicator, none with
+no box, none invisible, and no `tabindex` above 0 anywhere in the source.
+
+What the measurement found, in the order it was fixed:
+
+| Defect | Evidence | Cause | Fix |
+|---|---|---|---|
+| 13 focus stops had no focus indicator (9 on `/menu`, 4 on `/table`) | `blind: 9` / `blind: 4` with the stops named in the output | `global.css:1041` `.field input { outline: 0 }` — specificity 0,1,1 — beat `:focus-visible { outline: 2px }` at 0,1,0, so the search box, the date field and the time select were invisible to the keyboard | `.field:focus-within` paints the ring on the field wrapper, and `.field input:focus-visible { outline: 0 }` says out loud that the suppression is deliberate and which element answers instead |
+| The door painted a room nobody could see | 6 frames recorded after `scrollTo(55%)` put it 5,061 px above the viewport | `DoorScene` stopped the loop for `document.hidden` and nothing else | an `IntersectionObserver` with a 120 px margin drives `inView`; the same `onVisibility` decision now covers both reasons to stop. Re-measured: 3 frames while on screen, 0 while off |
+| The cursor never stopped running | 2 rAF callbacks per frame *forever* after a single mouse move | `draw()` re-requested unconditionally, and the ring is an exponential lag — it never arrives, so the numbers repeat long before the loop notices | `draw()` stops when \|pointer − ring\| < 0.05 px (the point where the next step moves less than a device pixel). Re-arm keys off `!raf`, and `blur` zeroes the id after cancelling — without that line the same fix bricks the cursor on the next tab switch |
+| A downgrade nobody could see | probe said nothing; the page claimed `tier: "full"` while drawing the lite room | `downgradeToLite()` rebuilt the geometry and left `data-tier` at the gate's page-load answer | the probe now writes `data-tier="lite"`, `data-tier-reason="measured frame time"` and `data-probe-ms` beside the rebuild. Measured on this machine: 532.9 ms average over 30 frames → lite → 267 ms per frame afterwards, against 533 ms before |
+
+Three more were defects of the measurement rather than the site, and are recorded because they are the traps
+in this kind of harness. `Enter` did not activate a focused button from `rawKeyDown` alone — Chrome's default
+activation needs the `char` event, so `press()` sends it. `getComputedStyle(child).display` is not `"none"`
+inside a `display: none` ancestor, so the first "invisible focusable" audit was fiction until it switched to
+`Element.checkVisibility`; and the second version's 9 remaining "sinks" were the *fade-up reveal working as
+designed* — `/menu` holds 129 controls at opacity 0 whose reveal has not been observed yet, which is a keyboard
+guest two seconds away from a real button, not a bug. The classifier now treats an element as stuck only when
+nothing is governing its reveal or its reveal ancestor is on screen and no animation is running, and separately
+proves the pending population by focusing one control and reading the result: `/` landed at `revealed: true ·
+opacity 1 · inViewport: true · ring: true`. The wait for that is a poll, not a snapshot, because
+`html { scroll-behavior: smooth }` means the browser's focus-follows scroll is an animation and a 950 ms
+photograph caught the control mid-flight — the first version of that check failed a page that was correct.
+
+Absolute frame numbers are not portable and are not claimed as such. The renderer here is
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)` at 1403×940, dpr 1, tier
+`full` for `desktop-class` — a CPU rasteriser, so ~3 fps is a property of the harness's browser, not of the
+site or of a phone. What the gate asserts is the *shape* of the loop: it runs while the door is on screen, it
+stops when the door leaves, no loop exists on a page without a door, one frame only under reduced motion, and
+after a parked pointer the only loop left is the door's (`idle.maxPerFrame 1 → chasing 2 → settled 1`, the
+ring having stopped writing at 17.7 s of chasing on this hardware, ~1 s on a GPU). `maxPerFrame > 3` is what
+fails as "a loop nobody wrote", because three legitimate consumers exist at page start: `DoorScene.step`,
+`Preloader.tick` and `Cursor.draw`.
+
+`evaluate()` bodies in this file are statement blocks, not expressions: the helper wraps them in an async
+function, so a body written as `matchMedia(q).matches` returns `undefined` — which read as "(pointer: fine) is
+false" and nearly shipped a false claim about the test environment in a comment. The harness carries a
+document-start override that forces that query true only when the browser does not, so the desktop cursor path
+cannot go untested either way, and the override's status is printed in the result line rather than assumed.
+
+Gate state at the end of M6: `npm run check` 67/67, `check-drift` clean, `verify-dist` ok (5 pages, 301 local
+references, 5 routes, contracts + a11y + weight), `check-board` 176 strings, `verify-runtime` exit 0 with 12
+route passes and 0 console errors. JS is 890 kB across 10 chunks with `three` lazy at 673 kB, i.e. never in the
+entry graph.
+
 ## Milestones
 
 1. **M0 — probes** (headless ingest, image reachability, toolchain availability). No UI.

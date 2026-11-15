@@ -207,6 +207,10 @@ const {
     let raf = 0;
     let running = false;
     let revealed = false;
+    // Whether the door is anywhere in the viewport. The hero is one screen tall and a guest who has
+    // scrolled to the menu is not looking at it, so this is the difference between a render loop that
+    // animates a room and one that burns the GPU painting a room nobody can see.
+    let inView = true;
 
     const step = (now: number) => {
       const delta = now - previous;
@@ -238,10 +242,17 @@ const {
       scene.fog = haven.fog;
       haven.applyRig(values, readPalette());
       haven.resize(host.clientHeight, renderer.getPixelRatio());
+      // The evidence has to move with the behaviour. `data-tier` is what the gate decided at page load, and
+      // after this line the room is no longer what the gate asked for — so anyone reading the attribute (a
+      // debugger, or verify-runtime.mjs) would be told "full" while standing in a lite scene. The measured
+      // average is written next to it because "it felt slow" is not a reason; a millisecond is.
+      host.dataset.tier = "lite";
+      host.dataset.tierReason = "measured frame time";
+      host.dataset.probeMs = (probeTotal / 30).toFixed(1);
     }
 
     const play = () => {
-      if (running || reduced || document.hidden) return;
+      if (running || reduced || document.hidden || !inView) return;
       running = true;
       previous = performance.now();
       raf = requestAnimationFrame(step);
@@ -252,7 +263,21 @@ const {
       cancelAnimationFrame(raf);
     };
 
-    const onVisibility = () => (document.hidden ? pause() : play());
+    // One decision for two reasons to stop — the tab going to the background and the room scrolling out
+    // of sight — so a hidden page that is also off-screen cannot have one handler resume what the other
+    // just stopped.
+    const onVisibility = () => (document.hidden || !inView ? pause() : play());
+
+    // The margin is deliberate: the loop restarts before the first row of the door is visible, so the
+    // guest who scrolls back up finds it already breathing rather than catching up frame by frame.
+    const inViewObserver = new IntersectionObserver(
+      (entries) => {
+        inView = entries[entries.length - 1]?.isIntersecting ?? inView;
+        onVisibility();
+      },
+      { rootMargin: "120px 0px 120px 0px" }
+    );
+    inViewObserver.observe(host);
 
     if (reduced) {
       // One frame at the current hour, already rendered above; the loop is never created.
@@ -273,6 +298,7 @@ const {
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener(HOUR_EVENT, onHour);
       observer.disconnect();
+      inViewObserver.disconnect();
       haven.dispose();
       renderer.dispose();
     }

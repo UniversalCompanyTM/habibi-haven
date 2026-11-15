@@ -1041,6 +1041,20 @@ html.js [data-reveal].is-in {
   outline: 0;
 }
 
+/* The pill is the control the guest sees, so the pill is what has to light up. `.field input` drops the
+   box outline because a 2px ring around the bare text inside a rounded pill reads as a mis-drawn border,
+   but dropping it with no replacement left the search box, the date and the time without any focus
+   indicator at all — WCAG 2.4.7, and the three fields a keyboard guest uses most on this site. */
+.field:focus-within {
+  border-color: var(--teal);
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.field input:focus-visible {
+  outline: 0;
+}
+
 .field input::placeholder {
   color: var(--mist-3);
 }

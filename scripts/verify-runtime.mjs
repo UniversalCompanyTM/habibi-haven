@@ -181,6 +181,131 @@ await inPage("Runtime.enable");
 await inPage("Log.enable");
 await inPage("Page.enable");
 
+// ---------------------------------------------------------------- frame probe
+// "The site is lightweight" is a claim about frames, and nothing in the markup or the build output can
+// answer it. Wrapping requestAnimationFrame before any page script runs gives the harness a counter of
+// callbacks and a timestamp per vsync, so a render loop that is running, a loop that stopped when the
+// door scrolled out of sight, and a page that never started one are three different measurable answers.
+// The wrapper is installed in the page, never in the source: the shipped code carries no test hook, and
+// the callback it returns is the native one, so cancelAnimationFrame still works.
+const FRAME_PROBE = `(() => {
+  const native = window.requestAnimationFrame.bind(window);
+  const f = { on: false, stamps: [] };
+  window.__hhFrames = f;
+  window.requestAnimationFrame = (cb) => native((now) => {
+    if (f.on) f.stamps.push(now);
+    return cb(now);
+  });
+})()`;
+await inPage("Page.addScriptToEvaluateOnNewDocument", { source: FRAME_PROBE });
+
+async function startFrames() {
+  await evaluate("window.__hhFrames.stamps.length = 0; window.__hhFrames.on = true; return true;");
+}
+
+// Read the window back as frame statistics. Distinct timestamps are frames; callbacks per frame says how
+// many loops were alive at once, which is how a page that quietly runs a leaked rAF loop gets caught. The
+// honest ceiling on the home page is two, not one: three components register a repeating callback — the door
+// (DoorScene `step`), the cursor trail (Cursor `draw`, which only re-arms on pointermove) and the preloader
+// countdown (Preloader `tick`, which ends when the overlay does) — so a window that overlaps the preloader
+// leaving can legitimately show 1.x. What would be a bug is a sustained third.
+async function stopFrames() {
+  return evaluate(`
+    window.__hhFrames.on = false;
+    const s = window.__hhFrames.stamps.slice();
+    window.__hhFrames.stamps.length = 0;
+    const uniq = [...new Set(s)].sort((a, b) => a - b);
+    const perFrame = new Map();
+    for (const t of s) perFrame.set(t, (perFrame.get(t) || 0) + 1);
+    const d = [];
+    for (let i = 1; i < uniq.length; i += 1) d.push(Math.round((uniq[i] - uniq[i - 1]) * 100) / 100);
+    d.sort((a, b) => a - b);
+    const pct = (p) => (d.length ? d[Math.min(d.length - 1, Math.floor(d.length * p))] : null);
+    return {
+      callbacks: s.length,
+      frames: uniq.length,
+      loops: uniq.length > 1 ? Math.round((s.length / (uniq.length - 1)) * 100) / 100 : null,
+      maxPerFrame: perFrame.size ? Math.max(...perFrame.values()) : null,
+      p50: pct(0.5),
+      p95: pct(0.95),
+      worst: d.length ? d[d.length - 1] : null,
+      span: uniq.length > 1 ? Math.round(uniq[uniq.length - 1] - uniq[0]) : 0,
+    };
+  `);
+}
+
+// ---------------------------------------------------------------- key probe
+// A synthetic KeyboardEvent does not move focus, does not fire a button's default action and does not
+// type into an input — it only proves a listener exists. These are real browser key events through
+// Input.dispatchKeyEvent, so the keyboard path asserted below is the path a guest on a laptop takes.
+const KEY_CODES = { Tab: 9, Enter: 13, " ": 32, Escape: 27, "/": 191, ArrowRight: 39, ArrowLeft: 37 };
+
+async function press(keyName, times = 1) {
+  const letter = /^[a-zA-Z]$/.test(keyName);
+  const vk = KEY_CODES[keyName] ?? (letter ? keyName.toUpperCase().charCodeAt(0) : 0);
+  const printable = keyName.length === 1;
+  // Enter and Space have to be sent as a full key sequence, not just a keydown: a focused button is
+  // activated by Chrome's default action for the keypress, and a rawKeyDown alone reaches the listener
+  // without ever producing the click. A test that only fires keydown would report the site as broken.
+  const text = keyName === "Enter" ? "\r" : keyName === " " ? " " : printable ? keyName : undefined;
+  const base = {
+    key: keyName,
+    code: letter ? `Key${keyName.toUpperCase()}` : keyName === "/" ? "Slash" : keyName === " " ? "Space" : keyName,
+    windowsVirtualKeyCode: vk,
+    nativeVirtualKeyCode: vk,
+  };
+  for (let i = 0; i < times; i += 1) {
+    await inPage("Input.dispatchKeyEvent", { ...base, type: "rawKeyDown" });
+    if (text !== undefined) await inPage("Input.dispatchKeyEvent", { ...base, type: "char", text, unmodifiedText: text });
+    await inPage("Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+    await sleep(24);
+  }
+}
+
+// What the keyboard is currently on, as the guest would experience it: an accessible name, a box on
+// screen, and whether a focus indicator is actually visible. Reading the computed outline is the only way
+// to tell a :focus-visible rule that exists from one that never matches — and an outline painted on a
+// visually-hidden input is invisible too, so the label proxy it lights up is measured with it.
+async function focusStop() {
+  return evaluate(`
+    const el = document.activeElement;
+    const boxOf = (n) => n.getBoundingClientRect();
+    const isEmpty = (n) => !n || n.width < 2 || n.height < 2;
+    if (!el || el === document.body) return { tag: "body", name: "", inMain: false, ring: false, proxy: false, box: false, data: "", proxyOf: "" };
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const name = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || el.value
+      || el.placeholder || el.name || "").replace(/\\s+/g, " ").trim().slice(0, 44);
+    const outlines = (n) => {
+      const c = getComputedStyle(n);
+      const ring = (c.outlineStyle !== "none" && parseFloat(c.outlineWidth) > 0) || c.boxShadow !== "none";
+      return ring && !isEmpty(boxOf(n));
+    };
+    const label = el.closest("label");
+    const proxies = [];
+    if (el.nextElementSibling) proxies.push(el.nextElementSibling);
+    if (label) { proxies.push(label, ...label.querySelectorAll("span, b")); }
+    if (el.parentElement) proxies.push(el.parentElement);
+    const proxyHit = proxies.find((n) => n && n.nodeType === 1 && outlines(n));
+    return {
+      tag: el.tagName.toLowerCase(),
+      cls: String(typeof el.className === "string" ? el.className : "").replace(/\\s+/g, " ").trim().slice(0, 26),
+      data: Object.keys(el.dataset ?? {}).join(",").slice(0, 30),
+      type: el.getAttribute("type") || "",
+      name,
+      unnamed: name === "",
+      inMain: !!el.closest("main"),
+      box: !isEmpty(r),
+      own: cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0,
+      ring: outlines(el),
+      shadow: cs.boxShadow !== "none",
+      proxy: !!proxyHit,
+      proxyOf: proxyHit ? proxyHit.tagName.toLowerCase() + "." + String(proxyHit.className).slice(0, 20) : "",
+      hiddenControl: isEmpty(r),
+    };
+  `);
+}
+
 // ---------------------------------------------------------------- capture
 // The page-level listeners only see what JavaScript can see. Log.entryAdded is what carries the browser's
 // own complaints — shader validation, CSP, failed requests — which is exactly the class of problem the
@@ -217,6 +342,9 @@ function drain() {
 // Runtime.callFunctionOn insists on an objectId or executionContextId; Runtime.evaluate has no such
 // requirement, so batteries are wrapped in an async IIFE and payloads too large to inline are parked on
 // `window` by a preceding evaluate instead of passed as arguments.
+// The body goes into an async function, so it must say `return` — `evaluate(\`matchMedia(q).matches\`)` reads
+// the value in the page and hands back undefined, which then looks exactly like a false answer about the
+// browser. Every one of these bodies is a statement block, not an expression.
 async function evaluate(body) {
   const out = await inPage("Runtime.evaluate", {
     expression: `(async () => {\n${body}\n})()`,
@@ -1001,6 +1129,414 @@ results.push({ path: "/menu (reduced motion)", value: posterMenu, errors: [], wa
 if (posterMenu.visible !== posterMenu.total) failures.push(`/menu under reduced motion shows ${posterMenu.visible} of ${posterMenu.total} dishes — a weaker tier is not allowed to change the menu`);
 if (posterMenu.groups !== 6) failures.push(`/menu under reduced motion found ${posterMenu.groups} group containers, expected 6`);
 await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+
+// ---- M6: the keyboard path, and what the page costs per frame
+// Two questions this file could not previously answer. Can the whole site be used without a mouse —
+// measured by pressing Tab for real, not by checking that href and aria-label exist? And is the site
+// light — measured as frames on the machine running the gate, not as a weight budget on disk? A page can
+// pass every static gate here and still be one where the focus ring is invisible, the tab order lands on
+// a control that is not on screen, and the GPU keeps painting a hero nobody scrolled back to.
+const measure = async (ms) => {
+  await startFrames();
+  await sleep(ms);
+  return stopFrames();
+};
+
+for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit", 20]]) {
+  await goto(route);
+  const stops = [];
+  for (let i = 0; i < cap; i += 1) {
+    await press("Tab");
+    const s = await focusStop();
+    stops.push(s);
+    if (s.tag === "body") break; // the document wrapped, so everything reachable was reached
+  }
+  const audit = await evaluate(`
+    const sel = "a[href], button:not([disabled]), input:not([type=hidden]), select, textarea, [tabindex]";
+    const nodes = [...document.querySelectorAll(sel)].filter((el) => el.getAttribute("aria-hidden") !== "true");
+    const tabbable = nodes.filter((el) => (Number(el.getAttribute("tabindex")) || 0) >= 0);
+    const identity = (el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      // A box that measures nothing has a cause three levels up, not in its own rules, so the report
+      // carries the chain: the size, the element's own display, and each ancestor's overflow and height.
+      const chain = [];
+      for (let n = el.parentElement; n && chain.length < 4; n = n.parentElement) {
+        const c = getComputedStyle(n);
+        const p = n.getBoundingClientRect();
+        chain.push(n.tagName.toLowerCase() + "." + String(n.className).split(" ")[0].slice(0, 16) +
+          "[ov:" + c.overflow + " h:" + Math.round(p.height) + " w:" + Math.round(p.width) + "]");
+      }
+      return el.tagName.toLowerCase() + (el.type ? "[" + el.type + "]" : "") + "." +
+        String(el.className).slice(0, 26) + ' "' + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 20) +
+        '" box:' + Math.round(r.width) + "x" + Math.round(r.height) + " disp:" + cs.display + " | " + chain.join(" > ") +
+        (el.closest("label") ? " in label." + String(el.closest("label").className).slice(0, 18) : "");
+    };
+    // Three different things hide an element, and only two of them are defects.
+    //   display:none / visibility:hidden / content-visibility:hidden  — the browser also takes the element
+    //     out of the tab order, so the "clear the filters" button inside a hidden empty-state note is not
+    //     reachable and not a problem. checkVisibility answers this without walking ancestors by hand.
+    //   opacity:0 — still focusable, and the guest is now somewhere with nothing on screen.
+    //   a 1px clipped box — the visually-hidden control pattern. Sound only when a label carries the ring,
+    //     which the Tab walk below proves by landing on it for real.
+    const rendered = tabbable.filter((el) => el.checkVisibility({ checkOpacity: false }));
+    const invisible = rendered.filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width < 2 || r.height < 2 || !el.checkVisibility({ checkOpacity: true });
+    });
+    // An unrevealed fade-up section is at opacity 0 and stays in the tab order — that is how the reveal
+    // keeps its no-JS promise (global.css note 1: content starts visible and only animates once JS is
+    // present). The question is therefore not "is anything transparent" but "does it stay transparent when
+    // the keyboard arrives", so an element is only a sink when nothing can explain its transparency:
+    //   not inside a reveal at all                            — nothing will ever make it visible
+    //   inside a reveal that is on screen, settled, and still  — the observer or the class is broken
+    // A control below the fold waiting its turn, or one mid-transition, is the mechanism working.
+    const governed = (el) => el.closest("[data-reveal], .kin");
+    const pending = invisible.filter((el) => !!governed(el));
+    const stuck = invisible.filter((el) => {
+      const a = governed(el);
+      if (!a) return true;
+      if (a.getAnimations().length) return false;
+      const r = a.getBoundingClientRect();
+      return r.top < innerHeight && r.bottom > 0;
+    });
+    const sample = pending[0] ?? null;
+    return {
+      tabbable: tabbable.length,
+      srControls: invisible.filter((el) => el.closest("label")).length,
+      pendingReveal: pending.length,
+      sinks: stuck.length,
+      which: stuck.slice(0, 5).map(identity),
+      positives: tabbable.filter((el) => Number(el.getAttribute("tabindex")) > 0).length,
+      // Focus is what the keyboard guest brings; measuring the pending case means actually focusing one.
+      // The browser scrolls a focused control into view, the IntersectionObserver sees it, the class lands
+      // and the transition runs — so give it the transition's own time and then ask what is on screen.
+      focusReveal: sample
+        ? (() => {
+            const before = sample.getBoundingClientRect();
+            sample.focus();
+            return {
+              tag: sample.tagName.toLowerCase(),
+              label: (sample.getAttribute("aria-label") || sample.textContent || "").trim().slice(0, 28),
+              was: [Math.round(before.top), Number(getComputedStyle(sample.closest("[data-reveal], .kin")).opacity)],
+              pendingOnPage: pending.length,
+            };
+          })()
+        : null,
+    };
+  `);
+  const { errors, warnings } = drain();
+  // The audit just focused one pending-reveal control. Ask the only question that matters — does the keyboard
+  // guest end up looking at something, or at a hole in the page where a button should be? — but ask it of the
+  // settled state rather than of a snapshot: `html { scroll-behavior: smooth }` means the browser's
+  // focus-follows scroll is an animation, and at three frames a second (this harness's SwiftShader reality)
+  // a 950 ms photograph caught a control still travelling. Polling is both the honest wait and the cheaper
+  // false-positive fix.
+  const revealedOnFocus = audit.focusReveal
+    ? await (async () => {
+        let read = null;
+        const began = Date.now();
+        while (Date.now() - began < 3200) {
+          read = await evaluate(`
+            const el = document.activeElement;
+            if (!el || el === document.body) return null;
+            const a = el.closest("[data-reveal], .kin");
+            const r = el.getBoundingClientRect();
+            return {
+              label: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 28),
+              revealed: a ? a.classList.contains("is-in") : null,
+              opacity: a ? Math.round(Number(getComputedStyle(a).opacity) * 100) / 100 : Math.round(Number(getComputedStyle(el).opacity) * 100) / 100,
+              inViewport: r.top >= -4 && r.bottom <= innerHeight + 4 && r.width > 2 && r.height > 2,
+              box: [Math.round(r.top), Math.round(r.bottom)],
+              scrollY: Math.round(scrollY),
+              ring: getComputedStyle(el).outlineStyle !== "none" && parseFloat(getComputedStyle(el).outlineWidth) > 0,
+            };
+          `);
+          if (!read || (read.inViewport && read.opacity >= 0.9)) break;
+          await sleep(250);
+        }
+        return read ? { ...read, waitedMs: Date.now() - began } : null;
+      })()
+    : null;
+  const named = (s) => `${s.tag}${s.type ? `[${s.type}]` : ""}.${s.cls}${s.data ? `[${s.data}]` : ""}`;
+  const keyOf = (s) => `${s.tag}|${s.cls}|${s.type}|${s.data}|${s.name}`;
+  // A native date field holds four segments and the document's activeElement stays the input while the
+  // keyboard walks through them, so consecutive identical stops are one control, not four defects.
+  const live = stops.filter((s) => s.tag !== "body");
+  const distinct = live.filter((s, i) => i === 0 || keyOf(s) !== keyOf(live[i - 1]));
+  let run = 1;
+  let longestRun = 1;
+  for (let i = 1; i < live.length; i += 1) {
+    run = keyOf(live[i]) === keyOf(live[i - 1]) ? run + 1 : 1;
+    longestRun = Math.max(longestRun, run);
+  }
+  const unnamed = distinct.filter((s) => s.unnamed);
+  const blind = distinct.filter((s) => !s.ring && !s.proxy);
+  const ghosts = distinct.filter((s) => !s.box && !s.proxy);
+  const srOnly = distinct.filter((s) => s.hiddenControl && s.proxy);
+  const reachedMain = stops.findIndex((s) => s.inMain);
+  results.push({
+    path: `${route} (keyboard)`,
+    value: {
+      ...audit,
+      pressed: stops.length,
+      distinct: distinct.length,
+      first: stops[0] ? `${stops[0].tag}.${stops[0].cls}` : null,
+      reachedMain: reachedMain === -1 ? null : reachedMain + 1,
+      unnamed: unnamed.length,
+      blind: blind.length,
+      ghosts: ghosts.length,
+      srOnly: srOnly.length,
+      longestRun,
+      revealedOnFocus,
+      chain: stops.slice(0, 10).map(named),
+    },
+    errors,
+    warnings,
+  });
+  if (errors.length) failures.push(`${route} (keyboard) logged ${errors.length} error(s): ${errors.slice(0, 2).join(" | ")}`);
+  if (stops[0]?.tag === "body") failures.push(`${route}: the first Tab went nowhere — nothing in the document is focusable`);
+  if (!/skip/.test(stops[0]?.cls ?? "")) failures.push(`${route}: the first Tab stop is ${stops[0]?.tag}.${stops[0]?.cls}, not the skip link — a keyboard guest has to cross the whole nav on every page`);
+  if (unnamed.length) failures.push(`${route}: ${unnamed.length} of ${distinct.length} Tab stops have no accessible name: ${unnamed.slice(0, 3).map(named).join(", ")}`);
+  if (blind.length) failures.push(`${route}: ${blind.length} of ${distinct.length} Tab stops show no focus indicator on the control or its field: ${blind.slice(0, 4).map(named).join(", ")}`);
+  if (ghosts.length) failures.push(`${route}: ${ghosts.length} Tab stops are elements with no box and no visible proxy: ${ghosts.slice(0, 4).map(named).join(", ")}`);
+  if (longestRun > 6) failures.push(`${route}: ${longestRun} consecutive Tabs stayed on ${named(live[0])} — the keyboard cannot leave that control`);
+  if (audit.sinks) failures.push(`${route}: ${audit.sinks} focusable element(s) are invisible with no reveal waiting on them (${audit.which.join(", ")})`);
+  if (revealedOnFocus && (!revealedOnFocus.inViewport || revealedOnFocus.opacity < 0.9)) {
+    failures.push(`${route}: focusing one of the ${audit.pendingReveal} controls that were transparent while unrevealed left it at opacity ${revealedOnFocus.opacity}, ${revealedOnFocus.inViewport ? "on" : "off"} screen — the fade-up reveal is keeping content out of the keyboard's sight`);
+  }
+  if (audit.positives) failures.push(`${route}: ${audit.positives} element(s) carry a positive tabindex, which pulls the tab path out of DOM order`);
+}
+
+// The two shortcuts the menu page promises in its own copy, pressed rather than inspected.
+await goto("/menu");
+await press("/");
+const slashFocus = await focusStop();
+for (const ch of "chai") await press(ch);
+await sleep(400);
+const typed = await evaluate(`
+  const el = document.activeElement;
+  const count = document.querySelector("[data-count]");
+  return { value: el && el.tagName === "INPUT" ? el.value : null, count: count ? count.textContent.replace(/\\s+/g, " ").trim().slice(0, 60) : null };
+`);
+await press("Escape");
+await sleep(300);
+const afterEscape = await evaluate(`
+  const search = document.querySelector("input[type=search], input[name=q], [data-search]");
+  const count = document.querySelector("[data-count]");
+  return {
+    focused: document.activeElement === document.body ? "body" : document.activeElement.tagName.toLowerCase(),
+    value: search ? search.value : null,
+    count: count ? count.textContent.replace(/\\s+/g, " ").trim().slice(0, 60) : null,
+    visible: [...document.querySelectorAll("[data-card]")].filter((c) => !c.hasAttribute("hidden")).length,
+    total: document.querySelectorAll("[data-card]").length,
+  };
+`);
+results.push({ path: "/menu (shortcuts)", value: { slashFocus, typed, afterEscape }, errors: [], warnings: [] });
+if (slashFocus.tag !== "input") failures.push(`/menu: "/" moved focus to ${slashFocus.tag}.${slashFocus.cls}, not the search box the page promises`);
+if (typed.value !== "chai") failures.push(`/menu: typing after "/" put ${JSON.stringify(typed.value)} in the box, not "chai"`);
+if (!typed.count || !/chai/i.test(typed.count)) failures.push(`/menu: filtering to "chai" left the status line reading “${typed.count}” — it does not describe the filter`);
+if (afterEscape.value !== "") failures.push(`/menu: Escape left “${afterEscape.value}” in the search box instead of releasing the filter`);
+if (afterEscape.visible !== afterEscape.total) failures.push(`/menu: after Escape only ${afterEscape.visible} of ${afterEscape.total} dishes are visible — the reset did not restore the menu`);
+
+// A control reached by Tab has to answer Enter, and answer it the way a click does.
+await goto("/table");
+const partyBefore = await evaluate(`const el = document.querySelector("[data-party-count]"); return el ? el.textContent.trim() : null;`);
+let foundStepper = null;
+for (let i = 0; i < 40; i += 1) {
+  await press("Tab");
+  const s = await focusStop();
+  if (s.data.split(",").includes("party")) { foundStepper = { ...s, tabs: i + 1 }; break; }
+}
+if (foundStepper) await press("Enter");
+await sleep(250);
+const partyAfter = await evaluate(`const el = document.querySelector("[data-party-count]"); return el ? el.textContent.trim() : null;`);
+results.push({ path: "/table (enter)", value: { foundStepper, partyBefore, partyAfter }, errors: [], warnings: [] });
+if (!foundStepper) failures.push("/table: the party stepper was never reached in 40 Tabs — the configurator is mouse-only");
+else if (partyBefore === partyAfter) failures.push(`/table: Enter on the focused stepper left the guest count at ${partyAfter} — the button did not answer the keyboard`);
+
+// The frame budget, measured on the machine running the gate. The absolute number is not portable — this
+// Chrome runs `--use-angle=swiftshader`, so the scene is rasterised on the CPU and every claim about
+// milliseconds here is a claim about a software rasteriser, not about a phone or a laptop with a GPU. The
+// portable part is the shape of the loop: it runs while the door is on screen, it stops when the door is
+// off screen, and it does not exist at all on a page with no door or a tier that draws one frame.
+await goto("/");
+const inView = await measure(1300);
+const glInfo = await evaluate(`
+  const host = document.querySelector("[data-door]");
+  const c = host ? host.querySelector("canvas") : null;
+  const gl = c && (c.getContext("webgl2") || c.getContext("webgl"));
+  const dbg = gl && gl.getExtension("WEBGL_debug_renderer_info");
+  return {
+    tier: host ? host.dataset.tier : null,
+    tierReason: host ? host.dataset.tierReason : null,
+    buffer: c ? [c.width, c.height] : null,
+    dpr: devicePixelRatio,
+    renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl ? gl.getParameter(gl.RENDERER) : null,
+    contextLost: gl ? gl.isContextLost() : null,
+    hidden: document.hidden,
+    fps: null,
+  };
+`);
+glInfo.fps = inView.span ? Math.round((inView.frames / (inView.span / 1000)) * 10) / 10 : null;
+await evaluate('scrollTo({ top: Math.round(document.documentElement.scrollHeight * 0.55), behavior: "instant" }); return true;');
+await sleep(500);
+const awayGeometry = await evaluate(`
+  const r = document.querySelector("[data-door]").getBoundingClientRect();
+  return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight };
+`);
+const outOfView = await measure(1300);
+await goto("/menu");
+const menuFrames = await measure(1100);
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+await goto("/");
+const posterFrames = await measure(1100);
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+results.push({ path: "frames", value: { glInfo, inView, outOfView, awayGeometry, menuFrames, posterFrames }, errors: [], warnings: [] });
+if (glInfo.contextLost) failures.push("/ the WebGL context is lost on the page under test — every frame count below is meaningless");
+if (inView.frames < 1) failures.push(`/ the door produced ${inView.frames} frames in ${inView.span}ms while on screen (hidden=${glInfo.hidden}) — the render loop is not running`);
+if (inView.frames >= 20 && inView.maxPerFrame > 3) failures.push(`/ ${inView.maxPerFrame} rAF callbacks shared a frame on the home page: the door, the preloader countdown and the cursor trail account for three, and a fourth is a loop nobody wrote (see the cursor block, which measures the steady state after the preloader is gone)`);
+if (awayGeometry.bottom > 0 && awayGeometry.top < awayGeometry.vh) failures.push(`/ the door was still on screen after the scroll (${JSON.stringify(awayGeometry)}) — the off-screen measurement proved nothing`);
+if (outOfView.frames > 3) failures.push(`/ the door kept painting ${outOfView.frames} frames after it left the viewport (${JSON.stringify(awayGeometry)})`);
+if (menuFrames.frames > 3) failures.push(`/menu ran ${menuFrames.frames} rAF frames with no door on the page — a page without a scene should not hold a loop`);
+if (posterFrames.frames > 3) failures.push(`/ under reduced motion the page ran ${posterFrames.frames} rAF frames — the poster tier draws one frame and stops`);
+
+// The 30-frame probe counts frames, not seconds. On this machine a frame costs ~300 ms of software
+// rasterisation, so the probe needs ~13 s of page life before it can conclude anything — longer than any of
+// the windows above. It gets its own page and its own deadline, because the claim worth testing is not "is
+// WebGL fast" (a property of the hardware) but "when the scene is slow, does the page say so". A gate that
+// rebuilds the room and leaves data-tier="full" in the DOM would pass every assertion above and still lie to
+// the next person who opens a debugger on a weak device.
+const readProbe = () =>
+  evaluate(`
+    const host = document.querySelector("[data-door]");
+    if (!host) return null;
+    return {
+      tier: host.dataset.tier || null,
+      reason: host.dataset.tierReason || null,
+      probeMs: host.dataset.probeMs === undefined ? null : Number(host.dataset.probeMs),
+      canvas: !!host.querySelector("canvas"),
+      live: !!host.querySelector("canvas[data-live]"),
+    };
+  `);
+await goto("/");
+const probeEarly = await measure(1300);
+const probeStarted = await readProbe();
+if (probeStarted && probeStarted.tier === "full") {
+  const deadline = Date.now() + 20000;
+  let probe = probeStarted;
+  while (probe && probe.probeMs === null && probe.tier === "full" && Date.now() < deadline) {
+    await sleep(400);
+    probe = await readProbe();
+  }
+  const probeLate = await measure(1300);
+  results.push({ path: "probe", value: { early: probeEarly, late: probeLate, outcome: probe }, errors: [], warnings: [] });
+  if (probe && probe.probeMs === null) {
+    failures.push(`/ the door rendered at ${probeEarly.fps} fps on this page (the probe's own threshold is 24 ms a frame, i.e. 41 fps)
+      and after 20 s the page still reports no data-probe-ms — the 30-frame probe is the only thing that reacts to
+      a slow device after load, and its outcome is not readable from the DOM, so nobody can tell it fired`);
+  } else if (probe && probe.tier !== "lite") {
+    failures.push(`/ the probe measured ${probe.probeMs} ms a frame and the page still claims tier "${probe.tier}"
+      (reason "${probe.reason}") — changing the geometry without changing the evidence is worse than no probe at
+      all, because data-tier is exactly what a debugger reads to decide what a guest was shown`);
+  }
+}
+
+// ---------------------------------------------------------------- the cursor
+// The page's other rAF consumer, and the one whose failure mode is silent waste rather than a visible bug:
+// the trailing ring is an exponential lag, which never mathematically arrives, so a loop that always
+// re-requests repaints two unchanged numbers 60 times a second for as long as the tab is open. Tested in the
+// steady state — preloader removed, pointer parked — where the only loop that should remain is the door's.
+// And tested through a blur and a return, because the fix (stop when settled) turns the re-arm test into
+// `if (!raf)`, which only works if cancelling also zeroes the id.
+//
+// This browser reports `(pointer: fine)` true, so the override below is normally not installed. It exists for
+// the case where it is not: without a fine pointer the component attaches no listeners at all, and the whole
+// desktop cursor path would ship untested rather than fail the gate. When it does get installed the result
+// line says so, because a test that quietly changes the environment it is measuring is how a green run comes
+// to mean nothing.
+const pointerClass = await evaluate(`return matchMedia("(pointer: fine)").matches;`);
+// Installed as a document-start script so the page's own scripts see it, and removed straight afterwards —
+// the component reads the media query once, at parse time, so patching it after load would change nothing.
+const POINTER_OVERRIDE = [
+  "(() => {",
+  "  const real = window.matchMedia.bind(window);",
+  "  window.matchMedia = (query) => (String(query).indexOf('pointer') !== -1 && String(query).indexOf('fine') !== -1",
+  "    ? { matches: true, media: String(query), onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }",
+  "    : real(query));",
+  "  window.__hhPointerOverride = true;",
+  "})();",
+].join("\n");
+let patched = null;
+if (!pointerClass) patched = await inPage("Page.addScriptToEvaluateOnNewDocument", { source: POINTER_OVERRIDE });
+if (pointerClass || patched) {
+  await goto("/");
+  const overrideActive = await evaluate(`return window.__hhPointerOverride === true && matchMedia("(pointer: fine)").matches;`);
+  let curtainWait = 0;
+  while (curtainWait < 4000) {
+    const stillCovered = await evaluate(`return !!document.querySelector("[data-preloader]");`);
+    if (!stillCovered) break;
+    await sleep(200);
+    curtainWait += 200;
+  }
+  const idle = await measure(800);
+  await inPage("Input.dispatchMouseEvent", { type: "mouseMoved", x: 260, y: 240, buttons: 0 });
+  await sleep(150);
+  await inPage("Input.dispatchMouseEvent", { type: "mouseMoved", x: 900, y: 520, buttons: 0 });
+  await sleep(120);
+  // Two claims, in order: the loop starts when a real pointer arrives, and it stops when the pointer stops
+  // being interesting. The first is measured while the ring is still chasing.
+  const chasing = await measure(800);
+  const moved = await evaluate(`
+    return {
+      on: document.body.classList.contains("cursor-on"),
+      dot: document.querySelector("[data-cursor]").style.transform,
+      ring: document.querySelector("[data-ring]").style.transform,
+    };
+  `);
+  // The ring closes the gap by 18% per *frame*, so "settled" arrives after about fifty frames — sixteen
+  // seconds on this software-rasterised page and under a second on a GPU. Waiting a fixed number of
+  // milliseconds measured a chase still in mid-flight and called it a leak. The honest deadline is the
+  // write itself: two identical inline transforms in a row means nothing is writing any more.
+  const chase = { samples: [], began: Date.now() };
+  let converged = null;
+  let previousRing = moved.ring;
+  while (Date.now() - chase.began < 30000) {
+    await sleep(600);
+    const ringNow = await evaluate(`return document.querySelector("[data-ring]").style.transform;`);
+    chase.samples.push(ringNow === previousRing ? "=" : "≠");
+    if (ringNow === previousRing) {
+      converged = { transform: ringNow, afterMs: Date.now() - chase.began, frames: chase.samples.length };
+      break;
+    }
+    previousRing = ringNow;
+  }
+  const settled = await measure(900);
+  await evaluate(`window.dispatchEvent(new Event("blur")); return true;`);
+  await sleep(150);
+  const blurred = await evaluate(`return { on: document.body.classList.contains("cursor-on") };`);
+  await inPage("Input.dispatchMouseEvent", { type: "mouseMoved", x: 640, y: 400, buttons: 0 });
+  await sleep(220);
+  const rearmed = await evaluate(`
+    return { on: document.body.classList.contains("cursor-on"), ring: document.querySelector("[data-ring]").style.transform };
+  `);
+  results.push({ path: "cursor", value: { pointerNative: pointerClass, overrideActive, curtainWait, idle, chasing, moved, converged, settled, blurred, rearmed }, errors: [], warnings: [] });
+  if (patched && overrideActive !== true) failures.push("/ the (pointer: fine) override did not reach the page scripts, so nothing below this line tested the cursor");
+  if (moved.on !== true) failures.push(`/ (pointer: fine) is true but two real mouse moves never put cursor-on on the body — the pointer this design promises does not appear`);
+  if (chasing.maxPerFrame !== 2) failures.push(`/ while the ring was chasing a moving pointer, ${chasing.maxPerFrame} rAF callbacks shared a frame — the door is one and the cursor should be the second, so one of them never started (${JSON.stringify(chasing)})`);
+  if (idle.frames >= 1 && idle.maxPerFrame > 1) failures.push(`/ before the pointer ever moved, ${idle.maxPerFrame} rAF callbacks shared each of ${idle.frames} frames with the preloader gone — something is arming the cursor without a mouse`);
+  if (!moved.dot || !moved.ring) failures.push(`/ after moving, the inline transforms were ${JSON.stringify([moved.dot, moved.ring])} — the dot and the ring are both supposed to be positioned by the loop`);
+  if (!converged) failures.push(`/ 30 s after a pointer move the ring was still writing a new transform every sample (${chase.samples.length} samples, all "≠") — an exponential chase that never stops is a permanent second loop on every page with the cursor enabled`);
+  else if (settled.frames < 1) failures.push(`/ the door produced ${settled.frames} frames in the window after the ring settled (${JSON.stringify(settled)}) — there is nothing to judge about the second loop`);
+  else if (settled.maxPerFrame > 1) failures.push(`/ the ring stopped writing after ${converged.afterMs} ms, yet ${settled.maxPerFrame} rAF callbacks still shared each of the ${settled.frames} frames that followed — the loop is running to repaint two numbers that are not changing`);
+  if (blurred.on !== false) failures.push(`/ window blur left cursor-on on the body — switch tabs and come back to a dot that belongs to nobody`);
+  if (rearmed.on !== true) failures.push(`/ after a blur the cursor never returned when the mouse moved again (${JSON.stringify(rearmed)}) — cancelling a rAF leaves its id set, so the re-arm guard stays false and the cursor is dead until the page reloads`);
+} else {
+  results.push({ path: "cursor", value: { pointerNative: pointerClass, skipped: "no (pointer: fine) and no override installed" }, errors: [], warnings: [] });
+}
+// The override was borrowed for one block. Leaving it installed would mean every later page load in this
+// run — and there are none, which is exactly why it has to be said out loud rather than relied on.
+if (patched) await inPage("Page.removeScriptToEvaluateOnNewDocument", { identifier: patched.identifier });
 
 // ---------------------------------------------------------------- report
 const pad = (s, n) => String(s).padEnd(n);

@@ -33,6 +33,16 @@
       ringPos.x += (pointer.x - ringPos.x) * 0.18;
       ringPos.y += (pointer.y - ringPos.y) * 0.18;
       ring.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`;
+      // The ring is an exponential lag, so "caught up" is asymptotic — 0.05px is the point where the next
+      // step would move it less than a pixel of the screen can show. Past that there is nothing to
+      // interpolate, and a loop that keeps firing to repaint two identical numbers is a wake-up every frame
+      // for as long as the tab is open, on a page where the pointer happened to stop. The next real move
+      // re-arms it, which is the whole cost of the trick: a cursor is only interesting while it is moving.
+      const settled = Math.abs(pointer.x - ringPos.x) < 0.05 && Math.abs(pointer.y - ringPos.y) < 0.05;
+      if (settled) {
+        raf = 0;
+        return;
+      }
       raf = requestAnimationFrame(draw);
     };
 
@@ -45,8 +55,10 @@
         if (!visible) {
           visible = true;
           document.body.classList.add("cursor-on");
-          raf = requestAnimationFrame(draw);
         }
+        // `!raf` rather than `!visible`: the loop stops itself once the ring settles, so a parked pointer
+        // that starts moving again has to be able to restart it.
+        if (!raf) raf = requestAnimationFrame(draw);
         const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button, [data-magnetic], input, [tabindex]");
         ring.toggleAttribute("data-hot", Boolean(target));
         magnetise(target, event);
@@ -92,6 +104,9 @@
       release();
       document.body.classList.remove("cursor-on");
       cancelAnimationFrame(raf);
+      // Zeroed, not just cancelled: the id survives a cancel, and the re-arm in pointermove now keys off
+      // `!raf`. Without this line the cursor would come back from another tab invisible and frozen.
+      raf = 0;
       visible = false;
     });
   }
