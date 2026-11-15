@@ -91,11 +91,37 @@ OpenStreetMap's Nominatim returns nothing for "Habibi Haven", the Google listing
 and a plus code, and a street centroid on Koinange Street would be a different location wearing this
 venue's name. Sending someone to the wrong door is the one mapping error a restaurant cannot forgive.
 
+**What the plus code turns out to resolve to.** A short code is recoverable: `PR99+82` + a reference
+near the venue expands to the full code **`6GCRPR99+82`**, whose ~14 m cell centres on
+**−1.281687, 36.817562**. The reference only picks which repetition on Earth is meant — the cell comes
+from the venue's own code, and the decode was checked digit by digit against the grid.
+`research/tools/pluscode.mjs` performs the recovery and then tries to falsify it:
+
+| check | result |
+| --- | --- |
+| Nominatim reverse, zoom 18 | road **Koinage Street** — OSM's spelling of the published address |
+| Nominatim reverse, zoom 17 | road **Koinage Street** |
+| OSM ways named "Koinange Street" | nearest is 482 m — a *different* way; OSM maps the main road under the misspelling |
+| OSM ways named "Koinage Street" | nearest segment ~117–146 m by vertex distance (a vertex metric, not perpendicular) |
+| 250 m around the pin | Sapee Lounge 42 m, Kowloon Garden 54 m, Java House 61 m, "CJ's Koinage Street" 166 m, a coffee node 1 m |
+| OSM node for the venue itself | none — Nominatim has never heard of Habibi Haven |
+
+Read charitably, one source (Google's own code) agrees with a second (OSM snaps the point onto the
+street the address names). Read strictly, it is still one source: the venue has no OSM node, the Uber
+Eats capture carries no coordinates, and the street is mapped under two spellings, so nothing
+independent confirms the door. An earlier run of this check printed "Monrovia Street" instead — my first
+centre was off by half a cell (7 m), which is all it took to flip the answer at a junction. The tool now
+prints the centre, both zooms and both spellings so a lucky snap cannot hide behind a metric.
+
 **Preview position.** `site/src/lib/schema.mjs` implements `geo` and leaves it dark until
 `meta.facts.coordinates` exists, so the switch is one edit in `content/menu.overrides.json` rather than a
 code change; both branches are pinned by `tests/run.mjs`, and `scripts/verify-dist.mjs` rejects a `geo`
-that is not a real coordinate. Directions work today through the map links. **Ask:** drop a pin from the
-Google Business listing, or read the two numbers off the Maps place page.
+that is not a real coordinate. Directions work today through the map links.
+
+**Ask (sharpened, and answerable in ten seconds on the owner's phone).** Open the Google Business
+listing's place page and read either the two numbers behind the pin or the plus code, then compare with
+`−1.281687, 36.817562`. If they match, publishing `geo` is one edit. If they do not, the code stored in
+`menu.json` is wrong — worth knowing before anyone drives anywhere on the strength of it.
 
 ## 10. Taking money — what M-Pesa would actually need
 
