@@ -1593,6 +1593,84 @@ if (pointerClass || patched) {
 // run — and there are none, which is exactly why it has to be said out loud rather than relied on.
 if (patched) await inPage("Page.removeScriptToEvaluateOnNewDocument", { identifier: patched.identifier });
 
+// ---------------------------------------------------------------- phone width
+/*
+  Every battery above runs at the viewport Chrome was launched with, which is a desktop width — and a
+  desktop width is exactly where ActionDock hides itself. So the thumb-reachable Call / WhatsApp / Book a
+  table controls were the one part of the site with no runtime proof: `display: none` at 1440 is correct
+  behaviour and `display: none` at 390 is a missing feature, and nothing so far could tell them apart.
+
+  Three claims, measured at 390x844 on each route:
+    1. the dock paints, and a thumb landing in its middle hits a dock link rather than the page beneath it;
+    2. each action is a real destination — tel:, wa.me, /table — in a box a finger can actually press;
+    3. nothing the guest can see is lying underneath it. Every on-screen link must answer elementFromPoint
+       with itself, because the document gives the dock its own padding instead of overlapping the footer.
+  Plus the cheap one that only a phone reveals: horizontal overflow.
+*/
+const PHONE_ROUTES = ["/", "/menu", "/table", "/visit"];
+await inPage("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+for (const route of PHONE_ROUTES) {
+  await goto(route);
+  const read = await evaluate(`
+    const bar = document.querySelector("[data-dock]");
+    if (!bar) return { present: false };
+    const box = bar.getBoundingClientRect();
+    const centre = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const actions = Array.from(bar.querySelectorAll("a")).map((a) => ({
+      text: (a.getAttribute("aria-label") || a.textContent || "").trim().slice(0, 26),
+      href: a.getAttribute("href"),
+      w: Math.round(a.getBoundingClientRect().width),
+      h: Math.round(a.getBoundingClientRect().height),
+    }));
+    // The page animates its own scrolls, so measuring at the bottom means turning that off first — an
+    // animated scrollTo would have the audit reading a page still on its way down.
+    document.documentElement.style.scrollBehavior = "auto";
+    scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise((r) => setTimeout(r, 350));
+    const buried = [];
+    for (const a of document.querySelectorAll("main a[href], footer a[href]")) {
+      const r = a.getBoundingClientRect();
+      if (r.width < 10 || r.height < 10) continue;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (r.top < 0 || r.bottom > innerHeight || cx < 0 || cx > innerWidth || cy < 0 || cy > innerHeight) continue;
+      const hit = document.elementFromPoint(cx, cy);
+      if (hit && bar.contains(hit) && !a.contains(hit)) {
+        buried.push((a.textContent || a.getAttribute("aria-label") || a.getAttribute("href") || "").trim().slice(0, 26));
+      }
+    }
+    document.documentElement.style.scrollBehavior = "";
+    return {
+      present: true,
+      display: getComputedStyle(bar).display,
+      dockBox: [Math.round(box.top), Math.round(box.bottom)],
+      viewport: [innerWidth, innerHeight],
+      hitIsDock: !!centre && bar.contains(centre),
+      actions,
+      buried: buried.slice(0, 6),
+      buriedCount: buried.length,
+      overflowX: document.documentElement.scrollWidth - innerWidth,
+    };
+  `);
+  const logged = drain();
+  results.push({ path: `phone ${route}`, value: read, errors: logged.errors, warnings: logged.warnings });
+  if (!read || read.present !== true) {
+    failures.push(`${route}: at 390px there is no [data-dock] at all — the sticky order controls are missing`);
+    continue;
+  }
+  if (read.display === "none") failures.push(`${route}: the dock is display:none at 390px — it only ever shows on a desktop, which is the reverse of what it is for`);
+  if (!read.hitIsDock) failures.push(`${route}: the middle of the dock (${read.dockBox.join("–")}) resolves to something other than the dock — it is painted under the page`);
+  const kinds = (read.actions || []).map((a) => a.href || "");
+  if (!kinds.some((h) => h.startsWith("tel:+"))) failures.push(`${route}: no tap-to-call action in the dock`);
+  if (!kinds.some((h) => h.startsWith("https://wa.me/"))) failures.push(`${route}: no WhatsApp order action in the dock`);
+  if (route !== "/table" && !kinds.some((h) => h === "/table")) failures.push(`${route}: the dock does not offer a route to the table builder`);
+  const stub = (read.actions || []).filter((a) => a.w < 40 || a.h < 40);
+  if (stub.length) failures.push(`${route}: ${stub.map((a) => `${a.text} ${a.w}x${a.h}`).join(", ")} in the dock is too small to press on a phone`);
+  if (read.buriedCount) failures.push(`${route}: ${read.buriedCount} visible link(s) sit under the dock at the bottom of the page (${read.buried.join(", ")}) — the document is not giving it room`);
+  if (read.overflowX > 1) failures.push(`${route}: the page is ${read.overflowX}px wider than a 390px viewport — a phone gets a horizontal scrollbar`);
+}
+await inPage("Emulation.clearDeviceMetricsOverride", {});
+
 // ---------------------------------------------------------------- report
 const pad = (s, n) => String(s).padEnd(n);
 console.log(`verify-runtime  browser ${browser.split("/").pop()}  ${base}\n`);
