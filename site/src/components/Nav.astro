@@ -7,7 +7,7 @@
 // needs to know more often than that.
 import { isOpen, nextChange, nairobiMinutes, minutesToLabel } from "../lib/hours.mjs";
 
-const { facts, rig, current = "/" } = Astro.props;
+const { facts, rig, current = "/", overHero = false } = Astro.props;
 const open = isOpen();
 const change = nextChange();
 
@@ -18,7 +18,7 @@ const links = [
 ];
 ---
 
-<header class="nav" data-hour={rig.hour}>
+<header class="nav" data-hour={rig.hour} data-over-hero={overHero || undefined}>
   <a class="brand" href="/" aria-label="Habibi Haven — home">
     <img src="/brand/habibi-haven-badge.jpg" alt="Habibi Haven badge: a teal mandala ring with HABIBI HAVEN around it and HH in the centre" width="38" height="38" />
     <span class="brand__type">

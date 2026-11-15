@@ -19,11 +19,11 @@
 //     again with it hidden, decoding both back inside the page, and comparing pixel statistics. If the
 //     WebGL layer contributed nothing, the two captures would be identical.
 //
-// Usage: npm run build && node scripts/verify-runtime.mjs [--base http://localhost:4322] [--port 9333]
+// Usage: npm run build && node scripts/verify-runtime.mjs [--base http://localhost:4322] [--port 9333] [--shots DIR]
 // --port is only the starting point: if something already holds it the run moves to the next free port,
 // because attaching to another Chrome's endpoint reads another run's pages.
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +35,21 @@ const arg = (name, dflt) => {
   return i === -1 ? dflt : argv[i + 1];
 };
 const base = arg("base", "http://localhost:4322").replace(/\/$/, "");
+// --shots DIR keeps the element frames the hour test already captures. Numbers on their own pass or fail;
+// a PNG is what shows whether the room actually looks different, and this project has already been
+// caught once by a green assertion over a hero that rendered as black slabs.
+const shotsDir = arg("shots", "") ? join(process.cwd(), arg("shots")) : null;
+// --probe prints what the pass already measured instead of only the verdict it reached: the 8x8 luminance
+// grid per hour and the palette the scene was painted from. It changes no threshold and no assertion — it
+// exists because "the arch reads blown out at noon" is an art judgement, and an art judgement is only
+// arguable once the numbers under it are on the table.
+const probe = process.argv.includes("--probe");
+let shotSeq = 0;
+function saveShot(name, base64) {
+  if (!shotsDir) return;
+  mkdirSync(shotsDir, { recursive: true });
+  writeFileSync(join(shotsDir, `${String(++shotSeq).padStart(2, "0")}-${name}.png`), Buffer.from(base64, "base64"));
+}
 // The debug port used to be a plain constant, and that turned two overlapping runs into a silent failure:
 // the second Chrome could not bind 9333, so the second harness connected to the FIRST run's browser and
 // waited there for a load event in a profile the first run had already deleted. Bind-then-release takes a
@@ -284,7 +299,7 @@ function sigDistance(a, b) {
 
 // Screenshot one element's box, so a claim about the door can be measured on the door instead of on the
 // whole viewport, where the page background answers to the clock too and would take the credit.
-async function shotRegion(selector) {
+async function shotRegion(selector, name = "region") {
   const clip = await evaluate(`
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el) return null;
@@ -296,7 +311,41 @@ async function shotRegion(selector) {
     format: "png",
     clip: { ...clip, scale: 1 },
   });
+  saveShot(name, data);
   return pixelStats(data);
+}
+
+// The whole viewport, photograph and scrim and copy included. The door-region frames answer "did the rig
+// move"; they cannot answer "can the headline be read", and only the composite a guest actually sees does.
+async function shotViewport(name) {
+  const { data } = await inPage("Page.captureScreenshot", { format: "png" });
+  saveShot(name, data);
+  return pixelStats(data);
+}
+
+// A single frame of a running scene is not a measurement of a lighting state: the dust drifts and the
+// lamps breathe, so any one capture carries that motion as well as the hour. Averaging a short burst per
+// block keeps the hour (deterministic) and cancels the motion (random per frame), which is the difference
+// between asking "did the rig move" and asking "did anything on screen move at all".
+function avgSig(frames) {
+  const usable = frames.filter((f) => f?.sig);
+  if (!usable.length) return null;
+  const sig = [];
+  for (let b = 0; b < usable[0].sig.length; b += 1) {
+    const vals = usable.map((f) => f.sig[b]).filter((v) => v >= 0);
+    sig.push(vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100 : -1);
+  }
+  return { sig };
+}
+
+// Mean step between successive frames of one hour — the noise floor the hour gap has to clear.
+function meanStep(frames) {
+  const steps = [];
+  for (let i = 1; i < frames.length; i += 1) {
+    const d = sigDistance(frames[i - 1], frames[i]);
+    if (d !== null) steps.push(d);
+  }
+  return steps.length ? Math.round((steps.reduce((s, v) => s + v, 0) / steps.length) * 100) / 100 : null;
 }
 
 // ---------------------------------------------------------------- batteries
@@ -771,12 +820,13 @@ drain();
 // The home battery already proves --hour and --night move and that the labels follow. It does not prove
 // the WebGL room is lit differently, because the CSS responds to the same custom properties and can change
 // the whole frame on its own. So: hide the photograph, put the camera on the door region only, read the
-// exposure the component wrote when it set renderer.toneMappingExposure, and compare two frames of the
-// same hour against two frames of another hour. Breathing lamps and drifting dust make same-hour frames
-// differ; the claim is only true if the two hours differ by clearly more than that.
+// exposure the component wrote when it set renderer.toneMappingExposure, and compare a burst of frames at
+// one hour against a burst at another. Breathing lamps and drifting dust make same-hour frames differ, so
+// each hour is averaged over the burst and the noise floor is the mean step inside a burst; the claim is
+// only true if the gap between the two averaged hours clears that floor by a visible margin.
 await goto("/");
-const setHour = async (value) => {
-  const at = await evaluate(`
+const dialTo = async (value) =>
+  evaluate(`
     const q = (s) => document.querySelector(s);
     const door = q("[data-door]");
     const dialEl = document.querySelectorAll("[data-dial]")[1] || q("[data-dial]");
@@ -797,34 +847,90 @@ const setHour = async (value) => {
       tier: door.dataset.tier ?? null,
     };
   `);
-  const first = await shotRegion("[data-scene]");
-  await evaluate(`await new Promise((r) => setTimeout(r, 260)); return true;`);
-  const second = await shotRegion("[data-scene]");
-  return { at, first, second };
+const stillVisible = () =>
+  evaluate(`
+    const still = document.querySelector(".hero__still");
+    if (still) still.style.display = "";
+    return true;
+  `);
+const burstAt = async (value) => {
+  const frames = [];
+  for (let i = 0; i < 4; i += 1) {
+    if (i) await evaluate(`await new Promise((r) => setTimeout(r, 240)); return true;`);
+    const frame = await shotRegion("[data-scene]", `hour-${value}-frame-${i + 1}`);
+    if (frame) frames.push(frame);
+  }
+  return frames;
 };
-const dusk = await setHour(20);
-const noon = await setHour(14);
-await evaluate(`
-  const still = document.querySelector(".hero__still");
-  if (still) still.style.display = "";
-  return true;
-`);
-const crossPairs = [dusk.first, dusk.second]
-  .flatMap((a) => [noon.first, noon.second].map((b) => sigDistance(a, b)))
-  .filter((d) => d !== null);
+const dusk = { at: await dialTo(20) };
+dusk.frames = await burstAt(20);
+const noon = { at: await dialTo(14) };
+noon.frames = await burstAt(14);
+await stillVisible();
+if (shotsDir) {
+  // Composite passes, photograph back under the canvas: the same two hours, because the thing that broke
+  // last time was legible-at-night copy over a blown-out noon arch, and neither half of that shows in a
+  // frame of the render alone.
+  for (const hour of [20, 14]) {
+    await dialTo(hour);
+    await stillVisible();
+    await evaluate(`await new Promise((r) => setTimeout(r, 700)); return true;`);
+    await shotViewport(`hero-composite-${hour}`);
+  }
+}
 const hourFrames = {
-  withinDusk: sigDistance(dusk.first, dusk.second),
-  withinNoon: sigDistance(noon.first, noon.second),
-  cross: crossPairs.length ? Math.min(...crossPairs) : null,
+  framesDusk: dusk.frames.length,
+  framesNoon: noon.frames.length,
+  withinDusk: meanStep(dusk.frames),
+  withinNoon: meanStep(noon.frames),
+  cross: sigDistance(avgSig(dusk.frames), avgSig(noon.frames)),
 };
-// The margin matters as much as the ordering. At dusk the lamps breathe, so two frames of the SAME hour
-// can sit ~23 luminance units apart while two hours sit ~44 — real, but only about twice the noise.
-// Anything under 1.5x is not a difference a guest could call, so it fails below that instead of squeaking
-// past, and the ratio is printed rather than buried.
+// The margin matters as much as the ordering. With the sprites sampling their texture the soft glow and the
+// drifting motes cover real area, so two frames of the SAME hour now sit tens of luminance units apart on
+// their own — a single pair is mostly motion. Averaging each burst leaves the hour, and the floor is the
+// mean step inside a burst. Anything under 1.5x is not a difference a guest could call, so it fails below
+// that instead of squeaking past, and the ratio is printed rather than buried.
 hourFrames.margin =
   hourFrames.cross !== null && Math.max(hourFrames.withinDusk, hourFrames.withinNoon) > 0
     ? Math.round((hourFrames.cross / Math.max(hourFrames.withinDusk, hourFrames.withinNoon)) * 100) / 100
     : Infinity;
+if (probe) {
+  const grid = (frames) => {
+    const s = avgSig(frames)?.sig;
+    if (!s) return "    (no frames sampled)";
+    const lines = [];
+    for (let r = 0; r < 8; r += 1) {
+      lines.push("    " + s.slice(r * 8, r * 8 + 8).map((v) => (v < 0 ? "   -" : String(Math.round(v)).padStart(4))).join(""));
+    }
+    return lines.join("\n");
+  };
+  console.log(`probe 20:00 luminance grid (8x8, first row = top of the frame):\n${grid(dusk.frames)}`);
+  console.log(`probe 14:00 luminance grid (8x8, first row = top of the frame):\n${grid(noon.frames)}`);
+  console.log(
+    "probe palette the scene was painted from at 14:00: " +
+      JSON.stringify(
+        await evaluate(`
+          const cs = getComputedStyle(document.documentElement);
+          const get = (n) => cs.getPropertyValue(n).trim();
+          const t = get("--bg-2");
+          const s = document.createElement("span");
+          s.style.color = t;
+          document.documentElement.appendChild(s);
+          const back = getComputedStyle(s).color;
+          const accepted = s.style.color !== "";
+          s.remove();
+          return {
+            night: get("--night"),
+            bg: [get("--bg-0"), get("--bg-1"), t, get("--bg-3")],
+            roundTrip: { accepted, back },
+            ivory: get("--ivory"),
+            brassSoft: get("--brass-soft"),
+            lampGlow: get("--lamp-glow"),
+          };
+        `)
+      )
+  );
+}
 drain();
 results.push({
   path: "/ (hour pixels)",
@@ -845,7 +951,7 @@ else {
   else {
     const within = Math.max(hourFrames.withinDusk, hourFrames.withinNoon);
     if (hourFrames.cross <= within * 1.5) {
-      failures.push(`/ the door at 20:00 vs 14:00 differs by ${hourFrames.cross}, only ${hourFrames.margin}x more than two frames of the same hour (${within}) — the room is not relighting, the lamps are just breathing`);
+      failures.push(`/ the door at 20:00 vs 14:00 differs by ${hourFrames.cross}, only ${hourFrames.margin}x more than the frame-to-frame step inside one hour (${within}) — the room is not relighting, the lamps are just breathing`);
     }
   }
 }

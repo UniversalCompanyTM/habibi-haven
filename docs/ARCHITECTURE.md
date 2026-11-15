@@ -277,6 +277,41 @@ tier in a browser (would need `--disable-webgl`; it is unit-tested only). The ma
 deliberately shown because it is only ~2× the lamp-breathing noise, and a gate that hides its own headroom
 is not evidence.
 
+### Amendment A7 — the door was painting from its fallbacks at every hour, and the art pass that followed
+
+Found by measurement, not by looking. `--probe` was added to `scripts/verify-runtime.mjs` (prints the 8×8
+luminance grid for both hours and the palette the scene read) and it showed the palette arriving as
+`"color-mix(in oklab, #ffffff, #0b2621 calc(0.097 * 100%))"`. A custom property's computed value is its
+declared text with `var()` substituted and nothing else evaluated, so `readPalette`'s rgb/hex parser matched
+nothing and every surface token fell through to `FALLBACK` — the midnight values. The rig's intensities, fog
+and exposure moved with the clock while the colours did not, which is why noon looked like a dark room with a
+blown-out arch rather than daylight. `scenes/rig.js` now completes the substitution the only way that cannot
+disagree with the stylesheet: it writes the expression to an off-layout probe element as a `color` and reads
+the engine's answer back. That answer is `oklab(0.92685 -0.00328372 0.0000595812)` — Chrome keeps a
+`color-mix(in oklab, …)` in Oklab — so the file gained an Oklab→linear-sRGB→sRGB conversion (Ottosson's
+matrices, sign carried through the transfer curve so out-of-gamut channels clamp rather than shift hue). Four
+tokens the scene had been inventing (`--ivory`, `--brass`, `--brass-soft`, `--lamp-glow`) are now declared in
+`tokens.css` as the door's materials and lamps, deliberately not interpolated by `--night`: a lamp's colour
+does not change with the hour, only how much of it reaches you. A token that is missing or unresolvable now
+warns once in the console instead of silently using a fallback, and the harness counts warnings, so the class
+of bug cannot return unnoticed.
+
+What the corrected palette then exposed, and what the same two frames were used to fix:
+
+| Defect | Cause | Fix |
+|---|---|---|
+| Courtyard read as a black hole with a bright garden inside it | seven free-standing arch slabs 3.6 m wide, nothing at `\|x\| > 1.8` and nothing above the lintel, so the canvas was transparent there and the fallback photograph showed through | two plaster side walls from the street wall to the end wall, and the bay slabs carried up to `WALL_TOP`; the arcade is a wall with holes in it again |
+| A black diagonal bar crossing the arch | brass at `metalness: 0.85` with no environment map — a metal with nothing to reflect gives up its diffuse term and draws unlit | `metalness: 0.3, roughness: 0.5`, plus a small warm emissive that rises with the lamps |
+| Noon façade clipping to a flat field | daylight key 0.95 on a near-white albedo left ACES nothing to compress | key 0.95 → 0.78, sky 0.40 → 0.34, bounce 0.58 → 0.50, and the stone/plaster albedo pulled toward real limestone by `0.5 × (1 − night)` |
+| Interior too dark at dusk, too flat at noon | no light reached past the second arch and directional lights cannot be occluded | `rigValues.interiorFill` drives a low warm emissive on the stone — a bounce approximation, one uniform, no new light term, works on the lite tier |
+| Nav invisible over the hero at day and dusk | `.nav` sits outside `.hero`, so it inherited the page's day ink (`--mist` resolves to `--ink` at `--night: 0`) over a scene that is a night picture in either scheme | `Base.astro` passes `overHero` on the home route, the bar pins the hero's own contrast pair, carries a short top scrim until `[data-stuck]` frosts it, and the frost uses the night ink rather than paper |
+
+Re-measured on the shipped build: 12 route passes, 0 console errors, 0 warnings; exposure 1.127 → 0.979
+between 20:00 and 14:00; cross-hour distance against the four-frame-per-hour noise floor gives a margin of
+1.68×, above the 1.5× floor but thinner than A6 recorded. That is partly real — the enclosed corridor is now
+lit at both hours — and partly the statistic, which compares luminance only, while the visible difference
+between those two frames is mostly colour temperature. The margin stays printed rather than tuned upward.
+
 ## Milestones
 
 1. **M0 — probes** (headless ingest, image reachability, toolchain availability). No UI.

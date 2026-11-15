@@ -5,6 +5,7 @@ site/.astro/
 
 # Scratch: probe logs, screenshots, and the local servers' output live here and never belong in the repo
 .tmp/
+docs/screenshots/
 
 # Editors and OS noise
 .DS_Store

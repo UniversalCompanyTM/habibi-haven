@@ -44,6 +44,36 @@ const NUMBER_PATTERN = /(-?\d*\.?\d+)/;
 // forms apart, so hoist one pattern instead of rebuilding it per token read.
 const RGB_PATTERN = /^rgba?\(\s*([\d.]+)(?:%|[, ])\s*([\d.]+)(?:%|[, ])\s*([\d.]+)/i;
 const HEX_PATTERN = /^#([0-9a-f]{3,8})$/i;
+// An engine that resolves a `color-mix(in oklab, …)` may hand the colour back in a named space rather than
+// rgb(), with channels as 0–1 floats. Same three numbers, different scale and spelling.
+const COLOR_FN_PATTERN = /^color\(\s*(?:srgb|display-p3)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/i;
+// This is what Chrome actually answers for `color-mix(in oklab, …)`: the mix stays in Oklab and serialises
+// as the function below, not as rgb(). Measured with the runtime harness's own --probe, on the shipped page.
+const OKLAB_PATTERN = /^oklab\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/i;
+
+// Oklab → linear sRGB → sRGB bytes, the published Björn Ottosson transform: undo the LMS cube roots, apply
+// the LMS-to-linear-RGB matrix, then the sRGB transfer curve. Sign is carried through the curve because a
+// mix that lands outside the gamut produces negative channels, and clamping before the curve would turn
+// those into a different colour instead of a harder edge.
+function oklabToBytes(l, a, b) {
+  const fy = l + 0.3963377774 * a + 0.2158037573 * b;
+  const fzy = l - 0.1055613458 * a - 0.0638541728 * b;
+  const fz = l - 0.0894841775 * a - 1.291485548 * b;
+  const x = fy ** 3;
+  const y = fzy ** 3;
+  const z = fz ** 3;
+  const linear = [
+    4.0767416621 * x - 3.3077115913 * y + 0.2309699292 * z,
+    -1.2684380046 * x + 2.6097574011 * y - 0.3413193965 * z,
+    -0.0041960863 * x - 0.7034186147 * y + 1.707614701 * z,
+  ];
+  return linear.map((u) => {
+    const magnitude = Math.abs(u);
+    const curved = u < 0 ? -1 : 1;
+    const encoded = magnitude <= 0.0031308 ? 12.92 * magnitude : 1.055 * magnitude ** (1 / 2.4) - 0.055;
+    return clamp(curved * encoded * 255, 0, 255);
+  });
+}
 
 function clamp(value, min, max) {
   return value < min ? min : value > max ? max : value;
@@ -55,8 +85,8 @@ function readNumber(style, property, fallback) {
   return match ? clamp(Number(match[1]), 0, 1) : fallback;
 }
 
-function readCssColor(text, fallback) {
-  if (!text) return fallback;
+function parseColor(text) {
+  if (!text) return null;
   let m = RGB_PATTERN.exec(text);
   if (m) {
     // The engine reports either 0–255 numbers or percentages; the separator tells them apart.
@@ -85,7 +115,45 @@ function readCssColor(text, fallback) {
       ];
     }
   }
-  return fallback;
+  m = COLOR_FN_PATTERN.exec(text);
+  if (m) return [clamp(Number(m[1]) * 255, 0, 255), clamp(Number(m[2]) * 255, 0, 255), clamp(Number(m[3]) * 255, 0, 255)];
+  m = OKLAB_PATTERN.exec(text);
+  if (m) return oklabToBytes(Number(m[1]), Number(m[2]), Number(m[3]));
+  return null;
+}
+
+/*
+ * A custom property's computed value is the text it was declared with, with var() references substituted but
+ * nothing else evaluated: `--bg-2` comes back as "color-mix(in oklab, #ffffff, #0b2621 calc(0.097 * 100%))".
+ * Reading that directly and looking for numbers finds none, so every surface token fell through to the night
+ * fallbacks and the door kept its midnight palette while the clock moved the lights, the fog and the exposure
+ * around it. The scene and the CSS are supposed to be the same picture, so the substitution has to be
+ * completed the only way that is guaranteed to agree with the stylesheet: hand the expression to an element as
+ * a colour and read the engine's own answer back. The probe is created once, kept off-layout, and never styled
+ * with anything the page can see.
+ */
+let colourProbe = null;
+const warnedAbout = new Set();
+
+function resolveColour(text, fallback, property) {
+  const direct = parseColor(text);
+  if (direct) return direct;
+  if (!text || typeof document === "undefined") return fallback;
+  if (!colourProbe?.isConnected) {
+    colourProbe = document.createElement("span");
+    colourProbe.setAttribute("aria-hidden", "true");
+    colourProbe.style.cssText = "position:absolute;left:-9999px;top:0;width:1px;height:1px;pointer-events:none";
+    document.documentElement.appendChild(colourProbe);
+  }
+  colourProbe.style.color = text;
+  const computed = getComputedStyle(colourProbe).color;
+  colourProbe.style.color = "";
+  const resolved = parseColor(computed);
+  if (!resolved && !warnedAbout.has(property)) {
+    warnedAbout.add(property);
+    console.warn(`hh:rig — ${property} did not resolve to a colour ("${text}"); the scene is using its fallback.`);
+  }
+  return resolved ?? fallback;
 }
 
 /**
@@ -96,7 +164,12 @@ export function readPalette(root = document.documentElement) {
   const style = getComputedStyle(root);
   const palette = {};
   for (const [name, property] of TOKENS) {
-    palette[name] = readCssColor(style.getPropertyValue(property).trim(), FALLBACK[name]);
+    const raw = style.getPropertyValue(property).trim();
+    if (!raw && !warnedAbout.has(property)) {
+      warnedAbout.add(property);
+      console.warn(`hh:rig — ${property} is not declared, so the door is painting ${name} from its night fallback.`);
+    }
+    palette[name] = resolveColour(raw, FALLBACK[name], property);
   }
   return palette;
 }
@@ -145,9 +218,18 @@ export function rigValues(night, open) {
     lamp,
     open: open !== false,
     lanternIntensity: (0.12 + 1.85 * lamp) * openFactor,
-    streetIntensity: 1.35 * (1 - 0.86 * n),
-    skyIntensity: 0.5 * (1 - 0.55 * n),
-    bounceIntensity: 0.75 * (1 - 0.45 * n) * openFactor,
+    // Daylight is the part of the curve that used to break the render: at 14:00 the street key, the sky
+    // fill and the bounce summed past the plaster's albedo and ACES had nothing left to compress, so the
+    // façade became a flat white field and the arch lost its edges. These three are the daytime ceiling —
+    // still brightest in the morning, still a clear step down into the evening, but under the clip.
+    streetIntensity: 0.78 * (1 - 0.86 * n),
+    skyIntensity: 0.34 * (1 - 0.5 * n),
+    bounceIntensity: 0.5 * (1 - 0.4 * n) * openFactor,
+    // The three lantern lights hang near the door, and a directional light knows nothing about occlusion,
+    // so past the second arch the courtyard had nothing to light it and read as a silhouette against the
+    // façade. This is the warm fill that lives inside the run: never off, brighter once the lamps strike up,
+    // and the difference between a black hole and a room you can see tables in.
+    interiorFill: 0.3 + 1.25 * lamp,
     hazeOpacity: 0.05 + 0.3 * lamp,
     breathDepth: 0.035 + 0.085 * lamp,
     swayAmplitude: 0.016 + 0.012 * lamp,

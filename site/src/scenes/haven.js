@@ -26,6 +26,20 @@ const CORD_LENGTH = 0.62; // brass rail sits at RAIL_Y, flame hangs below it
 const RAIL_Y = 3.68;
 const LAMP_DROP = 0.86;
 const FLOOR_SIZE = 34;
+// The street doorway and its jamb: DOOR_HALF is the opening you walk through, REVEAL_HALF the same arch
+// offset outward by the thickness of a reveal. The façade is punched at REVEAL_HALF and the ring between
+// the two is recessed behind it, so the entrance reads as a wall you could put your hand inside rather
+// than as a cut-out pasted over the courtyard.
+const DOOR_HALF = 1.5;
+const REVEAL_HALF = 1.78;
+const DOOR_SPRING = 2.2;
+
+// Real limestone and real lime plaster, as 0–255 sRGB bytes. The palette's ivory side is a paper white, and
+// a wall whose albedo is that high leaves ACES nothing to compress once the sun is up: the façade clips to a
+// flat field and the arch loses its edges. These are the mid-tones the stone is pulled toward as daylight
+// arrives, so the hour moves the light rather than the material's whiteness.
+const LIMESTONE = [172, 156, 128];
+const PLASTER_MID = [150, 136, 112];
 
 // One horseshoe opening punched in a slab of wall. ExtrudeGeometry.addShape
 // normalises winding itself (it reverses counter-clockwise contours and clockwise
@@ -34,8 +48,13 @@ function bayShape(THREE) {
   const outerHalf = SPAN_HALF + PIER_WIDTH;
   const shape = new THREE.Shape();
   shape.moveTo(-outerHalf, 0);
-  shape.lineTo(-outerHalf, LINTEL_TOP);
-  shape.lineTo(outerHalf, LINTEL_TOP);
+  // The slab runs to the top of the courtyard wall, not to the lintel. With the band above the arches left
+  // out, the canvas had nothing to draw there and the fallback photograph showed through the arcade: at dusk
+  // that passed for sky, and in daylight it was a bright garden with a pergola beam crossing it, cutting a
+  // diagonal hole in the middle of a stone room. A riad arcade is a wall with holes in it — the wall is the
+  // point, and the openings are what you look through.
+  shape.lineTo(-outerHalf, WALL_TOP);
+  shape.lineTo(outerHalf, WALL_TOP);
   shape.lineTo(outerHalf, 0);
   shape.closePath();
 
@@ -107,6 +126,74 @@ function createFloorTexture(THREE) {
   return texture;
 }
 
+// Lime-wash over coral stone. Without a map the arcade is one flat value per face, and a flat value under
+// one directional light reads as a black slab by night and as a blown white field by day — which is exactly
+// what the hero looked like. The mottling is three sine fields whose periods divide the canvas edge, so the
+// tile wraps without a seam, and it is a function of (x, y) rather than of Math.random() so two reloads of
+// the same hour draw the same wall.
+function createPlasterTexture(THREE) {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const wave = (m) => (2 * Math.PI * m) / size; // integer harmonic → the tile closes on itself
+  const [k1, k2, k3] = [wave(3), wave(7), wave(11)];
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const i = (y * size + x) * 4;
+      const n = Math.sin(x * k1 + y * k2 * 0.6) + Math.sin(x * k2 - y * k1 * 1.4) + Math.sin((x + y) * k3);
+      // Warm stone, biased so the mean sits near 0.93 of full scale: the material colour multiplies this,
+      // so a bright map keeps the hour tint in charge of hue while the texture only carries form.
+      const v = 226 + Math.round(n * 11);
+      d[i] = Math.min(255, v + 10);
+      d[i + 1] = Math.min(255, v + 3);
+      d[i + 2] = Math.max(0, v - 18);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // Trowel sweeps: a few horizontal drags at low alpha, enough to break up a bay without reading as stripes.
+  ctx.globalAlpha = 0.07;
+  ctx.strokeStyle = "#6b5a3a";
+  for (let row = 0; row < 7; row += 1) {
+    ctx.lineWidth = 6 + row * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, row * 38 + 12);
+    ctx.lineTo(size, row * 38 + 20);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  // ExtrudeGeometry hands back shape coordinates as UVs, so one tile is one metre of wall — no per-material
+  // repeat, and the piers and the façade agree about the scale of the grain.
+  texture.anisotropy = 4;
+  return texture;
+}
+
+// A concentric arch band: the opening the doorway has, offset outward by the thickness of a jamb. Used for
+// the reveal behind the street façade, which is what gives the hole in the wall a depth instead of a cut-out.
+function archRingShape(THREE, innerHalf, outerHalf, spring) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-outerHalf, 0);
+  shape.lineTo(-outerHalf, spring);
+  shape.absellipse(0, spring, outerHalf, outerHalf, Math.PI, 0, true);
+  shape.lineTo(outerHalf, 0);
+  shape.lineTo(innerHalf, 0);
+  shape.lineTo(innerHalf, spring);
+  shape.absellipse(0, spring, innerHalf, innerHalf, 0, Math.PI, false);
+  shape.lineTo(-innerHalf, 0);
+  shape.closePath();
+  return shape;
+}
+
 // Soft radial sprite shared by the dust motes and the haze sheets. Marked
 // premultiplied because both shaders emit vec4(color * alpha, alpha) to match the
 // renderer's default premultipliedAlpha blending.
@@ -135,21 +222,37 @@ function createSoftDot(THREE) {
 // #if defined( TONE_MAPPING ), so these bodies compile with tone mapping on or off.
 const SOFT_PARS = ["uniform sampler2D uMap;", "varying float vAlpha;"].join("\n");
 
-const SOFT_FRAGMENT = [
-  "uniform float uOpacity;",
-  "uniform vec3 uColor;",
-  // vAlpha is declared by SOFT_PARS, which is joined in front of this body — declaring it here too is
-  // a GLSL redefinition, and GLSL does not warn, it refuses: `ERROR: 0:160: 'vAlpha' : redefinition`,
-  // `Fragment shader is not compiled`, `useProgram: program not valid` on every frame after that. The
-  // canvas stayed transparent over the photograph and the only trace was a console that filled up.
-  "void main() {",
-  "  float alpha = vAlpha * uOpacity;",
-  "  if (alpha <= 0.0) discard;",
-  "  gl_FragColor = vec4(uColor * alpha, alpha);",
-  "  #include <tonemapping_fragment>",
-  "  #include <colorspace_fragment>",
-  "}",
-].join("\n");
+// The sprite has to be SAMPLED, and with the coordinate that belongs to the primitive: gl_PointCoord
+// inside a point sprite, the plane's uv inside a haze quad. The body that ignored uMap was the reason the
+// hero looked broken — every mote drew as a solid square of light and every haze sheet as a hard-edged
+// rectangle over the doorway, both of which read as a failed render rather than as lamp glow.
+// sprite.rgb is already multiplied by sprite.a (createSoftDot sets premultiplyAlpha), so keeping uColor
+// times rgb against alpha preserves the premultiplied convention the renderer blends with.
+const softFragment = (coord) =>
+  [
+    "uniform float uOpacity;",
+    "uniform vec3 uColor;",
+    // vAlpha is declared by SOFT_PARS, which is joined in front of this body — declaring it here too is
+    // a GLSL redefinition, and GLSL does not warn, it refuses: `ERROR: 0:160: 'vAlpha' : redefinition`,
+    // `Fragment shader is not compiled`, `useProgram: program not valid` on every frame after that. The
+    // canvas stayed transparent over the photograph and the only trace was a console that filled up.
+    "void main() {",
+    `  vec4 sprite = texture2D(uMap, ${coord});`,
+    "  float k = vAlpha * uOpacity;",
+    "  float alpha = sprite.a * k;",
+    "  if (alpha <= 0.002) discard;",
+    "  gl_FragColor = vec4(uColor * sprite.rgb * k, alpha);",
+    "  #include <tonemapping_fragment>",
+    "  #include <colorspace_fragment>",
+    "}",
+  ].join("\n");
+
+const SOFT_FRAGMENT_POINTS = softFragment("gl_PointCoord");
+// A varying has to be declared on both sides of the stage boundary. The vertex shader declares vUv and
+// writes it; the fragment body above never mentions it (gl_PointCoord needs nothing), so the plane variant
+// brings in its own declaration. Without it the haze sheet fails exactly the way a missing one does in a
+// browser: VALIDATE_STATUS false, `ERROR: 'vUv' : undeclared identifier`, and no softening at all.
+const SOFT_FRAGMENT_PLANE = ["varying vec2 vUv;", softFragment("vUv")].join("\n");
 
 // Dust that catches the lantern light. gl_PointCoord only exists in the fragment
 // stage, so the vertex shader just sizes and fades each mote and the sprite is
@@ -196,7 +299,7 @@ function createDust(THREE, count, dot) {
       "  vAlpha = 0.35 + 0.65 * abs(sin(uTime * 0.6 + phase * 3.1));",
       "}",
     ].join("\n"),
-    fragmentShader: [SOFT_PARS, SOFT_FRAGMENT].join("\n"),
+    fragmentShader: [SOFT_PARS, SOFT_FRAGMENT_POINTS].join("\n"),
     transparent: true,
     depthWrite: false,
   });
@@ -221,7 +324,9 @@ function createHaze(THREE, dot) {
     },
     vertexShader: [
       "varying float vAlpha;",
+      "varying vec2 vUv;",
       "void main() {",
+      "  vUv = uv;",
       "  vec4 origin = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);",
       "  vec4 view = origin + vec4(position.xy, 0.0, 0.0);",
       "  gl_Position = projectionMatrix * view;",
@@ -230,7 +335,7 @@ function createHaze(THREE, dot) {
       "  vAlpha = clamp(1.0 - r, 0.0, 1.0) * (0.35 + 0.65 * vertical);",
       "}",
     ].join("\n"),
-    fragmentShader: [SOFT_PARS, SOFT_FRAGMENT].join("\n"),
+    fragmentShader: [SOFT_PARS, SOFT_FRAGMENT_PLANE].join("\n"),
     transparent: true,
     depthWrite: false,
   });
@@ -261,16 +366,29 @@ export function buildHaven(THREE, options = {}) {
   const group = new THREE.Group();
   const dot = track(textures, createSoftDot(THREE));
   const floorMap = track(textures, createFloorTexture(THREE));
+  const plasterMap = track(textures, createPlasterTexture(THREE));
 
-  const stoneMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xd9cbb2, roughness: 0.92, metalness: 0.02 }));
-  const plasterMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xc4b49a, roughness: 0.98, metalness: 0.0 }));
-  const brassMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xc9a24d, roughness: 0.34, metalness: 0.85 }));
+  const stoneMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xd9cbb2, roughness: 0.92, metalness: 0.02, map: plasterMap }));
+  const plasterMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xc4b49a, roughness: 0.98, metalness: 0.0, map: plasterMap }));
+  // Metal without an environment map is a black mirror. At metalness 0.85 the rail and the lantern cages
+  // gave up their diffuse term to reflect a cube map that does not exist, so they drew as unlit holes cut
+  // into the picture — the diagonal bar across the arch at noon was this. Brass keeps its look by borrowing
+  // most of its colour from the diffuse term and a little from the lamps' specular instead.
+  const brassMat = track(materials, new THREE.MeshStandardMaterial({ color: 0xc9a24d, roughness: 0.5, metalness: 0.3 }));
   const floorMat = track(materials, new THREE.MeshStandardMaterial({ color: 0x8fb6ab, roughness: 0.42, metalness: 0.08, map: floorMap }));
   // Emissive-looking surfaces are unlit basics with toneMapped off: they must stay
   // bright when the rig dims everything else, and going through the lighting model
   // would cost a shader permutation each.
   const glassMat = track(materials, new THREE.MeshBasicMaterial({ color: 0xffc46e, toneMapped: false }));
   const glowMat = track(materials, new THREE.MeshBasicMaterial({ color: 0xffb763, transparent: true, opacity: 0.34, depthWrite: false, toneMapped: false }));
+  // A lamp's glow is not a solid: it is light scattered by the air, so it has to fade from its centre to
+  // nothing at its edge. A sphere in a flat transparent material cannot do that — it draws as a hard disc,
+  // and where two lamps overlap the discs cut angular facets into each other, which is the shape the hero
+  // used to show. A Sprite carries the same soft radial texture the motes use, always faces the camera, and
+  // costs one quad. No texture, no sprite: a plain quad would be the hard disc again.
+  const haloMat = dot
+    ? track(materials, new THREE.SpriteMaterial({ map: dot, color: 0xffb763, transparent: true, opacity: 0.34, depthWrite: false, toneMapped: false }))
+    : glowMat;
 
   // --- arcade: seven identical bays, one InstancedMesh, one draw call ---
   const bayGeo = track(geometries, new THREE.ExtrudeGeometry(bayShape(THREE), { depth: 0.46, bevelEnabled: false, curveSegments: 14 }));
@@ -282,6 +400,22 @@ export function buildHaven(THREE, options = {}) {
   }
   arcade.instanceMatrix.needsUpdate = true;
   group.add(arcade);
+
+  // --- the two walls the arcade hangs on ---
+  // Seven free-standing slabs leave nothing at |x| > SPAN_HALF + PIER_WIDTH, and where the scene draws no
+  // geometry the canvas stays transparent and the photograph behind it shows through. At night that reads as
+  // darkness and nobody looks twice; in daylight it is a bright garden where a courtyard wall should be, and
+  // the room stops being a place you could walk into. These run flush with the outer face of every pier, from
+  // the street wall to the end wall. They stop at the top of the courtyard wall, which is below the height
+  // the camera can see at the far end, so there is still a band of sky at the crown of the frame.
+  const arcadeLength = FRONT_WALL_Z - BACK_WALL_Z - 0.2;
+  const arcadeCentreZ = (FRONT_WALL_Z + BACK_WALL_Z) / 2;
+  const sideWallGeo = track(geometries, new THREE.BoxGeometry(0.5, WALL_TOP, arcadeLength));
+  for (const side of [-1, 1]) {
+    const sideWall = new THREE.Mesh(sideWallGeo, plasterMat);
+    sideWall.position.set(side * (SPAN_HALF + PIER_WIDTH + 0.25), WALL_TOP / 2, arcadeCentreZ);
+    group.add(sideWall);
+  }
 
   // --- courtyard end wall, with a rose window so the night sky reads through ---
   const backShape = new THREE.Shape();
@@ -311,16 +445,55 @@ export function buildHaven(THREE, options = {}) {
   frontShape.lineTo(6.6, 0);
   frontShape.closePath();
   const door = new THREE.Path();
-  door.moveTo(-1.5, 0);
-  door.lineTo(-1.5, 2.2);
-  door.absellipse(0, 2.2, 1.5, 1.5, Math.PI, 0, true);
-  door.lineTo(1.5, 0);
+  door.moveTo(-REVEAL_HALF, 0);
+  door.lineTo(-REVEAL_HALF, DOOR_SPRING);
+  door.absellipse(0, DOOR_SPRING, REVEAL_HALF, REVEAL_HALF, Math.PI, 0, true);
+  door.lineTo(REVEAL_HALF, 0);
   door.closePath();
   frontShape.holes.push(door);
   const frontGeo = track(geometries, new THREE.ExtrudeGeometry(frontShape, { depth: 0.6, bevelEnabled: false, curveSegments: 12 }));
   const frontWall = new THREE.Mesh(frontGeo, plasterMat);
   frontWall.position.set(0, 0, FRONT_WALL_Z);
   group.add(frontWall);
+
+  // The reveal itself, pushed back inside the opening so its inner faces — the two jambs and the crown —
+  // are what the camera sees through the hole. Stone, not plaster, because a dressed surround is the thing
+  // that says "this opening was built", and it takes the lantern spill on a different plane to the wall.
+  const revealGeo = track(
+    geometries,
+    new THREE.ExtrudeGeometry(archRingShape(THREE, DOOR_HALF, REVEAL_HALF, DOOR_SPRING), {
+      depth: 0.6,
+      bevelEnabled: false,
+      curveSegments: 14,
+    }),
+  );
+  const reveal = new THREE.Mesh(revealGeo, stoneMat);
+  reveal.position.set(0, 0, FRONT_WALL_Z - 0.55);
+  group.add(reveal);
+
+  // Keystone at the crown and a sconce either side. The sconces carry no light of their own — their glow
+  // is the shared unlit basic that the rig already dims by day and lifts at dusk, so the entrance answers
+  // the clock without three more terms in every standard-material fragment.
+  const keystoneGeo = track(geometries, new THREE.BoxGeometry(0.52, 0.4, 0.2));
+  const keystone = new THREE.Mesh(keystoneGeo, stoneMat);
+  keystone.position.set(0, DOOR_SPRING + REVEAL_HALF + 0.06, FRONT_WALL_Z + 0.62);
+  group.add(keystone);
+
+  const sconceBodyGeo = track(geometries, new THREE.CylinderGeometry(0.07, 0.11, 0.26, 6));
+  const sconceGlowGeo = track(geometries, new THREE.CircleGeometry(0.1, 12));
+  const sconces = [];
+  for (const side of [-1, 1]) {
+    const sconce = new THREE.Group();
+    sconce.position.set(side * (REVEAL_HALF + 0.62), DOOR_SPRING + 0.42, FRONT_WALL_Z + 0.62);
+    const body = new THREE.Mesh(sconceBodyGeo, brassMat);
+    const glow = new THREE.Mesh(sconceGlowGeo, glassMat);
+    glow.position.set(0, 0.02, 0.1);
+    const halo = new THREE.Sprite(haloMat);
+    halo.scale.setScalar(0.52);
+    sconce.add(body, glow, halo);
+    group.add(sconce);
+    sconces.push(halo);
+  }
 
   // --- floor ---
   const floorGeo = track(geometries, new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE));
@@ -341,7 +514,8 @@ export function buildHaven(THREE, options = {}) {
   const cordGeo = track(geometries, new THREE.CylinderGeometry(0.012, 0.012, CORD_LENGTH, 4));
   const cageGeo = track(geometries, new THREE.CylinderGeometry(0.19, 0.14, 0.42, 6, 1, true));
   const flameGeo = track(geometries, new THREE.OctahedronGeometry(0.11, 0));
-  const haloGeo = track(geometries, new THREE.SphereGeometry(0.34, 10, 8));
+  // Sprite scale is world size, so the glow is 0.68 across — the diameter the old 0.34 sphere occupied.
+  const HALO_SIZE = 0.68;
   const pivots = [];
   const flames = [];
   const halos = [];
@@ -354,8 +528,9 @@ export function buildHaven(THREE, options = {}) {
     cage.position.y = -CORD_LENGTH - 0.21;
     const flame = new THREE.Mesh(flameGeo, glassMat);
     flame.position.y = -CORD_LENGTH - 0.21;
-    const halo = new THREE.Mesh(haloGeo, glowMat);
+    const halo = new THREE.Sprite(haloMat);
     halo.position.y = -CORD_LENGTH - 0.21;
+    halo.scale.setScalar(HALO_SIZE);
     pivot.add(cord, cage, flame, halo);
     // Phase comes from the index, not Math.random(), so two reloads of the same
     // hour animate identically.
@@ -428,17 +603,35 @@ export function buildHaven(THREE, options = {}) {
     const setByte = (color, rgb) => color.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
     const mixByte = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-    setByte(stoneMat.color, mixByte(palette.ivory, palette.bg2, 0.55));
-    setByte(plasterMat.color, mixByte(palette.ivory, palette.bg1, 0.7));
+    const headroom = 0.5 * (1 - values.night);
+    setByte(stoneMat.color, mixByte(mixByte(palette.ivory, palette.bg2, 0.55), LIMESTONE, headroom));
+    setByte(plasterMat.color, mixByte(mixByte(palette.ivory, palette.bg1, 0.7), PLASTER_MID, headroom));
+    // The courtyard runs seven bays deep and the openings are narrow, so past the second arch no lantern is
+    // within reach — and a directional light cannot be blocked by a wall, which is exactly why the recess
+    // read as a silhouette cut out of the façade instead of a space beyond it. This low warm emissive stands
+    // in for the bounce the arcade throws off its own plaster. It never reaches zero, so the room is a room
+    // at every hour, and it is a uniform change: no new light term, no shader recompile, works on lite.
+    const bounce = 0.022 + 0.032 * values.interiorFill;
+    const bounceTint = mixByte(palette.brassSoft, palette.lampGlow, values.lamp);
+    setByte(stoneMat.emissive, bounceTint);
+    stoneMat.emissiveIntensity = bounce;
+    setByte(plasterMat.emissive, bounceTint);
+    plasterMat.emissiveIntensity = bounce * 0.8;
     setByte(brassMat.color, palette.brass);
+    // Brass in a lamp-lit passage does not just reflect the lamps, it holds their warmth along the rail long
+    // after the light has fallen off with distance. A small emissive on the metal is the cheapest way to say
+    // that, and it is the difference between a rail you can read at 22:00 and a dark line.
+    setByte(brassMat.emissive, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
+    brassMat.emissiveIntensity = 0.02 + 0.11 * values.lamp;
     setByte(floorMat.color, mixByte(palette.tealDeep, palette.bg1, values.night * 0.6));
     setByte(glassMat.color, palette.lampGlow);
     setByte(glowMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
+    setByte(haloMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
     setByte(fog.color, palette.bg1);
     fog.density = 0.016 + values.night * 0.014;
 
     setByte(ambient.color, mixByte(palette.bg3, palette.ivory, 0.35));
-    ambient.intensity = 0.16 + 0.34 * (1 - values.night);
+    ambient.intensity = 0.14 + 0.3 * (1 - values.night);
 
     for (let i = 0; i < lanternLights.length; i++) {
       setByte(lanternLights[i].color, palette.lampGlow);
@@ -458,7 +651,11 @@ export function buildHaven(THREE, options = {}) {
     }
 
     glowMat.opacity = 0.12 + 0.34 * values.lamp;
-    for (let i = 0; i < halos.length; i++) halos[i].scale.setScalar(0.82 + values.lamp * 0.4);
+    haloMat.opacity = 0.1 + 0.3 * values.lamp;
+    for (let i = 0; i < halos.length; i++) halos[i].scale.setScalar(HALO_SIZE * (0.82 + values.lamp * 0.4));
+    // The sconces strike up with the same curve as the lanterns, from a smaller base: they mark the door,
+    // they do not light it.
+    for (let i = 0; i < sconces.length; i++) sconces[i].scale.setScalar(0.52 * (0.62 + values.lamp * 0.55));
     for (let i = 0; i < haze.length; i++) haze[i].material.uniforms.uOpacity.value = values.hazeOpacity;
     for (let i = 0; i < haze.length; i++) setByte(haze[i].material.uniforms.uColor.value, palette.lampGlow);
     if (dust) {
@@ -480,7 +677,7 @@ export function buildHaven(THREE, options = {}) {
       pivots[i].rotation.x = Math.cos(seconds * 0.47 + phase) * sway * 0.6;
       const flicker = 1 + Math.sin(seconds * 2.7 + phase * 2.1) * breath + Math.sin(seconds * 6.1 + phase) * breath * 0.35;
       flames[i].scale.setScalar(Math.max(0.6, flicker));
-      halos[i].scale.setScalar(Math.max(0.5, flicker) * (0.82 + (values ? values.lamp : 0.6) * 0.4));
+      halos[i].scale.setScalar(HALO_SIZE * Math.max(0.5, flicker) * (0.82 + (values ? values.lamp : 0.6) * 0.4));
     }
     if (dust) dust.material.uniforms.uTime.value = seconds;
     // Pointer parallax stays inside a couple of degrees: the brief asks for a few

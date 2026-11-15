@@ -116,7 +116,7 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
   <body data-hour={rig.hour} data-night={rig.night.toFixed(3)}>
     <a class="skip-link" href="#main">Skip to content</a>
     {loader ? <Preloader /> : null}
-    <Nav facts={f} rig={rig} current={path} />
+    <Nav facts={f} rig={rig} current={path} overHero={path === "/"} />
 
     <main id="main">
       <slot />

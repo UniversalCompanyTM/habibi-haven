@@ -522,6 +522,38 @@ html.js [data-reveal].is-in {
   border-bottom-color: color-mix(in oklab, var(--teal) 12%, transparent);
 }
 
+/* The door scene is a night picture whichever scheme the OS asks for — the courtyard is lit by lanterns, and
+   the hour moves the lamps rather than turning the frame into daylight — so on the home page the bar must not
+   inherit the page's day ink. Without this the nav is dark-on-dark at 20:00 and dark-on-bright at noon. The
+   pair mirrors the hero's own override below, so the headline and the links are the same contrast at any hour. */
+.nav[data-over-hero] {
+  --mist: #e8f4f0;
+  --mist-2: #b4ccc5;
+  --mist-3: #7e9a93;
+}
+
+.nav[data-over-hero][data-stuck] {
+  background: color-mix(in oklab, #04100e 74%, transparent);
+  border-bottom-color: color-mix(in oklab, var(--teal) 22%, transparent);
+}
+
+/* Before the frost arrives the bar floats directly over the canvas, and the top band of the frame is the
+   brightest part of a noon render. A short gradient anchored on the same night ink keeps the badge, the four
+   links and the status line readable at every hour, and steps aside once [data-stuck] paints the bar itself. */
+.nav[data-over-hero]:not([data-stuck])::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -1.75rem 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, #04100e 80%, transparent) 0%,
+    color-mix(in oklab, #04100e 48%, transparent) 55%,
+    transparent 100%
+  );
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -709,6 +741,41 @@ html.js [data-reveal].is-in {
   display: grid;
   align-items: end;
   padding-block: clamp(6rem, 10vh, 10rem) clamp(3rem, 6vh, 5rem);
+
+  /* The doorway is a night scene in either scheme: the plate is a photograph taken after dark and the
+     WebGL door is lantern-lit stone. Under `prefers-color-scheme: light` the root ink tokens flip to dark
+     paper-and-ink, which is right for the rest of the site and made the headline disappear into the arch.
+     These four are the hero's own contrast pair, so the copy reads the same whatever the OS prefers. */
+  --mist: #e8f4f0;
+  --mist-2: #b4ccc5;
+  --teal-soft: #8df3df;
+  --amber: #f7a93b;
+}
+
+/* A veil between the scene and the copy, and the only thing that guarantees the headline is legible: the
+   door behind it can be a blown-out noon arch or a lamp-lit night arcade, and the text sits on top of
+   whichever the clock happens to be showing. It is anchored on the night bg-0 rather than --bg-0 because
+   --bg-0 is paper by day, and a paper veil over a dark scene is the opposite of what is needed. Stronger
+   when the room is bright, gentler when it is already dark. */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in oklab, #04100e 84%, transparent) 0%,
+      color-mix(in oklab, #04100e 58%, transparent) 40%,
+      transparent 76%
+    ),
+    linear-gradient(
+      0deg,
+      color-mix(in oklab, #04100e 74%, transparent) 0%,
+      transparent 46%
+    );
+  opacity: calc(0.66 + (1 - var(--night)) * 0.34);
 }
 
 .hero__scene {

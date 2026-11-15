@@ -33,6 +33,16 @@
   --amber: #f7a93b; /* on bg-1 9.15:1 — lantern, the yellow neon heart */
   --amber-deep: #8a4e0b; /* on paper 5.86:1 */
 
+  /* ---- the door's materials and its lamps ----
+     These four are read by the WebGL scene through scenes/rig.js, which samples them off the same :root the
+     stylesheet uses, so the room in the canvas and the room in the CSS cannot drift apart. They are deliberately
+     NOT interpolated by --night below: they name a stone, a metal and a flame, and a lamp's colour does not
+     change with the hour — only how much of it reaches you, which is the rig's job, not the palette's. */
+  --ivory: #f6eedf; /* plaster in lamplight */
+  --brass: #c9a24d; /* the rail, the sconces, the cage */
+  --brass-soft: #e8ce94; /* brass where it catches the flame */
+  --lamp-glow: #ffc46e; /* the filament itself */
+
   /* ---- the daylight end of the clock ---- */
   --paper: #f3f1ec; /* chai and stone in the morning */
   --paper-2: #e7e3da;
