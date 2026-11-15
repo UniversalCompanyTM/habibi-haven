@@ -1,0 +1,112 @@
+name: verify-and-publish
+
+# Why this file exists: the expensive part of this project's verification is not the assertions, it is
+# the browser. scripts/verify-runtime.mjs drives a real headless Chrome over CDP, and with WebGL forced
+# through SwiftShader (software rasterisation, no GPU) that pins several cores for minutes on a laptop.
+# The same work on a runner costs the laptop nothing, so the loop here is: edit locally, push, read the
+# log. Nothing in this workflow needs a secret — Pages is authenticated with the built-in GITHUB_TOKEN.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      # The deterministic gates are hard failures. Each is Node-only and finishes in seconds.
+      - name: SSR safety, Astro parse, CSS, unit tests
+        working-directory: site
+        run: |
+          node ../scripts/check-ssr-safety.mjs
+          node ../scripts/check-astro-parse.mjs
+          node ../scripts/check-css.mjs
+          node ../tests/run.mjs
+
+      - name: Build
+        working-directory: site
+        run: npm run build
+
+      - name: Audit the built site
+        run: node scripts/verify-dist.mjs
+
+      - name: Audit the architecture board against the plan
+        run: node scripts/check-board.mjs
+
+      # Soft by design: check-drift re-reads menu.or.ke and their Supabase endpoint to answer "has the
+      # kitchen's data moved since we snapshotted it?". A datacenter egress IP can be blocked or served
+      # an interstitial where a home connection is fine, and that is not a defect in the built site — so
+      # it annotates instead of failing the gate. Read the annotation; run it locally for a trusted answer.
+      - name: Menu drift against the live source (advisory)
+        continue-on-error: true
+        run: node scripts/check-drift.mjs 2>&1 | tee drift.log || echo "::warning::drift check could not complete from a runner; run npm run check locally"
+
+      - name: Runtime harness (headless Chrome on this runner, not on a laptop)
+        run: |
+          npm --prefix site run preview -- --port 4321 > .tmp-preview.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:4321/ >/dev/null 2>&1 && break
+            sleep 1
+            if [ "$i" = 40 ]; then echo "preview server never answered"; cat .tmp-preview.log; exit 1; fi
+          done
+          HH_CHROME="$(command -v google-chrome || command -v chromium || command -v microsoft-edge)" node scripts/verify-runtime.mjs --base http://127.0.0.1:4321
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: site/dist
+          if-no-files-found: error
+
+  pages:
+    needs: verify
+    # Dormant until two things are true, and deliberately not run "to see what happens". (1) This is a
+    # project site, so it will live under /habibi-haven/, and every hand-written absolute reference — the
+    # 15 internal hrefs, the /brand/ assets, the routes the runtime harness walks — has to be emitted under
+    # that prefix first. Publishing the current root-absolute build there would ship a page that loads its
+    # CSS and its menu links off the domain root. (2) The Pages site itself has to exist. Both are switched
+    # on by one repo variable, DEPLOY_PAGES=true, so the gate is visible in the run list rather than buried
+    # in a comment someone has to remember.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_PAGES == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
