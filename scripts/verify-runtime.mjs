@@ -19,9 +19,12 @@
 //     again with it hidden, decoding both back inside the page, and comparing pixel statistics. If the
 //     WebGL layer contributed nothing, the two captures would be identical.
 //
-// Usage: npm run build && node scripts/verify-runtime.mjs [--base http://localhost:4322] [--keep]
+// Usage: npm run build && node scripts/verify-runtime.mjs [--base http://localhost:4322] [--port 9333]
+// --port is only the starting point: if something already holds it the run moves to the next free port,
+// because attaching to another Chrome's endpoint reads another run's pages.
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { platform } from "node:process";
@@ -32,7 +35,26 @@ const arg = (name, dflt) => {
   return i === -1 ? dflt : argv[i + 1];
 };
 const base = arg("base", "http://localhost:4322").replace(/\/$/, "");
-const port = Number(arg("port", 9333));
+// The debug port used to be a plain constant, and that turned two overlapping runs into a silent failure:
+// the second Chrome could not bind 9333, so the second harness connected to the FIRST run's browser and
+// waited there for a load event in a profile the first run had already deleted. Bind-then-release takes a
+// port this process actually owns, and waitForBrowser below gives up loudly if the browser it spawned is
+// not the one answering.
+const port = await freePort(Number(arg("port", 9333)));
+
+function freePort(from) {
+  return new Promise((resolve, reject) => {
+    const attempt = (candidate, tries) => {
+      const probe = net.createServer();
+      probe.once("error", (err) => {
+        if (err.code === "EADDRINUSE" && tries < 24) attempt(candidate + 1, tries + 1);
+        else reject(err);
+      });
+      probe.listen(candidate, "127.0.0.1", () => probe.close(() => resolve(candidate)));
+    };
+    attempt(from, 0);
+  });
+}
 
 const CANDIDATES =
   platform === "win32"
@@ -90,15 +112,30 @@ function send(method, params = {}, sessionId) {
 }
 
 async function waitForBrowser() {
+  let info = null;
   for (let i = 0; i < 60; i += 1) {
+    // Fail fast, and out loud, if the browser we started is gone: that is the one state where waiting
+    // forever looks like a slow page.
+    if (chrome.exitCode !== null || chrome.killed) {
+      throw new Error(`the browser we spawned exited with code ${chrome.exitCode} — port ${port} was taken before it started`);
+    }
     try {
-      const info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
-      return info.webSocketDebuggerUrl;
+      info = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+      break;
     } catch {
+      // Chrome has not opened the endpoint yet. Every transport error lands here as a failed fetch, so
+      // nothing distinguishes "not listening yet" from "refused" — the retry loop is the answer to both,
+      // and the exit check above is what makes a dead browser a real error instead of a 15-second wait.
       await sleep(250);
     }
   }
-  throw new Error(`no DevTools endpoint on ${port} — is Chrome/Edge installed at ${browser}?`);
+  if (!info) throw new Error(`no DevTools endpoint on ${port} — is Chrome/Edge installed at ${browser}?`);
+  // Loud on purpose: an endpoint that belongs to a different run answers on the port, and connecting to it
+  // produced the worst failure this harness ever had — a run that hung for minutes on pages from someone
+  // else's browser, in a temporary profile that run had already deleted.
+  const url = info.webSocketDebuggerUrl ?? "";
+  if (!url.includes(`:${port}/`)) throw new Error(`endpoint on ${port} reports ${url || "nothing"}, which is not this run's browser`);
+  return url;
 }
 
 const wsUrl = await waitForBrowser();
@@ -237,6 +274,18 @@ async function page(path, battery, ignore = []) {
   const kept = errors.filter((line) => !ignore.some((re) => re.test(line)));
   results.push({ path, value, errors: kept, warnings });
   if (kept.length) failures.push(`${path} logged ${kept.length} error(s): ${kept.slice(0, 3).join(" | ")}`);
+  return value;
+}
+
+// Identical to page(), except that the label in the report can differ from the URL that gets fetched.
+// The reload and reduced-motion passes need that: handing a made-up label to goto() navigates to a 404
+// and then reports the 404 page as if it were the page under test.
+async function runAt(path, label, battery) {
+  await goto(path);
+  const value = await evaluate(battery);
+  const { errors, warnings } = drain();
+  results.push({ path: label, value, errors, warnings });
+  if (errors.length) failures.push(`${label} logged ${errors.length} error(s): ${errors.slice(0, 3).join(" | ")}`);
   return value;
 }
 
@@ -641,6 +690,90 @@ drain();
 results.push({ path: "/ (scripts removed)", value: { noJs, noJsFacts }, errors: [], warnings: [] });
 if (!noJsFacts.stillPainted) failures.push("/ with JavaScript removed the CSS still is not painted — the poster fallback is not the renderer of record");
 
+// ---- M4: the table has to survive the guest putting the phone down
+// The share link proves the decode. This proves the storage: add through the real control, navigate away,
+// come back, and ask whether the same table is sitting there. Two loads of the same route in the same
+// target is the reload — no page.close, no new tab, no fake.
+const seeded = await runAt("/table", "add, then reload", `
+  const all = (s) => [...document.querySelectorAll(s)];
+  const q = (s) => document.querySelector(s);
+  const before = all("[data-inc]").length;
+  all("[data-add]")[0].click();
+  await new Promise((r) => setTimeout(r, 180));
+  return {
+    before,
+    after: all("[data-inc]").length,
+    total: q("[data-total]") ? q("[data-total]").textContent.trim() : null,
+    stored: (localStorage.getItem("habibi-haven:table:v1") || "").slice(0, 240),
+  };
+`);
+const restored = await runAt("/table", "table restored", `
+  const all = (s) => [...document.querySelectorAll(s)];
+  const q = (s) => document.querySelector(s);
+  return {
+    rows: all("[data-inc]").length,
+    total: q("[data-total]") ? q("[data-total]").textContent.trim() : null,
+    // On /table the house-set buttons are what say "this is already on the table" — data-on belongs to the
+    // party dots here, so counting [data-card][data-on] would have been a MenuExplorer hook wearing this
+    // page's clothes, and it would have read 0 on a correctly restored table.
+    marked: all("[data-add]").filter((b) => /On the table/.test(b.textContent)).length,
+    stored: (localStorage.getItem("habibi-haven:table:v1") || "").slice(0, 120),
+  };
+`);
+if (seeded.after <= seeded.before) failures.push(`/table the first "add" left ${seeded.after} row(s) where there were ${seeded.before}`);
+if (!seeded.stored) failures.push("/table adding a dish wrote nothing to localStorage — there is no table to restore");
+if (restored.rows !== seeded.after) failures.push(`/table came back with ${restored.rows} row(s), but the load before it had ${seeded.after} — the saved table does not restore`);
+else if (restored.total !== seeded.total) failures.push(`/table restored ${restored.rows} row(s) but the total went ${seeded.total} → ${restored.total} across the reload`);
+else if (restored.marked === 0) failures.push("/table restored the rows but no card is marked as on the table — the page forgot which dishes it is holding");
+await evaluate(`localStorage.removeItem("habibi-haven:table:v1"); return true;`);
+drain();
+
+// ---- M3: dropping a tier must cost pixels, never content
+// Emulating the media feature is a browser capability, not a site feature, so nothing in the product
+// bends for this. `prefers-reduced-motion: reduce` has to route the gate to `poster`: no canvas, the CSS
+// photograph left exactly as it is, and every dish still where it was. A unit test on decide() proves the
+// table of rules; only the browser proves the page reads the same rules.
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+await goto("/");
+const poster = await evaluate(`
+  const q = (s) => document.querySelector(s);
+  const all = (s) => [...document.querySelectorAll(s)];
+  const door = q("[data-door]");
+  return {
+    tier: door ? door.dataset.tier : null,
+    reason: door ? door.dataset.tierReason : null,
+    doorCanvas: !!q("[data-door] canvas"),
+    anyCanvas: all("canvas").length,
+    stillPainted: q(".hero__still") ? getComputedStyle(q(".hero__still")).backgroundImage.includes("venue-facade-night") : false,
+    heroText: q("h1") ? q("h1").textContent.trim().slice(0, 44) : null,
+    cards: all("[data-card]").length,
+    stuckAtLoad: all("[data-reveal]").filter((el) => Number(getComputedStyle(el).opacity) < 0.1).length,
+  };
+`);
+drain();
+results.push({ path: "/ (reduced motion)", value: poster, errors: [], warnings: [] });
+if (poster.tier !== "poster") failures.push(`/ a browser asking for reduced motion was given tier ${JSON.stringify(poster.tier)} (${poster.reason}), not poster`);
+if (poster.doorCanvas) failures.push("/ under reduced motion the door mounted a canvas anyway — the WebGL branch is supposed to stop at poster");
+if (!poster.stillPainted) failures.push("/ under reduced motion the CSS photograph is not painted, so the fallback has nothing to show");
+if (poster.stuckAtLoad > 0) failures.push(`/ under reduced motion ${poster.stuckAtLoad} reveal element(s) sit at opacity 0 at load — motion was removed and the content with it`);
+
+await goto("/menu");
+const posterMenu = await evaluate(`
+  const all = (s) => [...document.querySelectorAll(s)];
+  const q = (s) => document.querySelector(s);
+  return {
+    total: all("[data-card]").length,
+    visible: all("[data-card]").filter((c) => !c.hasAttribute("hidden")).length,
+    groups: all("[data-group]").length,
+    count: q("[data-count]") ? q("[data-count]").textContent.trim().slice(0, 46) : null,
+  };
+`);
+drain();
+results.push({ path: "/menu (reduced motion)", value: posterMenu, errors: [], warnings: [] });
+if (posterMenu.visible !== posterMenu.total) failures.push(`/menu under reduced motion shows ${posterMenu.visible} of ${posterMenu.total} dishes — a weaker tier is not allowed to change the menu`);
+if (posterMenu.groups !== 6) failures.push(`/menu under reduced motion found ${posterMenu.groups} group containers, expected 6`);
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+
 // ---------------------------------------------------------------- report
 const pad = (s, n) => String(s).padEnd(n);
 console.log(`verify-runtime  browser ${browser.split("/").pop()}  ${base}\n`);
@@ -655,6 +788,27 @@ console.log(JSON.stringify(results.map((r) => ({ [r.path]: r.value })), null, 1)
 if (failures.length) {
   console.error(`\nverify-runtime: ${failures.length} problem(s)`);
   console.error(failures.map((f) => `  ${f}`).join("\n"));
-  process.exit(1);
+  await goodbye(1);
 }
 console.log("\nverify-runtime: ok — no console errors on any route, door paints, dial drives the rig, menu and table interactions respond, no-JS still renders");
+await goodbye(0);
+
+// The report is the last thing this script needs from the browser. An open DevTools socket and a live
+// Chrome child keep Node's event loop alive forever, so a green run printed its verdict and then never
+// exited — which is how orphaned headless browsers piled up on the debug port and made the following run
+// attach to someone else's. Both paths say goodbye on the way out.
+async function goodbye(code) {
+  try {
+    ws?.close();
+  } catch {
+    /* the socket is already gone */
+  }
+  chrome.kill();
+  await sleep(150);
+  try {
+    rmSync(profile, { recursive: true, force: true });
+  } catch {
+    /* cleanup already ran, or Windows has not let go of the directory yet */
+  }
+  process.exit(code);
+}

@@ -82,6 +82,15 @@ const {
       }
     : null;
   const gate = decide(readEnvironment());
+  // Which tier this device landed on gets written on the door. Not for styling — for the moment something
+  // looks wrong on a weak phone, when `document.querySelector("[data-door]").dataset.tier` answers it
+  // without a debugger. It is also the only way verify-runtime.mjs can prove that a browser asking for
+  // reduced motion really does get `poster` with no canvas: the decision table itself is unit-tested, but
+  // a passing unit test is not evidence that the live page reads the same environment.
+  if (host) {
+    host.dataset.tier = gate.tier;
+    host.dataset.tierReason = gate.reason;
+  }
   // `2d` and `poster` stop here: no canvas, no three, and the CSS still underneath stays exactly as it is.
   if (host && props && (gate.tier === "full" || gate.tier === "lite")) {
     // Three arrives only down this branch, and a failed chunk leaves the photograph untouched.
