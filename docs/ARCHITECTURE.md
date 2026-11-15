@@ -249,9 +249,33 @@ any teal that enters the token set.
 | Ingest | `probe-ingest.mjs` reports whether a headless read of menu.or.ke is possible; if not, M0 records the scripted-read fallback and the plan proceeds. Image refs HEAD-checked before mirroring. |
 | Content | `build-content.mjs` fails the build if any item lacks family/section/price/photo-reference; count assertions: 243 items in, 243 out, 173 unique photos; `check-drift.mjs` exits non-zero on unreviewed upstream change |
 | Unit | `lib/table.mjs` (party scaling, cake formats, totals, KSh formatting, WhatsApp URL escaping), `lib/hours.mjs` with TZ frozen to Africa/Nairobi at 06:29/06:30/22:59/23:00, taxonomy mapping for the two over-collected headings |
-| E2E | Playwright at 1440×900, 1280×800, 390×844: configurator total updates, `/table` URL round-trips, menu search/filter, all four gate tiers forced (reduced-motion, WebGL blocked, save-data) each producing a working checkout |
-| A11y/perf | axe-core 0 AA violations; Lighthouse CI against the budgets above; 30-frame measurement downgrade proven on a throttled profile |
-| Preview | static build deployed unlisted with noindex; a screen-recorded walkthrough plus a per-route screenshot pack |
+| E2E | _(planned, superseded by Amendment A6)_ Playwright at 1440×900, 1280×800, 390×844: configurator total updates, `/table` URL round-trips, menu search/filter, all four gate tiers forced (reduced-motion, WebGL blocked, save-data) each producing a working checkout |
+| A11y/perf | _(planned, superseded by Amendment A6)_ axe-core 0 AA violations; Lighthouse CI against the budgets above; 30-frame measurement downgrade proven on a throttled profile |
+| Preview | static build served by `astro preview` on 4322 and verified against it; a screen-recorded walkthrough plus a per-route screenshot pack |
+
+### Amendment A6 — the E2E and a11y rows above were written before the no-downloading directive
+
+The plan named Playwright, axe-core and Lighthouse CI. None of them are installed, and installing them is
+against the standing instruction, so the row was a description of a system that does not exist. What
+actually runs is `scripts/verify-runtime.mjs`: it launches the Chrome already on the machine, drives it
+over the DevTools protocol with no packages at all, and fails the build on any console error, any broken
+contract or any measurement that contradicts the claim being tested. It takes ~62 s and covers:
+
+| Claim | How it is proven in a real browser | Last measured |
+|---|---|---|
+| No console errors anywhere | every route plus a deliberate 404, drained after each navigation | 12 route passes, 0 errors, 0 warnings |
+| The door contributes pixels | screenshot with the canvas, screenshot without, compare | mean shifts, unique colours shift |
+| The dial reaches the renderer, not just the CSS | `DoorScene` writes `data-rig-exposure` beside `renderer.toneMappingExposure`; the scene region is shot at 20:00 and 14:00 with the photograph hidden | exposure 1.127 → 0.979; cross-hour distance 42–44 vs same-hour, margin 1.97–2.99× over four consecutive runs |
+| A weaker tier costs pixels, never content | `Emulation.setEmulatedMedia` asks for reduced motion | tier `poster`, reason `prefers-reduced-motion`, 0 canvases, still painted, 0 reveals stuck; /menu 243/243 dishes in 6 groups |
+| A saved table survives the phone being put down | add through the real button, reload the route, re-read | 0 → 1 row, `habibi-haven:table:v1` written, restored 1 row / KSh 2,300 / 1 marked button |
+| The pointer magnet works and lets go | synthesised `pointermove` on `[data-magnetic]`, then `pointerleave` | offset 16.83 px, released to "" |
+| No JavaScript still books a table | scripts removed before load | hero photograph painted by CSS, working `wa.me` href |
+
+Not proven, and not claimed: axe-core AA (no accessibility engine is installed — the harness checks
+`aria-hidden`, roles, labels and focus-visible structurally instead), Lighthouse budgets, and the `2d`
+tier in a browser (would need `--disable-webgl`; it is unit-tested only). The margin on the hour test is
+deliberately shown because it is only ~2× the lamp-breathing noise, and a gate that hides its own headroom
+is not evidence.
 
 ## Milestones
 

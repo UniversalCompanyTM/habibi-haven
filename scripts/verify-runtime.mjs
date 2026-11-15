@@ -251,13 +251,52 @@ async function pixelStats(base64) {
     const d = g.getImageData(0, 0, c.width, c.height).data;
     const mean = [0, 0, 0]; let n = 0;
     const uniq = new Set();
+    // A coarse 8x8 luminance grid, sampled at the SAME pixel coordinates every frame: the stride is a
+    // constant of the image size, so two frames of the same page are comparable block against block. That
+    // is what makes "did the room change" answerable at all — a whole-frame mean moves a point or two when
+    // the lamps strike up, and a block grid shows where the light went.
+    const B = 8;
+    const lum = new Float64Array(B * B), seen = new Float64Array(B * B);
     // stride: sample ~1 in every 900 pixels; enough to characterise a 1440x1000 frame, cheap to compare
     for (let i = 0; i < d.length; i += 4 * 887) {
       mean[0] += d[i]; mean[1] += d[i + 1]; mean[2] += d[i + 2]; n += 1;
       uniq.add((d[i] >> 4) + "," + (d[i + 1] >> 4) + "," + (d[i + 2] >> 4));
+      const p = i / 4;
+      const x = p % c.width, y = (p - x) / c.width;
+      const b = ((y * B) / c.height | 0) * B + ((x * B) / c.width | 0);
+      lum[b] += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      seen[b] += 1;
     }
-    return { mean: mean.map((v) => Math.round(v / n)), uniq: uniq.size, size: [c.width, c.height] };
+    const sig = [];
+    for (let b = 0; b < B * B; b += 1) sig.push(seen[b] ? Math.round((lum[b] / seen[b]) * 100) / 100 : -1);
+    return { mean: mean.map((v) => Math.round(v / n)), uniq: uniq.size, size: [c.width, c.height], sig };
   `);
+}
+
+// Root-mean-square difference between two signatures. Two frames of a lit scene that is merely breathing
+// differ by a couple of units; a rig that moved an hour differs by tens.
+function sigDistance(a, b) {
+  if (!a?.sig || !b?.sig) return null;
+  let total = 0;
+  for (let i = 0; i < a.sig.length; i += 1) total += (a.sig[i] - b.sig[i]) ** 2;
+  return Math.round(Math.sqrt(total / a.sig.length) * 100) / 100;
+}
+
+// Screenshot one element's box, so a claim about the door can be measured on the door instead of on the
+// whole viewport, where the page background answers to the clock too and would take the credit.
+async function shotRegion(selector) {
+  const clip = await evaluate(`
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  `);
+  if (!clip || !clip.width || !clip.height) return null;
+  const { data } = await inPage("Page.captureScreenshot", {
+    format: "png",
+    clip: { ...clip, scale: 1 },
+  });
+  return pixelStats(data);
 }
 
 // ---------------------------------------------------------------- batteries
@@ -727,6 +766,89 @@ else if (restored.total !== seeded.total) failures.push(`/table restored ${resto
 else if (restored.marked === 0) failures.push("/table restored the rows but no card is marked as on the table — the page forgot which dishes it is holding");
 await evaluate(`localStorage.removeItem("habibi-haven:table:v1"); return true;`);
 drain();
+
+// ---- M5: the dial has to reach the renderer, not stop in the stylesheet
+// The home battery already proves --hour and --night move and that the labels follow. It does not prove
+// the WebGL room is lit differently, because the CSS responds to the same custom properties and can change
+// the whole frame on its own. So: hide the photograph, put the camera on the door region only, read the
+// exposure the component wrote when it set renderer.toneMappingExposure, and compare two frames of the
+// same hour against two frames of another hour. Breathing lamps and drifting dust make same-hour frames
+// differ; the claim is only true if the two hours differ by clearly more than that.
+await goto("/");
+const setHour = async (value) => {
+  const at = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const door = q("[data-door]");
+    const dialEl = document.querySelectorAll("[data-dial]")[1] || q("[data-dial]");
+    const input = dialEl ? dialEl.querySelector("[data-dial-input]") : null;
+    const still = q(".hero__still");
+    if (still) still.style.display = "none";
+    if (!input || !door) return { missing: true, canvas: !!q("[data-door] canvas") };
+    input.value = ${JSON.stringify(String(value))};
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      missing: false,
+      hour: getComputedStyle(document.documentElement).getPropertyValue("--hour").trim(),
+      night: getComputedStyle(document.documentElement).getPropertyValue("--night").trim(),
+      exposure: door.dataset.rigExposure ?? null,
+      rigNight: door.dataset.rigNight ?? null,
+      canvas: !!q("[data-door] canvas"),
+      tier: door.dataset.tier ?? null,
+    };
+  `);
+  const first = await shotRegion("[data-scene]");
+  await evaluate(`await new Promise((r) => setTimeout(r, 260)); return true;`);
+  const second = await shotRegion("[data-scene]");
+  return { at, first, second };
+};
+const dusk = await setHour(20);
+const noon = await setHour(14);
+await evaluate(`
+  const still = document.querySelector(".hero__still");
+  if (still) still.style.display = "";
+  return true;
+`);
+const crossPairs = [dusk.first, dusk.second]
+  .flatMap((a) => [noon.first, noon.second].map((b) => sigDistance(a, b)))
+  .filter((d) => d !== null);
+const hourFrames = {
+  withinDusk: sigDistance(dusk.first, dusk.second),
+  withinNoon: sigDistance(noon.first, noon.second),
+  cross: crossPairs.length ? Math.min(...crossPairs) : null,
+};
+// The margin matters as much as the ordering. At dusk the lamps breathe, so two frames of the SAME hour
+// can sit ~23 luminance units apart while two hours sit ~44 — real, but only about twice the noise.
+// Anything under 1.5x is not a difference a guest could call, so it fails below that instead of squeaking
+// past, and the ratio is printed rather than buried.
+hourFrames.margin =
+  hourFrames.cross !== null && Math.max(hourFrames.withinDusk, hourFrames.withinNoon) > 0
+    ? Math.round((hourFrames.cross / Math.max(hourFrames.withinDusk, hourFrames.withinNoon)) * 100) / 100
+    : Infinity;
+drain();
+results.push({
+  path: "/ (hour pixels)",
+  value: { dusk: dusk.at, noon: noon.at, ...hourFrames },
+  errors: [],
+  warnings: [],
+});
+if (dusk.at.missing || noon.at.missing) failures.push("/ no dial input or no door to measure the hour against");
+else if (!dusk.at.canvas) failures.push(`/ the hour test ran on tier ${dusk.at.tier} with no canvas — there is no WebGL room to prove anything about`);
+else {
+  if (dusk.at.exposure === noon.at.exposure) {
+    failures.push(`/ the renderer kept the same exposure at 20:00 and 14:00 (${dusk.at.exposure}) — the dial writes the stylesheet but not the scene`);
+  }
+  if (Number(dusk.at.exposure) <= Number(noon.at.exposure)) {
+    failures.push(`/ exposure went the wrong way into the evening: ${noon.at.exposure} at 14:00 → ${dusk.at.exposure} at 20:00, and rig.js raises it as night comes on`);
+  }
+  if (hourFrames.cross === null) failures.push("/ the door region could not be screenshotted, so the hour pixels were never measured");
+  else {
+    const within = Math.max(hourFrames.withinDusk, hourFrames.withinNoon);
+    if (hourFrames.cross <= within * 1.5) {
+      failures.push(`/ the door at 20:00 vs 14:00 differs by ${hourFrames.cross}, only ${hourFrames.margin}x more than two frames of the same hour (${within}) — the room is not relighting, the lamps are just breathing`);
+    }
+  }
+}
 
 // ---- M3: dropping a tier must cost pixels, never content
 // Emulating the media feature is a browser capability, not a site feature, so nothing in the product

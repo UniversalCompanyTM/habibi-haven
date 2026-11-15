@@ -146,6 +146,7 @@ const {
     haven.applyRig(values, readPalette());
     haven.resize(host.clientHeight, renderer.getPixelRatio());
     renderer.toneMappingExposure = values.exposure;
+    writeRig(host, values);
     haven.update(0, 0, 0, values);
     renderer.render(scene, camera);
 
@@ -174,6 +175,7 @@ const {
       values = rigValues(detail?.night ?? readClock().night, detail?.open);
       haven.applyRig(values, readPalette());
       renderer.toneMappingExposure = values.exposure;
+      writeRig(host, values);
       if (reduced) renderStatic();
     };
 
@@ -275,5 +277,15 @@ const {
       renderer.dispose();
     }
     addEventListener("pagehide", stop);
+  }
+
+  // `data-tier` says which door a device got; these two say what the room is currently lit like, and they
+  // are the only outward evidence that the rig reached the renderer rather than stopping in the
+  // stylesheet. `rigExposure` is written next to `renderer.toneMappingExposure = …` for that reason: if
+  // the number is on the element, the property was set on the WebGL renderer, which is the whole claim the
+  // dial makes. Nothing in the CSS reads either attribute.
+  function writeRig(host: HTMLElement, values: ReturnType<typeof rigValues>) {
+    host.dataset.rigExposure = values.exposure.toFixed(3);
+    host.dataset.rigNight = values.night.toFixed(3);
   }
 </script>
