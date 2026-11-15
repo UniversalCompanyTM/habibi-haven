@@ -914,7 +914,10 @@ if (visit && visit.allExternalSecure.length) failures.push(`/visit links over ht
 if (visit && !visit.mapLink) failures.push("/visit offers no Google Maps link for the Koinange Street address");
 if (visit && visit.brokenLocal.length) failures.push(`/visit links to routes this build does not have: ${visit.brokenLocal.join(", ")}`);
 
-// ---- no-JS: the CSS still is the renderer of record, so content must survive without JavaScript
+// ---- scripts killed mid-session: the poster is still the renderer when the bundle dies
+// Not the no-JS battery — the row below this section is. Deleting the tags after the fact leaves html.js
+// set and the already-intersected sections revealed, so it measures a page whose JavaScript died halfway,
+// which is its own failure mode and the one the WebGL door has to survive.
 await goto("/");
 await evaluate(`
   document.querySelectorAll("script").forEach((s) => s.remove());
@@ -930,8 +933,75 @@ const noJsFacts = await evaluate(`
   };
 `);
 drain();
-results.push({ path: "/ (scripts removed)", value: { noJs, noJsFacts }, errors: [], warnings: [] });
-if (!noJsFacts.stillPainted) failures.push("/ with JavaScript removed the CSS still is not painted — the poster fallback is not the renderer of record");
+results.push({ path: "/ (scripts killed mid-run)", value: { noJs, noJsFacts }, errors: [], warnings: [] });
+if (!noJsFacts.stillPainted) failures.push("/ after the scripts were deleted the CSS still is not painted — the poster fallback is not the renderer of record");
+
+// ---- the document that never executed a script, measured without executing one
+/*
+  Deleting the tags is not the same as JavaScript never running, and the difference is the whole claim.
+  Base.astro:132 puts html.js on the root from an inline script during head parsing, so by the time the
+  tags could be deleted the class was already there — and global.css:327 then holds every [data-reveal] at
+  opacity 0 until an IntersectionObserver adds .is-in. A scriptless guest never sets the class and reads
+  global.css:323 (opacity 1) instead. Those are two different documents, and only one of them is the
+  promise the site makes: nobody has to run JavaScript to read Habibi Haven.
+
+  So this probe asks the browser rather than the page. Emulation.setScriptExecutionDisabled stops the next
+  load from executing anything, the inline setter included, which is the point of it. DOM.getDocument and
+  CSS.getComputedStyleForNode then answer from the renderer's own tree and style engine: neither evaluates
+  JavaScript in the page, so the measurement cannot wake the site up in order to prove it was awake.
+*/
+async function noJsStyleProbe(route) {
+  const probe = { route, jsClassOnRoot: null, revealNodes: null, opacity: [], probeError: null };
+  try {
+    await inPage("DOM.enable");
+    await inPage("CSS.enable");
+    const { root } = await inPage("DOM.getDocument", { depth: 0 });
+    const jsClass = await inPage("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "html.js" });
+    const reveals = await inPage("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-reveal]" });
+    const ids = reveals.nodeIds || [];
+    probe.jsClassOnRoot = (jsClass.nodeIds || []).length;
+    probe.revealNodes = ids.length;
+    // First, middle and last in document order. The last is the block furthest down the page — the one an
+    // observer would never have reached on a guest's first screen, and therefore the one a no-JS claim
+    // actually lives or dies on.
+    const picks = [...new Set([0, Math.floor(ids.length / 2), ids.length - 1])].filter((i) => i >= 0 && i < ids.length);
+    for (const i of picks) {
+      const { computedStyle } = await inPage("CSS.getComputedStyleForNode", { nodeId: ids[i] });
+      const found = (computedStyle || []).find((p) => p.name === "opacity");
+      probe.opacity.push(found ? found.value : null);
+    }
+  } catch (error) {
+    probe.probeError = String(error?.message ?? error).slice(0, 180);
+  }
+  return probe;
+}
+
+await inPage("Emulation.setScriptExecutionDisabled", { value: true });
+await goto("/");
+const noJsHome = await noJsStyleProbe("/");
+const noJsHomeLog = drain();
+await goto("/menu");
+const noJsMenu = await noJsStyleProbe("/menu");
+const noJsMenuLog = drain();
+await inPage("Emulation.setScriptExecutionDisabled", { value: false });
+// goto clears the event buffer, so each load's complaints have to be collected while that load is current.
+results.push({
+  path: "no-JS (execution off)",
+  value: { noJsHome, noJsMenu },
+  errors: [...noJsHomeLog.errors, ...noJsMenuLog.errors],
+  warnings: [...new Set([...noJsHomeLog.warnings, ...noJsMenuLog.warnings])],
+});
+for (const row of [noJsHome, noJsMenu]) {
+  if (row.probeError) {
+    failures.push(`${row.route}: the script-disabled probe could not run (${row.probeError}) — the no-JS readability claim is unmeasured, and an unmeasured claim does not get to stay in the pitch`);
+    continue;
+  }
+  if (row.jsClassOnRoot !== 0)
+    failures.push(`${row.route}: html.js is on the root with script execution disabled, so global.css:327 is hiding every [data-reveal] at opacity 0 with no observer left to reveal them`);
+  if (!row.opacity.length || row.opacity.some((v) => v !== "1"))
+    failures.push(`${row.route}: [data-reveal] computes to ${JSON.stringify(row.opacity)} in a document that executed no script — content is invisible to a guest without JavaScript`);
+}
+await goto("/");
 
 // ---- M4: the table has to survive the guest putting the phone down
 // The share link proves the decode. This proves the storage: add through the real control, navigate away,
@@ -1986,6 +2056,13 @@ for (const r of results) {
   for (const e of r.errors) console.log(`   ERR ${e}`);
   for (const w of r.warnings) console.log(`   warn ${w}`);
 }
+// The verdict line below promises "no console errors on any route". Until now it printed that over any
+// number of errors, because a row's errors were only ever echoed — nothing turned them into a problem. A
+// promise the reporter cannot keep is worse than no promise, so the count is now a gate. Every route in
+// the last run reported errors 0, so this is tightening, not tripping.
+const loudRows = results.filter((r) => r.errors.length);
+if (loudRows.length)
+  failures.push(`${loudRows.reduce((n, r) => n + r.errors.length, 0)} console error(s) across ${loudRows.map((r) => r.path).join(", ")} — the run cannot also say the routes are clean`);
 console.log("\n--- measurements");
 console.log(JSON.stringify(results.map((r) => ({ [r.path]: r.value })), null, 1));
 
