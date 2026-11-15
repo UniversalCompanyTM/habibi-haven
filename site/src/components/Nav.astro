@@ -61,18 +61,29 @@ const links = [
 
 <script>
   import { isOpen, nextChange, nairobiMinutes, minutesToLabel } from "../lib/hours.mjs";
+  import { component } from "../lib/page.mjs";
 
-  const text = document.querySelector("[data-status-text]");
-  const pulse = document.querySelector(".pulse");
+  // The header is replaced by every navigation and this module runs once, so the wiring follows the
+  // element instead of the script. Capturing `text`/`pulse` at module scope and setting one interval over
+  // them is how a countdown ends up repainting a node that left with the previous page: the number in the
+  // report stays alive, the one on screen freezes.
+  component("[data-status]", {
+    mount(status) {
+      const text = status.querySelector("[data-status-text]");
+      const pulse = status.querySelector(".pulse");
 
-  function tick() {
-    if (!text) return;
-    const open = isOpen();
-    text.textContent = `${open ? "Open now" : "Closed"} · ${nextChange().label} · ${minutesToLabel(nairobiMinutes())} Nairobi`;
-    if (pulse) pulse.toggleAttribute("data-closed", !open);
-  }
+      const tick = () => {
+        if (!text) return;
+        const open = isOpen();
+        text.textContent = `${open ? "Open now" : "Closed"} · ${nextChange().label} · ${minutesToLabel(nairobiMinutes())} Nairobi`;
+        if (pulse) pulse.toggleAttribute("data-closed", !open);
+      };
 
-  tick();
-  // A minute of drift is invisible to a guest; a rAF loop burning CPU to keep a clock current is not.
-  setInterval(tick, 30_000);
+      tick();
+      // A minute of drift is invisible to a guest; a rAF loop burning CPU to keep a clock current is not.
+      const timer = setInterval(tick, 30_000);
+      return () => clearInterval(timer);
+    },
+    unmount: (stop) => stop?.(),
+  });
 </script>

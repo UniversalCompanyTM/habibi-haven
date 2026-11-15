@@ -9,6 +9,14 @@ import { DIAL_MAX, DIAL_MIN, nightAmount, rigFor, snapHour } from "./hours.mjs";
 
 export const HOUR_EVENT = "hh:hour";
 
+// The hour a person moved the dial to during this visit, or `null` while nobody has. This is the only
+// reason the value outlives a page: a router swap installs the incoming document's `<html>` wholesale,
+// and that one only knows the hour the build ran at. Without this, dialling 03:00 to see the room at
+// night and then opening /menu would put the lights back to whoever-built-it-o'clock, which reads as the
+// dial having been forgotten rather than the page having changed.
+/** @type {number | null} */
+let dialled = null;
+
 /**
  * Dial the room to an hour and tell everyone.
  *
@@ -23,9 +31,15 @@ export function applyHour(hour) {
   const root = document.documentElement;
   root.style.setProperty("--hour", String(h));
   root.style.setProperty("--night", night.toFixed(3));
+  dialled = h;
   const rig = rigFor(h);
   document.dispatchEvent(new CustomEvent(HOUR_EVENT, { detail: rig }));
   return rig;
+}
+
+/** The hour this visitor asked for, or `null` if the room is still on the build's clock. */
+export function liveHour() {
+  return dialled;
 }
 
 /** Whatever the HTML arrived with — the build-time hour, unless a script already moved it. */

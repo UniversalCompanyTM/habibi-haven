@@ -94,10 +94,14 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
   // "Watch the day go" while `astro build` reported success — a script block resolves names at click
   // time, not build time. Both lists have to be edited together.
   import { DIAL_MAX, DIAL_MIN, nairobiHour, nextChange, rigFor } from "../lib/hours.mjs";
+  import { collection } from "../lib/page.mjs";
 
   // Every dial on the page gets wired, because a hero carries a small one and the rig section a full
-  // one, and a `document.querySelector` would silently leave the second dead.
-  document.querySelectorAll<HTMLElement>("[data-dial]").forEach(wire);
+  // one, and a `document.querySelector` would silently leave the second dead. `collection` rather than a
+  // `forEach` at module scope because the module runs once: after a navigation the dials are new elements,
+  // and a second `forEach(wire)` over the document would bind the surviving ones twice — two playback
+  // intervals, two countdowns, one handle answering to both.
+  collection("[data-dial]", { mount: wire, unmount: (stop) => stop?.() });
 
   function wire(dial: HTMLElement) {
     const input = dial.querySelector<HTMLInputElement>("[data-dial-input]");
@@ -147,7 +151,8 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
 
     // One listener. The handle, the labels and the countdown all repaint from the event the writer
     // fired, so there is no second copy of this rendering to drift out of step with the first.
-    document.addEventListener(HOUR_EVENT, (event) => paint((event as CustomEvent).detail.hour));
+    const onHour = (event: Event) => paint((event as CustomEvent).detail.hour);
+    document.addEventListener(HOUR_EVENT, onHour);
     paint(Number(input.value));
     tickCountdown();
 
@@ -194,14 +199,26 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
     });
 
     // A looping timer in a hidden tab is nobody's idea of motion, and reduced-motion gets no autoplay.
-    addEventListener("pagehide", stop);
-    document.addEventListener("visibilitychange", () => {
+    const onHide = () => {
       if (document.hidden) stop();
-    });
+    };
+    addEventListener("pagehide", stop);
+    document.addEventListener("visibilitychange", onHide);
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) play?.setAttribute("hidden", "");
 
     // The countdown is the wall clock; the dial is the show. They are allowed to disagree, and saying
     // which is which is the whole point of putting both on the panel.
-    setInterval(tickCountdown, 60_000);
+    const countdown = setInterval(tickCountdown, 60_000);
+
+    // Everything with a teardown cost is returned rather than left running: this dial's hour listener and
+    // two intervals. A swapped-out dial keeps no listeners; a dialled-back-to home page gets one fresh set
+    // per live dial, which is the property `collection` exists to hold.
+    return () => {
+      stop();
+      document.removeEventListener(HOUR_EVENT, onHour);
+      removeEventListener("pagehide", stop);
+      document.removeEventListener("visibilitychange", onHide);
+      clearInterval(countdown);
+    };
   }
 </script>

@@ -15,40 +15,45 @@
 <span class="cursor-ring" aria-hidden="true" data-ring></span>
 
 <script>
-  const fine = matchMedia("(pointer: fine)").matches;
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const dot = document.querySelector<HTMLElement>("[data-cursor]");
-  const ring = document.querySelector<HTMLElement>("[data-ring]");
+  import { component } from "../lib/page.mjs";
 
-  if (fine && !reduced && dot && ring) {
-    // Not "cursor-on" yet: the pair stays invisible until a real mouse actually moves, so nobody
-    // meets a dot parked in the middle of their screen that belongs to nobody.
-    const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
-    const ringPos = { ...pointer };
-    let raf = 0;
-    let visible = false;
+  // Both spans come from this one component and a navigation replaces the pair together, so the dot is the
+  // host and the ring is looked up per mount. What must not be module-scope is the pair itself: the first
+  // navigation would leave the loop writing transforms into two detached nodes while the new screen's
+  // cursor — the one on screen — got nothing.
+  component("[data-cursor]", {
+    mount(dot) {
+      const fine = matchMedia("(pointer: fine)").matches;
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const ring = document.querySelector<HTMLElement>("[data-ring]");
+      if (!fine || reduced || !ring) return null;
 
-    const draw = () => {
-      dot.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`;
-      ringPos.x += (pointer.x - ringPos.x) * 0.18;
-      ringPos.y += (pointer.y - ringPos.y) * 0.18;
-      ring.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`;
-      // The ring is an exponential lag, so "caught up" is asymptotic — 0.05px is the point where the next
-      // step would move it less than a pixel of the screen can show. Past that there is nothing to
-      // interpolate, and a loop that keeps firing to repaint two identical numbers is a wake-up every frame
-      // for as long as the tab is open, on a page where the pointer happened to stop. The next real move
-      // re-arms it, which is the whole cost of the trick: a cursor is only interesting while it is moving.
-      const settled = Math.abs(pointer.x - ringPos.x) < 0.05 && Math.abs(pointer.y - ringPos.y) < 0.05;
-      if (settled) {
-        raf = 0;
-        return;
-      }
-      raf = requestAnimationFrame(draw);
-    };
+      // Not "cursor-on" yet: the pair stays invisible until a real mouse actually moves, so nobody
+      // meets a dot parked in the middle of their screen that belongs to nobody.
+      const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
+      const ringPos = { ...pointer };
+      let raf = 0;
+      let visible = false;
 
-    addEventListener(
-      "pointermove",
-      (event: PointerEvent) => {
+      const draw = () => {
+        dot.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0)`;
+        ringPos.x += (pointer.x - ringPos.x) * 0.18;
+        ringPos.y += (pointer.y - ringPos.y) * 0.18;
+        ring.style.transform = `translate3d(${ringPos.x}px, ${ringPos.y}px, 0)`;
+        // The ring is an exponential lag, so "caught up" is asymptotic — 0.05px is the point where the next
+        // step would move it less than a pixel of the screen can show. Past that there is nothing to
+        // interpolate, and a loop that keeps firing to repaint two identical numbers is a wake-up every frame
+        // for as long as the tab is open, on a page where the pointer happened to stop. The next real move
+        // re-arms it, which is the whole cost of the trick: a cursor is only interesting while it is moving.
+        const settled = Math.abs(pointer.x - ringPos.x) < 0.05 && Math.abs(pointer.y - ringPos.y) < 0.05;
+        if (settled) {
+          raf = 0;
+          return;
+        }
+        raf = requestAnimationFrame(draw);
+      };
+
+      const onMove = (event: PointerEvent) => {
         if (event.pointerType !== "mouse") return;
         pointer.x = event.clientX;
         pointer.y = event.clientY;
@@ -62,52 +67,71 @@
         const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("a, button, [data-magnetic], input, [tabindex]");
         ring.toggleAttribute("data-hot", Boolean(target));
         magnetise(target, event);
-      },
-      { passive: true }
-    );
+      };
 
-    // one magnetic element at a time; leaving it puts its own transform back
-    let magnetised: HTMLElement | null = null;
-    function magnetise(target: HTMLElement | null, event: PointerEvent) {
-      const magnet = target?.closest<HTMLElement>("[data-magnetic]") ?? null;
-      if (magnet !== magnetised) {
+      // one magnetic element at a time; leaving it puts its own transform back
+      let magnetised: HTMLElement | null = null;
+      function magnetise(target: HTMLElement | null, event: PointerEvent) {
+        const magnet = target?.closest<HTMLElement>("[data-magnetic]") ?? null;
+        if (magnet !== magnetised) {
+          magnetised?.style.removeProperty("translate");
+          magnetised = magnet;
+        }
+        if (!magnet) return;
+        const box = magnet.getBoundingClientRect();
+        const pull = Number(magnet.dataset.magnetic) || 0.22;
+        const dx = event.clientX - (box.left + box.width / 2);
+        const dy = event.clientY - (box.top + box.height / 2);
+        const reach = Math.max(box.width, box.height) * 0.85;
+        const distance = Math.hypot(dx, dy);
+        if (distance > reach) {
+          magnet.style.removeProperty("translate");
+          return;
+        }
+        magnet.style.translate = `${dx * pull}px ${dy * pull}px`;
+      }
+
+      const onDown = () => ring.setAttribute("data-hot", "");
+      const onUp = () => ring.removeAttribute("data-hot");
+
+      // A pointer that leaves the window sends no further pointermove, so the last magnetised button would
+      // keep its offset forever: the guest comes back to a call-to-action leaning toward nobody. Same for
+      // the tab losing focus. Releasing both is what makes the pull safe to put on real links.
+      const release = () => {
         magnetised?.style.removeProperty("translate");
-        magnetised = magnet;
-      }
-      if (!magnet) return;
-      const box = magnet.getBoundingClientRect();
-      const pull = Number(magnet.dataset.magnetic) || 0.22;
-      const dx = event.clientX - (box.left + box.width / 2);
-      const dy = event.clientY - (box.top + box.height / 2);
-      const reach = Math.max(box.width, box.height) * 0.85;
-      const distance = Math.hypot(dx, dy);
-      if (distance > reach) {
-        magnet.style.removeProperty("translate");
-        return;
-      }
-      magnet.style.translate = `${dx * pull}px ${dy * pull}px`;
-    }
+        ring.removeAttribute("data-hot");
+      };
+      const onPointerLeave = () => release();
 
-    addEventListener("pointerdown", () => ring.setAttribute("data-hot", ""), { passive: true });
-    addEventListener("pointerup", () => ring.removeAttribute("data-hot"), { passive: true });
+      const onBlur = () => {
+        release();
+        document.body.classList.remove("cursor-on");
+        cancelAnimationFrame(raf);
+        // Zeroed, not just cancelled: the id survives a cancel, and the re-arm in pointermove now keys off
+        // `!raf`. Without this line the cursor would come back from another tab invisible and frozen.
+        raf = 0;
+        visible = false;
+      };
 
-    // A pointer that leaves the window sends no further pointermove, so the last magnetised button would
-    // keep its offset forever: the guest comes back to a call-to-action leaning toward nobody. Same for
-    // the tab losing focus. Releasing both is what makes the pull safe to put on real links.
-    const release = () => {
-      magnetised?.style.removeProperty("translate");
-      ring.removeAttribute("data-hot");
-    };
-    document.addEventListener("pointerleave", release, { passive: true });
+      addEventListener("pointermove", onMove, { passive: true });
+      addEventListener("pointerdown", onDown, { passive: true });
+      addEventListener("pointerup", onUp, { passive: true });
+      document.addEventListener("pointerleave", onPointerLeave, { passive: true });
+      addEventListener("blur", onBlur);
 
-    addEventListener("blur", () => {
-      release();
-      document.body.classList.remove("cursor-on");
-      cancelAnimationFrame(raf);
-      // Zeroed, not just cancelled: the id survives a cancel, and the re-arm in pointermove now keys off
-      // `!raf`. Without this line the cursor would come back from another tab invisible and frozen.
-      raf = 0;
-      visible = false;
-    });
-  }
+      return () => {
+        removeEventListener("pointermove", onMove);
+        removeEventListener("pointerdown", onDown);
+        removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointerleave", onPointerLeave);
+        removeEventListener("blur", onBlur);
+        cancelAnimationFrame(raf);
+        // The class lives on <body>, which the swap replaces anyway; removed here so the same document
+        // that started with a cursor does not keep hiding the system one after the component is gone.
+        document.body.classList.remove("cursor-on");
+        magnetised?.style.removeProperty("translate");
+      };
+    },
+    unmount: (stop) => stop?.(),
+  });
 </script>

@@ -129,6 +129,9 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 </html>
 
 <script>
+  import { applyHour, liveHour } from "../lib/rig-client.mjs";
+  import { component, onPage } from "../lib/page.mjs";
+
   /* Reveal on scroll, once. Where IntersectionObserver is missing the fallback adds the class
      immediately rather than never, so the failure mode is "no animation", not "invisible content". */
   const seen = new WeakSet();
@@ -221,23 +224,41 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
     });
   }
 
-  prep();
+  /* Two things the server cannot know about a swapped-in document, re-asserted on every page.
+     `html.js`: the inline script in <head> is keyed by its own text inside Astro's swap function, so after
+     the first navigation it is marked as already run and never adds the class again — and every
+     `[data-reveal]` and `.kin` on the incoming page then renders in the no-JavaScript state, which is
+     visible but unmoved. And the hour this visitor dialled, which lives in lib/rig-client.mjs rather than
+     in the build's HTML. The order relative to the components does not matter: `applyHour` fires `hh:hour`,
+     and the door and the dials repaint from that event rather than from whatever they read at mount. */
+  onPage(() => {
+    document.documentElement.classList.add("js");
+    const askedFor = liveHour();
+    if (askedFor !== null) applyHour(askedFor);
+    // A new page begins at its own scroll position. Carrying the old number over would make the first
+    // scroll of the visit read as a jump and hand back every reveal above it before the guest has passed.
+    lastY = scrollY;
+    prep();
+  });
   /* Islands (the menu explorer, the table builder) render after hydration and ask for a rescan. */
   document.addEventListener("hh:prep", () => prep(document));
 
-  const nav = document.querySelector(".nav");
-  const onScroll = () => {
-    if (!nav) return;
-    nav.toggleAttribute("data-stuck", window.scrollY > 24);
-  };
-  onScroll();
-  addEventListener("scroll", onScroll, { passive: true });
+  // The stuck-header test belongs to the element, not to the script. A `nav` captured at module scope points
+  // at the header of whichever page loaded first, so after one navigation the handler would toggle
+  // `data-stuck` on a node that left with the previous body while the one on screen never got its shadow.
+  component(".nav", {
+    mount(nav) {
+      const onScroll = () => nav.toggleAttribute("data-stuck", window.scrollY > 24);
+      onScroll();
+      addEventListener("scroll", onScroll, { passive: true });
+      return () => removeEventListener("scroll", onScroll);
+    },
+    unmount: (stop) => stop?.(),
+  });
 
   /* One shared clock: the dial writes these two numbers, CSS interpolates the palette from --night,
      and the WebGL door reads the same pair off the document element. The writing itself lives in
      lib/rig-client.mjs so no second copy of the curve can exist — this file only exposes it as
      `window.hhSetHour` for anything that would rather call than import. */
-  import { applyHour } from "../lib/rig-client.mjs";
-
   window.hhSetHour = applyHour;
 </script>

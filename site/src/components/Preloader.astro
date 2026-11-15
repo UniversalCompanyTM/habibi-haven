@@ -21,92 +21,119 @@
 </div>
 
 <script>
-  const html = document.documentElement;
-  const curtain = document.querySelector<HTMLElement>("[data-preloader]");
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  import { component } from "../lib/page.mjs";
 
-  function openNow() {
-    html.classList.add("loaded");
-    document.dispatchEvent(new CustomEvent("hh:ready", { detail: { instant: true } }));
-  }
+  // A curtain belongs to an entrance, and there is one entrance per visit. The flag is module-scope because
+  // the module is what runs once: with the router on, coming back to / brings a fresh, untouched curtain in
+  // with the new body, and an overlay that nobody animates is an overlay that sits at "0" over the whole
+  // page and eats every click. So a second mount removes it instead of replaying it.
+  let shown = false;
 
-  if (!curtain || reduced) {
-    curtain?.setAttribute("data-done", "");
-    openNow();
-  } else {
-    const count = curtain.querySelector<HTMLElement>("[data-count]");
-    const fill = curtain.querySelector<HTMLElement>("[data-fill]");
+  component("[data-preloader]", {
+    mount(curtain) {
+      const html = document.documentElement;
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Each signal is 0 → 1. Fonts get 40 points, the first-screen images 48, and the last 12 is the
-    // ramp's ceiling while a signal is still outstanding — so an instant cache hit reads 88 rather
-    // than 100 for a moment, and a slow one never reads 100 at all until it is actually done.
-    const signals = { fonts: 0, media: 0 };
-    const ready = () => signals.fonts === 1 && signals.media === 1;
-    const earned = () => signals.fonts * 40 + signals.media * 48;
+      function openNow() {
+        html.classList.add("loaded");
+        document.dispatchEvent(new CustomEvent("hh:ready", { detail: { instant: true } }));
+      }
 
-    let lastPainted = -1;
-    const paint = (value: number) => {
-      const v = Math.max(0, Math.min(100, Math.round(value)));
-      if (v === lastPainted) return;
-      lastPainted = v;
-      if (count) count.textContent = String(v);
-      if (fill) fill.style.width = `${v}%`;
-    };
+      if (shown || reduced) {
+        curtain.setAttribute("data-done", "");
+        // Out of the tree rather than styled away: `html.js .preloader` is what makes the curtain visible,
+        // and a swapped-in document loses that class for the length of one task. Deleting the node cannot be
+        // raced by whichever of the two restores runs first.
+        curtain.remove();
+        openNow();
+        return null;
+      }
+      shown = true;
 
-    function settled<T>(p: Promise<T>): Promise<boolean> {
-      return p.then(() => true).catch(() => false);
-    }
+      const count = curtain.querySelector<HTMLElement>("[data-count]");
+      const fill = curtain.querySelector<HTMLElement>("[data-fill]");
 
-    const fontJob = "fonts" in document ? settled((document as Document & { fonts: FontFaceSet }).fonts.ready) : Promise.resolve(true);
-    // A font that failed is still a font that stopped taking time, so both outcomes clear the signal.
-    fontJob.then(() => {
-      signals.fonts = 1;
-    });
+      // Each signal is 0 → 1. Fonts get 40 points, the first-screen images 48, and the last 12 is the
+      // ramp's ceiling while a signal is still outstanding — so an instant cache hit reads 88 rather
+      // than 100 for a moment, and a slow one never reads 100 at all until it is actually done.
+      const signals = { fonts: 0, media: 0 };
+      const ready = () => signals.fonts === 1 && signals.media === 1;
+      const earned = () => signals.fonts * 40 + signals.media * 48;
 
-    // `data-critical` is set by the pages on the images the first screen paints with. An empty list
-    // means there is nothing to wait for, not that we should wait forever.
-    const media = Array.from(document.querySelectorAll<HTMLImageElement>("img[data-critical]"));
-    if (media.length === 0) signals.media = 1;
-    else
-      Promise.all(
-        media.map((img) =>
-          settled(
-            typeof img.decode === "function"
-              ? img.decode()
-              : img.complete
-                ? Promise.resolve()
-                : new Promise<void>((resolve) => {
-                    img.addEventListener("load", () => resolve(), { once: true });
-                    img.addEventListener("error", () => resolve(), { once: true });
-                  })
-          )
-        )
-      ).then(() => {
-        signals.media = 1;
+      let lastPainted = -1;
+      const paint = (value: number) => {
+        const v = Math.max(0, Math.min(100, Math.round(value)));
+        if (v === lastPainted) return;
+        lastPainted = v;
+        if (count) count.textContent = String(v);
+        if (fill) fill.style.width = `${v}%`;
+      };
+
+      function settled<T>(p: Promise<T>): Promise<boolean> {
+        return p.then(() => true).catch(() => false);
+      }
+
+      const fontJob = "fonts" in document ? settled((document as Document & { fonts: FontFaceSet }).fonts.ready) : Promise.resolve(true);
+      // A font that failed is still a font that stopped taking time, so both outcomes clear the signal.
+      fontJob.then(() => {
+        signals.fonts = 1;
       });
 
-    let raf = 0;
-    const started = performance.now();
+      // `data-critical` is set by the pages on the images the first screen paints with. An empty list
+      // means there is nothing to wait for, not that we should wait forever.
+      const media = Array.from(document.querySelectorAll<HTMLImageElement>("img[data-critical]"));
+      if (media.length === 0) signals.media = 1;
+      else
+        Promise.all(
+          media.map((img) =>
+            settled(
+              typeof img.decode === "function"
+                ? img.decode()
+                : img.complete
+                  ? Promise.resolve()
+                  : new Promise<void>((resolve) => {
+                      img.addEventListener("load", () => resolve(), { once: true });
+                      img.addEventListener("error", () => resolve(), { once: true });
+                    })
+            )
+          )
+        ).then(() => {
+          signals.media = 1;
+        });
 
-    const finish = () => {
-      cancelAnimationFrame(raf);
-      paint(100);
-      curtain!.setAttribute("data-done", "");
-      openNow();
-      // out of the tree after the wipe, so a fixed overlay can never eat a click
-      window.setTimeout(() => curtain!.remove(), 700);
-    };
+      let raf = 0;
+      const started = performance.now();
 
-    const tick = (now: number) => {
-      const seconds = (now - started) / 1000;
-      const ramp = 88 * (1 - Math.exp(-seconds / 0.55));
-      paint(ready() ? 100 : Math.max(earned(), ramp));
-      if (ready()) finish();
-      else raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
+      function finish() {
+        cancelAnimationFrame(raf);
+        clearTimeout(ceiling);
+        paint(100);
+        curtain.setAttribute("data-done", "");
+        openNow();
+        // out of the tree after the wipe, so a fixed overlay can never eat a click
+        window.setTimeout(() => curtain.remove(), 700);
+      }
 
-    // The ceiling. Whatever has or has not loaded, the site opens.
-    window.setTimeout(finish, 2600);
-  }
+      const tick = (now: number) => {
+        const seconds = (now - started) / 1000;
+        const ramp = 88 * (1 - Math.exp(-seconds / 0.55));
+        paint(ready() ? 100 : Math.max(earned(), ramp));
+        if (ready()) finish();
+        else raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+
+      // The ceiling. Whatever has or has not loaded, the site opens.
+      const ceiling = window.setTimeout(finish, 2600);
+
+      // The one case the ceiling cannot cover: the guest navigates away mid-entrance. Left running, the loop
+      // and the timer would both call finish() on a curtain that is no longer in the document, and the ramp
+      // would keep the frame budget for nothing.
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(ceiling);
+      };
+    },
+    unmount: (stop) => stop?.(),
+  });
 </script>

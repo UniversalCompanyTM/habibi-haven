@@ -12,8 +12,10 @@
 // replacing anything, keeps the renderer transparent (`alpha: true`, no `scene.background`), and fades
 // itself in only after a frame has actually rendered. If the gate says no, if three fails to load, or if
 // context creation throws, nothing here runs far enough to hide the photograph.
-import { decide, readEnvironment } from "../lib/gate.mjs";
-
+//
+// Nothing is imported into the frontmatter: the server half of this file writes one empty div and four
+// data attributes. `decide` and `readEnvironment` belong to the browser (see the script below), and an
+// unused import here would be a module in the page's server graph for a name nobody reads.
 const {
   // Camera framing lives here rather than in haven.js so the scene module stays about contents.
   position = [0, 1.62, 9.4] as [number, number, number],
@@ -63,42 +65,67 @@ const {
 <script>
   import { decide, readEnvironment } from "../lib/gate.mjs";
   import { HOUR_EVENT } from "../lib/rig-client.mjs";
+  import { component } from "../lib/page.mjs";
   import { buildHaven } from "../scenes/haven.js";
   import { readClock, readPalette, rigValues } from "../scenes/rig.js";
 
-  // The framing comes off the host element, not off the template. A `<script>` body in Astro is NOT
-  // interpolated — `{position}` here is plain JavaScript, an object shorthand naming a binding that does
-  // not exist, so it would compile and then throw `position is not defined` on the first frame. (Writing
-  // `{{ position }}` was worse: that is a syntax error, which is how this was first caught.) Data
-  // attributes are the framework-free way, they are readable in the DOM for debugging, and they keep the
-  // props next to the element they describe.
-  const host = document.querySelector<HTMLElement>("[data-door]");
-  const props = host
-    ? {
-        position: JSON.parse(host.dataset.position ?? "[0,1.62,9.4]") as [number, number, number],
-        target: JSON.parse(host.dataset.target ?? "[0,1.78,-3.2]") as [number, number, number],
-        fov: Number(host.dataset.fov ?? 38),
-        parallax: host.dataset.parallax !== "false",
-      }
-    : null;
-  const gate = decide(readEnvironment());
-  // Which tier this device landed on gets written on the door. Not for styling — for the moment something
-  // looks wrong on a weak phone, when `document.querySelector("[data-door]").dataset.tier` answers it
-  // without a debugger. It is also the only way verify-runtime.mjs can prove that a browser asking for
-  // reduced motion really does get `poster` with no canvas: the decision table itself is unit-tested, but
-  // a passing unit test is not evidence that the live page reads the same environment.
-  if (host) {
+  component("[data-door]", { mount, unmount: (stop) => stop?.() });
+
+  type Framing = {
+    position: [number, number, number];
+    target: [number, number, number];
+    fov: number;
+    parallax: boolean;
+  };
+
+  function mount(host: HTMLElement) {
+    // The framing comes off the host element, not off the template. A `<script>` body in Astro is NOT
+    // interpolated — `{position}` here is plain JavaScript, an object shorthand naming a binding that does
+    // not exist, so it would compile and then throw `position is not defined` on the first frame. (Writing
+    // `{{ position }}` was worse: that is a syntax error, which is how this was first caught.) Data
+    // attributes are the framework-free way, they are readable in the DOM for debugging, and they keep the
+    // props next to the element they describe.
+    const config = {
+      position: JSON.parse(host.dataset.position ?? "[0,1.62,9.4]") as [number, number, number],
+      target: JSON.parse(host.dataset.target ?? "[0,1.78,-3.2]") as [number, number, number],
+      fov: Number(host.dataset.fov ?? 38),
+      parallax: host.dataset.parallax !== "false",
+    };
+
+    // Which tier this device landed on gets written on the door. Not for styling — for the moment something
+    // looks wrong on a weak phone, when `document.querySelector("[data-door]").dataset.tier` answers it
+    // without a debugger. It is also the only way verify-runtime.mjs can prove that a browser asking for
+    // reduced motion really does get `poster` with no canvas: the decision table itself is unit-tested, but
+    // a passing unit test is not evidence that the live page reads the same environment.
+    const gate = decide(readEnvironment());
     host.dataset.tier = gate.tier;
     host.dataset.tierReason = gate.reason;
-  }
-  // `2d` and `poster` stop here: no canvas, no three, and the CSS still underneath stays exactly as it is.
-  if (host && props && (gate.tier === "full" || gate.tier === "lite")) {
-    // Three arrives only down this branch, and a failed chunk leaves the photograph untouched.
-    const THREE = await import("three").catch(() => null);
-    if (THREE) mount(THREE, host, gate, props);
+
+    // `2d` and `poster` stop here: no canvas, no three, and the CSS still underneath stays exactly as it is.
+    let teardown: (() => void) | null = null;
+    let gone = false;
+    if (gate.tier === "full" || gate.tier === "lite") {
+      // Three arrives only down this branch, and a failed chunk leaves the photograph untouched.
+      //
+      // The `gone` flag is why the import is not awaited at module scope any more. A cold chunk on a slow
+      // connection can resolve after the guest has already navigated away; without it, the response mounts a
+      // renderer, an IntersectionObserver and a frame loop into a detached div, and nothing on the new page
+      // can reach them to stop them — the one leak on this site that costs a WebGL context.
+      import("three")
+        .then((THREE) => {
+          if (gone) return;
+          teardown = start(THREE, host, gate, config);
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      gone = true;
+      teardown?.();
+    };
   }
 
-  function mount(THREE: any, host: HTMLElement, decision: ReturnType<typeof decide>, config: typeof props) {
+  function start(THREE: any, host: HTMLElement, decision: ReturnType<typeof decide>, config: Framing) {
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let renderer: InstanceType<typeof THREE.WebGLRenderer>;
     try {
@@ -303,6 +330,10 @@ const {
       renderer.dispose();
     }
     addEventListener("pagehide", stop);
+    // Handed to lib/page.mjs as well as bound to pagehide: leaving the home page for /menu is a navigation,
+    // not a page hide, and before this line the loop, the two observers and the context all survived it.
+    // `stop` is already idempotent — it removes the listener it added and disconnects what it created.
+    return stop;
   }
 
   // `data-tier` says which door a device got; these two say what the room is currently lit like, and they

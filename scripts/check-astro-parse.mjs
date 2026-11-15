@@ -10,8 +10,10 @@
 // then parse the code the template produced. A file passes only if both agree it is valid, and the
 // report gives the source line by re-running the transform without the minified wrapper.
 //
-// It does not type-check, and it does not run the framework. It answers one question — will `astro
-// build` get past reading this file — in about a second, before you ask it to render 243 dishes.
+// It does not type-check, and it does not run the framework. It answers three questions, in about a
+// second, before you ask the build to render 243 dishes: will `astro build` get past reading this file;
+// does every name a script block uses exist in that block's own import list; and does every block that
+// touches the document go through the page-lifecycle module (see `needsLifecycle` below).
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -77,12 +79,48 @@ function scriptBlocks(source) {
     skipUntil = end + "</script>".length;
     found.push({
       body: source.slice(start, end),
+      // `is:inline` is the one way to ask Astro NOT to process a block, and a block it does not process is
+      // also a block whose text is not keyed for re-execution by the router in the same way — it runs on
+      // every page. The lifecycle rule below is about hoisted modules, so the flag has to survive.
+      inline: attrs.includes("is:inline"),
       // esbuild counts lines from 1 within the text it is given, so the tag's own line is the offset
       // that turns a block-relative line back into one you can jump to.
       line: source.slice(0, match.index).split("\n").length,
     });
   }
   return found;
+}
+
+/**
+ * Does this block reach into the live document?
+ *
+ * A hoisted `<script>` in Astro evaluates once per browsing session, not once per page: the router stamps
+ * the incoming copy `data-astro-exec` and the browser never runs it again (astro/dist/transitions/
+ * swap-functions.js, `detectScriptExecuted`). So a block that queries the document or binds a listener on
+ * it either has to be re-driven by `lib/page.mjs` on every swap, or it is a component that stops working
+ * the first time anybody navigates — the dead explorer, the frozen countdown, the cursor wired to a node
+ * that left with the previous body.
+ *
+ * The rule is deliberately blunt: touch the document, name the lifecycle module. `component`,
+ * `collection` and `onPage` are the three ways to satisfy it, and which one is right depends on how many
+ * hosts the page has, which is a judgement the code comment next to the call should carry.
+ */
+const TOUCHES_DOCUMENT =
+  /(?:\bdocument|\bwindow)\s*\.\s*(?:querySelector|querySelectorAll|getElementById|addEventListener|dispatchEvent)|\baddEventListener\s*\(/;
+
+function needsLifecycle(block) {
+  if (block.inline) return false;
+  // Comments and string literals come out before the document test, so a block that merely mentions
+  // `addEventListener` in prose is not flagged. The import test runs on the raw body for the opposite
+  // reason: blanking strings first turns `from "../lib/page.mjs"` into `from ""`, and a rule that can
+  // never be satisfied is worse than no rule — it reports four clean files as broken and teaches whoever
+  // sees it to distrust the checker.
+  const code = block.body
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/(["'`])(?:\\.|(?!\1)[\s\S])*\1/g, '""');
+  if (!TOUCHES_DOCUMENT.test(code)) return false;
+  return !/(?:from|import)\s*["'][^"']*page\.mjs["']/.test(block.body);
 }
 
 /**
@@ -208,6 +246,12 @@ for (const file of files) {
       failures.push([
         label,
         `script block line ${block.line}: uses ${missing.join(", ")} without importing it in THIS block — the frontmatter import does not reach it`,
+      ]);
+    }
+    if (needsLifecycle(block)) {
+      failures.push([
+        label,
+        `script block line ${block.line}: binds to the document without lib/page.mjs — this code evaluates once per session, so nothing re-wires it after a navigation`,
       ]);
     }
   }

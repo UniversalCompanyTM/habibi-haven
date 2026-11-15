@@ -134,10 +134,15 @@ const priceBands = [
 <script>
   import menu from "../data/menu.json";
   import { addToTable, getTable, EVENT } from "../lib/table-client.mjs";
+  import { component } from "../lib/page.mjs";
 
-  const root = document.querySelector<HTMLElement>("[data-explorer]");
+  // The explorer is the heaviest thing on the site that is not the door: 243 cards, a keyboard shortcut on
+  // the window, and a subscription to the table. All of it belongs to the element, so all of it is set up
+  // and taken down with the element — which is what makes the `/` handler and the table repaint survive a
+  // navigation to /menu and back instead of accumulating one copy per visit.
+  component("[data-explorer]", { mount: wire, unmount: (stop) => stop?.() });
 
-  if (root) {
+  function wire(root: HTMLElement) {
     const cards = Array.from(root.querySelectorAll<HTMLElement>("[data-card]"));
     // `data-subgroup`, not `data-section`: a dish card carries data-section="<Breakfast>" as metadata, so
     // querying [data-section] returned 41 sections AND 243 cards, and the section pass below — which asks
@@ -311,7 +316,7 @@ const priceBands = [
     );
 
     // `/` to search, Escape to let go of it — the two shortcuts a guest on a laptop expects.
-    addEventListener("keydown", (event: KeyboardEvent) => {
+    const onKey = (event: KeyboardEvent) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((event.target as HTMLElement)?.tagName ?? "");
       if (event.key === "/" && !typing) {
         event.preventDefault();
@@ -322,7 +327,8 @@ const priceBands = [
         apply();
         search.blur();
       }
-    });
+    };
+    addEventListener("keydown", onKey);
 
     /* ---------------- the table, from here ---------------- */
 
@@ -358,7 +364,9 @@ const priceBands = [
       );
     });
 
-    document.addEventListener(EVENT, () => paintOnTable());
+    // The same function object, subscribed and unsubscribed by name: a wrapper arrow would be a different
+    // reference each time and `removeEventListener` would quietly do nothing.
+    document.addEventListener(EVENT, paintOnTable);
     paintOnTable();
 
     // Always run once: a query, tag or band can arrive in the address, and the page has to agree with
@@ -373,5 +381,14 @@ const priceBands = [
         requestAnimationFrame(() => target.scrollIntoView({ block: "start", behavior: calm ? "auto" : "smooth" }));
       }
     }
+
+    // Only the two listeners that live outside the explorer need releasing. Everything else is bound to a
+    // control inside `root` — the search box, the tag buttons, the delegated click on the grid — and goes
+    // away with the node. The window keydown and the table subscription do not, and a second copy of
+    // either would mean `/` focusing a search box on a page that has left it behind.
+    return () => {
+      removeEventListener("keydown", onKey);
+      document.removeEventListener(EVENT, paintOnTable);
+    };
   }
 </script>
