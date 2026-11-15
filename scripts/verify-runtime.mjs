@@ -83,9 +83,10 @@ const CANDIDATES =
 // directory that changes between images. The first version of this lookup asked existsSync about all three
 // candidates and fell through to `CANDIDATES.at(-1)` when none of them were literal files, which on a CI
 // runner meant "try to spawn microsoft-edge" and a spawn error that looked like a broken site. So: trust an
-// explicit HH_CHROME first (CI sets it from `command -v`), then an install location, then PATH. If nothing
-// resolves, say so plainly — a missing browser is not a failed assertion, and the log has to make that
-// distinction without anyone reading this file.
+// explicit HH_CHROME first (still there for a machine whose browser is nowhere on PATH; the runner does not
+// need it, because `google-chrome` is on PATH and the loop below finds it), then an install location, then
+// PATH. If nothing resolves, say so plainly — a missing browser is not a failed assertion, and the log has
+// to make that distinction without anyone reading this file.
 function resolveBrowser(name) {
   if (existsSync(name)) return name;
   const exe = platform === "win32" && !name.endsWith(".exe") ? `${name}.exe` : name;
