@@ -1760,14 +1760,16 @@ const cameForward = await evaluate(`
     jsOn: document.documentElement.classList.contains("js"),
   };
 `);
-const routerErrors = drain();
+// drain() answers {errors, warnings} — handing the object to a report row is how a green battery
+// manages to crash the reporter instead of the site.
+const routerLog = drain();
 results.push({
   path: "/ ⇄ /menu ⇄ /table (clicked)",
   value: { routerDial, toMenu, menuLive, toTable, tableLive, backHome, curtainAfterHome, dialsHome, wentBack, cameForward },
-  errors: routerErrors,
-  warnings: [],
+  errors: routerLog.errors,
+  warnings: routerLog.warnings,
 });
-if (routerErrors.length) failures.push(`router navigation logged ${routerErrors.length} error(s): ${routerErrors.slice(0, 3).join(" | ")}`);
+if (routerLog.errors.length) failures.push(`router navigation logged ${routerLog.errors.length} error(s): ${routerLog.errors.slice(0, 3).join(" | ")}`);
 
 // One document, four swaps.
 for (const step of [toMenu, toTable, backHome]) {
@@ -1860,7 +1862,10 @@ const vtRules = await evaluate(`
   };
 `);
 await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
-results.push({ path: "/ → /menu (reduced motion)", value: { reduceSwap, vtRules }, errors: [], warnings: [] });
+const reduceLog = drain();
+results.push({ path: "/ → /menu (reduced motion)", value: { reduceSwap, vtRules }, errors: reduceLog.errors, warnings: reduceLog.warnings });
+if (reduceLog.errors.length)
+  failures.push(`the reduced-motion navigation logged ${reduceLog.errors.length} error(s): ${reduceLog.errors.slice(0, 2).join(" | ")}`);
 if (vtRules.total === 0)
   failures.push("no ::view-transition rule reached the browser — the page change is running on the UA's own cross-fade, and nothing in Astro gates that on prefers-reduced-motion");
 else if (vtRules.inMedia === 0)
