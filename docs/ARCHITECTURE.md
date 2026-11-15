@@ -367,7 +367,39 @@ references, 5 routes, contracts + a11y + weight), `check-board` 176 strings, `ve
 route passes and 0 console errors. JS is 890 kB across 10 chunks with `three` lazy at 673 kB, i.e. never in the
 entry graph.
 
-## Milestones
+### Amendment A10 — the hosted URLs disagreed with the linked URLs, and the first fix did not work
+
+The site went live on Cloudflare Pages at `habibihavenpreview.pages.dev` from the runner's `dist`
+artifact (380 files, direct upload, nothing compiled on the laptop). Measured immediately after:
+
+| request | result |
+| --- | --- |
+| `/` | 200 |
+| `/menu`, `/table`, `/visit` | **308 to the trailing-slash form**, then 200 |
+| `/menu?party=4` | 308 preserving the query |
+| `/nope` | 404 with the styled page |
+| served `/menu/` HTML | canonical `…/menu`, `noindex, nofollow`, `@type Restaurant`, KES offers |
+
+Pages answers a slash-free path that names a **directory** by permanently redirecting to the slashed
+form, and this build emitted `menu/index.html`, so every nav link took a hop and the address bar ended
+up on a different URL than the canonical tag in its own `<head>`.
+
+**The attempt that failed, recorded because it is the tempting one.** A `site/public/_redirects` file
+with `/menu /menu/index.html 200` for each route. It built, it uploaded — the deploy log said
+"Uploading _redirects" — and `/menu` still returned 308. The rule shape is the one the platform
+documents for relative 200 proxying, so either Pages settles the directory case before it reads the
+file or the rule is ignored for a source that also names a directory; the measurement does not
+distinguish the two, and it does not need to. The file and its gate are gone.
+
+**What actually works:** `build.format: "file"` — routes are emitted as `menu.html` rather than
+`menu/index.html`, so there is no directory for the host to redirect to. `/menu` is 200, the canonical
+and the address bar agree, and nothing about the source links had to change because they were always
+slash-free strings. `scripts/verify-dist.mjs` gained a **route shape** gate that fails if a route comes
+back nested, and its reference-resolution check now counts `<path>.html` as a hit for `/path`, which is
+what the host does — the first flat build failed CI on exactly that, three "broken references" for the
+routes themselves.
+
+### Milestones
 
 1. **M0 — probes** (headless ingest, image reachability, toolchain availability). No UI.
 2. **M1 — content spine**: ingest → taxonomy → `menu.json` → mirrored photos → drift report.

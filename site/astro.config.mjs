@@ -19,14 +19,14 @@ export default defineConfig({
     // Emit /menu as dist/menu.html rather than dist/menu/index.html.
     //
     // Cloudflare Pages answers a slash-free path that names a *directory* with a 308 to the slashed
-    // form, so the link in the nav bar and the address in the browser bar disagreed with the canonical
-    // tag, which says /menu. A site/public/_redirects rewrite (`/menu /menu/index.html 200`) was built,
-    // deployed and measured on 2026-11-15: the file uploaded, and /menu still returned 308 — Pages' own
-    // directory redirect runs in front of those rules, so the rewrite never got a chance. Flat files
-    // remove the condition instead of fighting it: /menu is no longer a directory, so there is nothing
-    // to redirect and both shapes of the old argument disappear. Internal links are unaffected — they
-    // were always slash-free strings — and the dish photos copied from public/menu/ keep their paths,
-    // because menu.html and menu/ are different names, not the same one twice.
+    // form, so building /menu as menu/index.html made every nav link take a hop and put /menu/ in the
+    // address bar while the canonical tag in that page's own <head> says /menu. A site/public/_redirects
+    // rewrite (/menu /menu/index.html 200) was built, deployed and measured on 2026-11-15: the file
+    // uploaded, and /menu still returned 308. Flat files remove the condition instead of fighting it:
+    // /menu is no longer a directory, so there is nothing to redirect, and both shapes converge on the
+    // one URL the canonical names. Internal links are unaffected — they were always slash-free strings —
+    // and the dish photos copied from public/menu/ keep their paths, because menu.html and menu/ are
+    // different names, not the same one twice.
     //
     // scripts/verify-dist.mjs pins this: it fails if a route comes back as a nested index.html.
     format: "file",

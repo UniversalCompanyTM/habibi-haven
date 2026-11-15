@@ -213,17 +213,23 @@ for (const [, src] of all) {
   for (const m of src.matchAll(/"(\/(?:brand|menu|assets)\/[^"]+?\.(?:jpg|jpeg|png|webp|avif|svg|mp4|woff2?|json))"/g)) referenced.add(m[1]);
 }
 const broken = [];
+// A local reference counts as resolved when the bytes are where a browser landing on that URL would
+// find them: the exact path, `<path>.html` (the flat route files build.format: "file" emits, which is
+// what Cloudflare Pages answers /menu with), or `<path>/index.html`. Asking only for the literal path
+// failed the first flat build, because /menu is not a file — /menu.html is.
+const isFile = (p) => stat(p).then((s) => s.isFile()).catch(() => false);
+const isDir = (p) => stat(p).then((s) => s.isDirectory()).catch(() => false);
 for (const ref of referenced) {
   const clean = decodeURIComponent(ref.split("?")[0].split("#")[0]);
-  const target = join(dist, clean.replace(/^\//, ""));
-  try {
-    const info = await stat(target);
-    if (info.isDirectory()) {
-      try { await stat(join(target, "index.html")); } catch { broken.push(clean); }
-    }
-  } catch {
-    broken.push(clean);
+  if (clean === "/" || clean === "") {
+    if (!(await isFile(join(dist, "index.html")))) broken.push(clean);
+    continue;
   }
+  const target = join(dist, clean.replace(/^\//, ""));
+  if (await isFile(target)) continue;
+  if (await isFile(`${target}.html`)) continue;
+  if ((await isDir(target)) && (await isFile(join(target, "index.html")))) continue;
+  broken.push(clean);
 }
 if (broken.length) bad("broken references", `${broken.length} local paths with no file: ${broken.slice(0, 8).join(", ")}${broken.length > 8 ? " …" : ""}`);
 else ok("references", `${referenced.size} local paths, all present on disk`);
