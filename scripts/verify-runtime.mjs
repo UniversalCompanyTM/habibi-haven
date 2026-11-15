@@ -26,7 +26,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { platform } from "node:process";
 
 const argv = process.argv.slice(2);
@@ -79,7 +79,33 @@ const CANDIDATES =
       ]
     : ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "google-chrome", "microsoft-edge"];
 
-const browser = CANDIDATES.find((p) => existsSync(p)) ?? CANDIDATES.at(-1);
+// `existsSync` cannot see a bare PATH name — "google-chrome" is not a path, and on Linux it lives in a
+// directory that changes between images. The first version of this lookup asked existsSync about all three
+// candidates and fell through to `CANDIDATES.at(-1)` when none of them were literal files, which on a CI
+// runner meant "try to spawn microsoft-edge" and a spawn error that looked like a broken site. So: trust an
+// explicit HH_CHROME first (CI sets it from `command -v`), then an install location, then PATH. If nothing
+// resolves, say so plainly — a missing browser is not a failed assertion, and the log has to make that
+// distinction without anyone reading this file.
+function resolveBrowser(name) {
+  if (existsSync(name)) return name;
+  const exe = platform === "win32" && !name.endsWith(".exe") ? `${name}.exe` : name;
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (!dir) continue;
+    const candidate = join(dir, exe);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+const browser =
+  process.env.HH_CHROME || CANDIDATES.map(resolveBrowser).find(Boolean) || null;
+if (!browser) {
+  console.error(
+    "verify-runtime: no browser found. Install Chrome/Edge or set HH_CHROME to the binary.\nTried: " +
+      CANDIDATES.join(", "),
+  );
+  process.exit(2);
+}
 const profile = mkdtempSync(join(tmpdir(), "hh-cdp-"));
 
 const chrome = spawn(
