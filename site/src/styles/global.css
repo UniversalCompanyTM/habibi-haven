@@ -8,9 +8,10 @@
  * 1. Nothing depends on JavaScript to be readable. `[data-reveal]` starts visible and only animates
  *    once `html.js` is set by an inline script; if JS never runs, every word is already on screen.
  * 2. Motion is choreography, not decoration. Durations come from --dur-1/--dur-2, which
- *    prefers-reduced-motion already collapses to 1ms, so this file needs no reduce block of its own
- *    for anything that merely moves. The exceptions are the two things that would still be moving
- *    forever — the marquee and the cursor — and those are switched off explicitly at the bottom.
+ *    prefers-reduced-motion already collapses to 1ms, so anything that merely moves needs no reduce
+ *    block of its own. What is spelled out at the bottom of this file is the short list of things a
+ *    token cannot reach: the two that would move forever (the marquee and the cursor), and the
+ *    cross-fade the browser paints between pages on its own once the router is enabled.
  * 3. Contrast is inherited from tokens.css, where the ratios are measured. If a pair is not in that
  *    file's comment table, it does not go on a page.
  */
@@ -1828,5 +1829,38 @@ html.js .cursor-on .cursor-ring {
   .btn:hover::after,
   .btn:focus-visible::after {
     opacity: 1;
+  }
+}
+
+/* The route swap.
+ *
+ * <ClientRouter /> in the head turns a same-origin click into a swap of this document instead of a new
+ * one, and the browser paints that change through a view transition. Left alone it is still animated:
+ * the UA supplies a ~0.25s cross-fade on the root snapshots, Astro injects no rule to say otherwise
+ * (ClientRouter.astro ships only the route-announcer CSS), and its router never consults
+ * prefers-reduced-motion — astro/dist/transitions/router.js contains no matchMedia call, checked against
+ * the installed file rather than from memory. So the third exception to rule 2 in this file's header is
+ * the page change itself, and both the duration and its suppression are declared here.
+ *
+ * 180ms is --dur-1 written out rather than referenced, because these selectors are a pseudo-element tree
+ * hung off the document root and inheriting a custom property into it is not something this build needs
+ * to bet a behaviour on: if the var failed to resolve the fade would silently become 0s in every browser,
+ * which is the wrong failure direction for a decision this visible.
+ */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(root) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out);
+}
+
+/* Reduced motion: the swap still happens — that is the whole point, the document is not reloaded — but it
+   lands with no cross-fade at all. `animation: none` rather than a 1ms duration, because a transition that
+   paints both snapshots for one frame is a flicker, not a fade. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(root) {
+    animation: none;
   }
 }

@@ -12,6 +12,8 @@ import { restaurantSchema } from "../lib/schema.mjs";
 import "../styles/tokens.css";
 import "../styles/global.css";
 
+import { ClientRouter } from "astro:transitions";
+
 import Nav from "../components/Nav.astro";
 import ActionDock from "../components/ActionDock.astro";
 import Footer from "../components/Footer.astro";
@@ -76,6 +78,36 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
          indexable build asks to be crawled. */
       indexable ? null : <meta name="robots" content="noindex, nofollow" />
     }
+
+    {/* Inside the site, a click is a swap, not a reload.
+        The pitch demo is a person walking a restaurant owner through Menu → Table → Visit on a phone, in
+        a room with whatever signal a courtyard has. Every one of those clicks used to tear the document
+        down and rebuild it: the white frame, the re-fetched fonts, the WebGL door re-initialising, the
+        hour the guest just dialled reset to the build's clock. The router keeps one document and swaps its
+        contents, which is the difference between a site that feels loaded and a site that is loading.
+
+        Three things about how this is wired, because each is a place where a router quietly breaks a
+        hand-built page:
+        · The page change is animated, and not by anything we asked Astro for. With no `transition:animate`
+          directive in the project the browser still paints its own ~0.25 s cross-fade between the two root
+          snapshots, and the router does not stop it for anybody: `astro/dist/transitions/router.js`
+          contains no `matchMedia` call, so nothing about that fade honours `prefers-reduced-motion` on
+          its own. styles/global.css therefore declares the duration (180 ms) and switches it off under
+          that media query, so the one piece of motion the router brings in is a number this project owns
+          rather than a default it inherited. The arrival of content *inside* a page is still the existing
+          `[data-reveal]` system, whose durations already collapse to 1 ms (styles/global.css:11) — that
+          renderer is untouched by any of this.
+        · The incoming page's own scripts deliberately do not re-execute (lib/page.mjs explains the
+          `data-astro-exec` dedupe), so every live thing on a page is owned by the lifecycle primitive
+          rather than by its module body. That is what makes this swap safe, and it is why this line has a
+          dependency rather than being a one-line feature flag.
+        · The two things the incoming `<html>` cannot know — that JavaScript runs here, and the hour this
+          visitor dialled — are re-asserted on `astro:after-swap`, in the script block at the bottom of
+          this file. Without that, the router would strip `html.js` on the first click and every reveal
+          rule would drop out with it.
+        A link that must really reload carries `data-astro-reload`; with JavaScript switched off none of
+        this exists and the site behaves exactly as it did before the line was added. */}
+    <ClientRouter />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -221,10 +253,29 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
      visible but unmoved. And the hour this visitor dialled, which lives in lib/rig-client.mjs rather than
      in the build's HTML. The order relative to the components does not matter: `applyHour` fires `hh:hour`,
      and the door and the dials repaint from that event rather than from whatever they read at mount. */
-  onPage(() => {
-    document.documentElement.classList.add("js");
+  function reassert() {
+    const root = document.documentElement;
+    root.classList.add("js");
     const askedFor = liveHour();
-    if (askedFor !== null) applyHour(askedFor);
+    // Only repaint when the clock on the root actually disagrees with what this visitor dialled. The two
+    // callers below mean this runs twice per navigation, and `applyHour` broadcasts `hh:hour` to the door
+    // and to both dials — an unconditional second call would be a redundant repaint of the whole room for
+    // one click.
+    if (askedFor !== null && root.style.getPropertyValue("--hour") !== String(askedFor)) applyHour(askedFor);
+  }
+
+  // after-swap is the earliest moment the incoming document exists, and that is where this has to run:
+  // swapRootAttributes (astro/dist/transitions/swap-functions.js) removes every attribute from the live
+  // `<html>` and copies the incoming one's, so `html.js` is gone the instant the swap lands — and the
+  // router then awaits its script imports before it fires page-load. Anything that paints inside that
+  // window shows the incoming page in its no-JavaScript state and snaps it back a beat later. page-load
+  // still runs the same function, which is what keeps it correct on a first arrival and with the router
+  // switched off. The order relative to the components does not matter either way: the door and the dials
+  // repaint from `hh:hour`, and a dial mounting after this reads the hour that is now on the root.
+  document.addEventListener("astro:after-swap", reassert);
+
+  onPage(() => {
+    reassert();
     // A new page begins at its own scroll position. Carrying the old number over would make the first
     // scroll of the visit read as a jump and hand back every reveal above it before the guest has passed.
     lastY = scrollY;

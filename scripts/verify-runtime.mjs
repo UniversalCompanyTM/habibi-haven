@@ -1593,6 +1593,290 @@ if (pointerClass || patched) {
 // run — and there are none, which is exactly why it has to be said out loud rather than relied on.
 if (patched) await inPage("Page.removeScriptToEvaluateOnNewDocument", { identifier: patched.identifier });
 
+// ---------------------------------------------------------------- the router
+/*
+  Every battery above reaches a route with Page.navigate. That is the honest way to test a first arrival,
+  and it is also the only condition that hides the router's entire failure mode: on a fresh document every
+  module runs exactly once, so a component that can never re-mount looks flawless. lib/page.mjs exists
+  precisely because Astro marks the incoming page's scripts as already executed, which means that between
+  a nav click and a dead menu there is only the lifecycle sweep — and a sweep that misses is invisible to
+  a harness that has never clicked anything.
+
+  So this battery clicks. It also distinguishes a swap from a reload with a value only a document
+  tear-down can lose: `window.__hhMark` is set on the first load and read after every navigation. If it
+  survives, the same document served all four pages, which is the claim the router is making.
+*/
+const navStep = (expected) =>
+  evaluate(`
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const link =
+      document.querySelector('.nav a[href="${expected}"]') ||
+      document.querySelector('main a[href="${expected}"]') ||
+      document.querySelector('a[href="${expected}"]');
+    if (!link) return { clicked: false, expected: ${JSON.stringify(expected)} };
+    let swapped = 0, loaded = 0;
+    // document, not window: astro/dist/transitions/router.js fires these with
+    // document.dispatchEvent(new Event(name)), and a plain Event does not bubble — a window listener
+    // here would sit out every navigation and report a router that never ran.
+    document.addEventListener("astro:after-swap", () => { swapped += 1; }, { once: true });
+    document.addEventListener("astro:page-load", () => { loaded += 1; }, { once: true });
+    link.click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 9000 && !(swapped && loaded)) await wait(40);
+    await wait(700);
+    const root = getComputedStyle(document.documentElement);
+    const curtain = document.querySelector("[data-preloader]");
+    return {
+      clicked: true,
+      expected: ${JSON.stringify(expected)},
+      landed: location.pathname,
+      swapped,
+      loaded,
+      title: document.title,
+      announced: (document.querySelector(".astro-route-announcer") || {}).textContent ?? null,
+      mark: window.__hhMark ?? null,
+      jsOn: document.documentElement.classList.contains("js"),
+      hour: root.getPropertyValue("--hour").trim(),
+      canvases: document.querySelectorAll("[data-door] canvas").length,
+      curtain: curtain
+        ? { present: true, opacity: getComputedStyle(curtain).opacity, pointerEvents: getComputedStyle(curtain).pointerEvents }
+        : { present: false },
+      navCurrent: ((document.querySelector(".nav [aria-current]") || {}).textContent || "").trim(),
+    };
+  `);
+
+await goto("/");
+drain();
+await evaluate(`window.__hhMark = "router"; return true;`);
+
+// Dial first, while there is a dial to dial: the hour is the one piece of state this site invents, and the
+// one a page swap can silently erase (the incoming <html> only knows the clock the build ran at).
+const routerDial = await dialTo(3);
+const toMenu = await navStep("/menu");
+const menuLive = await evaluate(`
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const q = (s) => document.querySelector(s);
+  const vis = () => [...document.querySelectorAll("[data-card]")].filter((c) => c.getBoundingClientRect().height > 0);
+  if (!q("[data-q]")) return { mounted: false };
+  const open = vis().length;
+  q("[data-q]").value = "chai";
+  q("[data-q]").dispatchEvent(new Event("input", { bubbles: true }));
+  await wait(300);
+  const searched = vis().length;
+  q("[data-reset]").click();
+  await wait(250);
+  const reset = vis().length;
+  const chip = [...document.querySelectorAll("[data-tag]")].find((b) => /goat/i.test(b.textContent));
+  if (chip) { chip.click(); await wait(300); }
+  return {
+    mounted: true,
+    open,
+    searched,
+    reset,
+    chipped: vis().length,
+    chip: chip ? chip.textContent.trim() : null,
+    pressed: chip ? chip.getAttribute("aria-pressed") : null,
+    count: (q("[data-count]") || {}).textContent?.replace(/\\s+/g, " ").trim().slice(0, 60) ?? null,
+    dock: !!document.querySelector("[data-dock]"),
+  };
+`);
+const toTable = await navStep("/table");
+// The table starts empty unless localStorage says otherwise, and the M4 battery clears the key behind it.
+// So `[data-inc]` — the stepper inside a row — cannot be counted before a dish exists: seed through the
+// real "add" control first, then prove the stepper that the swap just built is wired to the total.
+const tableLive = await evaluate(`
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const q = (s) => document.querySelector(s);
+  const add = document.querySelector("[data-add]");
+  if (!add) return { mounted: false, rows: 0 };
+  add.click();
+  await wait(300);
+  const seededRows = document.querySelectorAll("[data-inc]").length;
+  const before = (q("[data-total]") || {}).textContent?.trim() ?? null;
+  const inc = document.querySelector("[data-inc]");
+  if (inc) { inc.click(); await wait(300); }
+  return {
+    mounted: true,
+    seededRows,
+    rows: document.querySelectorAll("[data-inc]").length,
+    before,
+    after: (q("[data-total]") || {}).textContent?.trim() ?? null,
+    party: (q("[data-party-count]") || {}).textContent?.trim() ?? null,
+  };
+`);
+const backHome = await navStep("/");
+// Home is the one route that ships a curtain: the preloader exists in its server HTML and is taken away
+// when the door paints. On a first arrival that is polite. On a swap it is a decision — so measure it
+// rather than assume it, and give it time to finish before judging.
+const curtainAfterHome = await evaluate(`
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 30; i += 1) {
+    const c = document.querySelector("[data-preloader]");
+    if (!c) return { present: false, waitedMs: i * 100 };
+    const st = getComputedStyle(c);
+    if (Number(st.opacity) < 0.05 && st.pointerEvents === "none") return { present: true, transparent: true, waitedMs: i * 100 };
+    await wait(100);
+  }
+  const c = document.querySelector("[data-preloader]");
+  return { present: true, transparent: false, opacity: c && getComputedStyle(c).opacity, pointerEvents: c && getComputedStyle(c).pointerEvents, waitedMs: 3000 };
+`);
+const dialsHome = await evaluate(`
+  const all = [...document.querySelectorAll("[data-dial]")];
+  return {
+    dials: all.length,
+    values: all.map((d) => (d.querySelector("[data-dial-input]") || {}).value ?? null),
+    hour: getComputedStyle(document.documentElement).getPropertyValue("--hour").trim(),
+    canvas: document.querySelectorAll("[data-door] canvas").length,
+    live: !!document.querySelector("[data-door] canvas[data-live]"),
+  };
+`);
+// Back and forward are the navigation a demo does most (the owner looks at the menu, then taps back to the
+// door) and the one the router implements itself rather than through a link click.
+const wentBack = await evaluate(`
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  history.back();
+  const t0 = Date.now();
+  while (Date.now() - t0 < 6000 && location.pathname !== "/table") await wait(40);
+  await wait(600);
+  return {
+    landed: location.pathname,
+    mark: window.__hhMark ?? null,
+    jsOn: document.documentElement.classList.contains("js"),
+    hour: getComputedStyle(document.documentElement).getPropertyValue("--hour").trim(),
+    rows: document.querySelectorAll("[data-inc]").length,
+  };
+`);
+const cameForward = await evaluate(`
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  history.forward();
+  const t0 = Date.now();
+  while (Date.now() - t0 < 6000 && location.pathname !== "/") await wait(40);
+  await wait(800);
+  return {
+    landed: location.pathname,
+    canvas: document.querySelectorAll("[data-door] canvas").length,
+    live: !!document.querySelector("[data-door] canvas[data-live]"),
+    hour: getComputedStyle(document.documentElement).getPropertyValue("--hour").trim(),
+    jsOn: document.documentElement.classList.contains("js"),
+  };
+`);
+const routerErrors = drain();
+results.push({
+  path: "/ ⇄ /menu ⇄ /table (clicked)",
+  value: { routerDial, toMenu, menuLive, toTable, tableLive, backHome, curtainAfterHome, dialsHome, wentBack, cameForward },
+  errors: routerErrors,
+  warnings: [],
+});
+if (routerErrors.length) failures.push(`router navigation logged ${routerErrors.length} error(s): ${routerErrors.slice(0, 3).join(" | ")}`);
+
+// One document, four swaps.
+for (const step of [toMenu, toTable, backHome]) {
+  if (!step.clicked) {
+    failures.push(`the router battery could not find a link to ${step.expected} — nothing here proves navigation at all`);
+    continue;
+  }
+  if (step.landed !== step.expected)
+    failures.push(`clicking to ${step.expected} ended at ${step.landed} — the router took the click and did not finish the job`);
+  if (step.swapped !== 1 || step.loaded !== 1)
+    failures.push(`${step.expected}: after-swap fired ${step.swapped} time(s) and page-load ${step.loaded} — a component sweep depends on exactly one of each (${JSON.stringify({ swapped: step.swapped, loaded: step.loaded })})`);
+  if (step.mark !== "router")
+    failures.push(`${step.expected}: window.__hhMark did not survive the navigation — that was a document reload, not a router swap`);
+  if (!step.jsOn)
+    failures.push(`${step.expected}: html.js is missing after the swap — every [data-reveal] rule on this page is gated on it, so the content is showing in its no-JavaScript state`);
+  if (!step.title) failures.push(`${step.expected}: the document title is empty after the swap`);
+}
+// The door belongs to one page, and it must not follow the visitor around or arrive twice.
+if (toMenu.canvases !== 0)
+  failures.push(`/menu after a click carries ${toMenu.canvases} door canvas(es) — the scene is a home-page feature and it came along in the swap`);
+if (backHome.canvases !== 1)
+  failures.push(`/ after a click carries ${backHome.canvases} door canvas(es), expected exactly 1 — a second context on a swapped-in home is the leak lib/gate.mjs exists to prevent`);
+if (!dialsHome.live && backHome.canvases === 1)
+  failures.push(`/ after a click has a canvas that never got data-live — the door mounted and then did not paint`);
+if (cameForward.canvas !== 1)
+  failures.push(`forward back to / left ${cameForward.canvas} canvas(es), expected 1`);
+// The hour the visitor dialled outranks the hour the build ran at, on every page and in both directions.
+if (routerDial.missing) failures.push("the router battery could not dial the room — no dial or door was present to drive");
+if (routerDial.hour !== "3") failures.push(`dialling 03:00 left --hour at ${JSON.stringify(routerDial.hour)} — the state was never written, so the later comparisons mean nothing`);
+for (const step of [toMenu, toTable, backHome]) {
+  if (step.clicked && step.hour !== "3")
+    failures.push(`${step.expected}: --hour is ${JSON.stringify(step.hour)} after the swap, not the 3 this visitor dialled — the incoming <html> overwrote it and nothing re-asserted it`);
+}
+if (dialsHome.dials !== 2) failures.push(`/ after a click has ${dialsHome.dials} dial(s); the home hero and the rig section each carry one, so both have to come back`);
+if (dialsHome.dials === 2 && dialsHome.values.filter((v) => Number(v) === 3).length !== 2)
+  failures.push(`/ after a click shows the dialled hour on only ${JSON.stringify(dialsHome.values)} — one of the two dials remounted reading the build's clock instead of this visitor's`);
+if (wentBack.rows === 0)
+  failures.push("back to /table rebuilt nothing — the table builder has no rows, so its mount did not run on the restored document");
+if (wentBack.landed !== "/table" || cameForward.landed !== "/")
+  failures.push(`history back/forward landed on ${JSON.stringify([wentBack.landed, cameForward.landed])}, expected /table then /`);
+if (wentBack.mark !== "router" || cameForward.mark !== "router")
+  failures.push("back/forward tore the document down (window.__hhMark gone) — the router is not handling popstate in this build");
+if (wentBack.hour !== "3" || cameForward.hour !== "3")
+  failures.push(`back/forward reset --hour to ${JSON.stringify([wentBack.hour, cameForward.hour])} — the restored document's own attributes won over the dialled hour`);
+if (!menuLive.mounted) failures.push("/menu after a click has no [data-q] — the explorer arrived as dead markup, which is the exact failure lib/page.mjs exists to prevent");
+if (menuLive.mounted && !menuLive.dock)
+  failures.push("/menu after a click lost its action dock — the sticky order control is chrome, and it has to be on every page of the demo");
+if (backHome.curtain.present && !curtainAfterHome.transparent)
+  failures.push(`/ after a click is still behind its curtain after ${curtainAfterHome.waitedMs} ms (opacity ${curtainAfterHome.opacity}, pointer-events ${curtainAfterHome.pointerEvents}) — the preloader is for a first arrival, not a second lap`);
+if (menuLive.mounted) {
+  if (!(menuLive.searched < menuLive.open))
+    failures.push(`/menu after a click: searching "chai" left ${menuLive.searched} of ${menuLive.open} rows visible — the filter is wired to nothing on a swapped-in page`);
+  if (!(menuLive.reset > menuLive.searched))
+    failures.push(`/menu after a click: reset did not bring the rows back (${JSON.stringify({ open: menuLive.open, searched: menuLive.searched, reset: menuLive.reset })})`);
+  if (menuLive.chip && menuLive.pressed !== "true")
+    failures.push(`/menu after a click: the "${menuLive.chip}" chip was clicked and still reads aria-pressed=${JSON.stringify(menuLive.pressed)}`);
+  if (!(menuLive.chipped < menuLive.reset))
+    failures.push(`/menu after a click: the "${menuLive.chip}" chip changed nothing (${menuLive.chipped} of ${menuLive.reset} rows still visible)`);
+}
+if (tableLive.mounted && tableLive.before === tableLive.after)
+  failures.push(`/table after a click: pressing a row's + left the total at ${JSON.stringify(tableLive.before)} — the builder mounted without its handlers`);
+if (!tableLive.mounted)
+  failures.push("/table after a click has no [data-add] control — the configurator did not mount on the swapped-in document");
+else if (tableLive.seededRows === 0)
+  failures.push('/table after a click: the first "add" built no row ([data-inc] still 0) — the dish list is markup with no builder behind it');
+// Reduced motion must not cost a visitor the router: what the swap buys is that the document is never
+// torn down, and a cross-fade is not the swap. So turn the preference on, click again, and check both
+// halves — that the animation rule actually reached the applied stylesheet, and that the navigation is
+// still a swap with its lifecycle intact.
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+const reduceSwap = await navStep("/menu");
+const vtRules = await evaluate(`
+  const hits = [];
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue; // the font stylesheet is cross-origin and has no readable rules — not our business here
+    }
+    for (const rule of rules) {
+      const text = rule.cssText || "";
+      if (text.includes("view-transition")) hits.push({ media: rule.conditionText ?? null });
+    }
+  }
+  return {
+    total: hits.length,
+    medias: hits.map((h) => h.media),
+    inMedia: hits.filter((h) => (h.media || "").includes("prefers-reduced-motion")).length,
+  };
+`);
+await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+results.push({ path: "/ → /menu (reduced motion)", value: { reduceSwap, vtRules }, errors: [], warnings: [] });
+if (vtRules.total === 0)
+  failures.push("no ::view-transition rule reached the browser — the page change is running on the UA's own cross-fade, and nothing in Astro gates that on prefers-reduced-motion");
+else if (vtRules.inMedia === 0)
+  failures.push(`the view-transition rules are applied but none of them sits inside a reduced-motion block (${JSON.stringify(vtRules.medias)}) — a visitor who asked for no motion still gets the fade`);
+if (reduceSwap.clicked && reduceSwap.mark !== "router")
+  failures.push("with prefers-reduced-motion the navigation was no longer a swap — the suppression path is reloading the document instead of skipping its animation");
+if (reduceSwap.clicked && reduceSwap.landed !== "/menu")
+  failures.push(`with prefers-reduced-motion the click to /menu landed on ${JSON.stringify(reduceSwap.landed)}`);
+if (reduceSwap.clicked && !reduceSwap.jsOn)
+  failures.push("/menu after a reduced-motion click lost html.js — the re-assertion has to run regardless of the motion preference");
+
+// Leave the guest's table empty for the batteries that run after this one, the same way M4 does.
+await evaluate(`localStorage.removeItem("habibi-haven:table:v1"); return true;`);
+await stillVisible();
+drain();
+
 // ---------------------------------------------------------------- phone width
 /*
   Every battery above runs at the viewport Chrome was launched with, which is a desktop width — and a
