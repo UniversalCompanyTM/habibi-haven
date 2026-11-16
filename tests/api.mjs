@@ -964,6 +964,67 @@ await check("thirteen posts from one address in one minute is twelve records and
   return blocked === 1 && results[12] === 429 ? true : `statuses: ${results.join(",")}`;
 });
 
+/* A receipt is readable by reference alone, and the reference is six characters — about 29 bits. That makes
+   the read path the only endpoint whose sole defence is how expensive a guess is, so the ceiling here is not
+   politeness: it is what stands between "capability URL" and "public record". These four checks are the
+   ceiling, its scope, and the two properties that make it safe to add. */
+
+await check("the reference alone is not much of a secret, which is why the read path is counted", async () => {
+  const { reference } = await record(live.db, {
+    kind: "table",
+    contact: { name: "Counted Guest", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  const ip = "198.51.100.177";
+  const statuses = [];
+  for (let i = 0; i < 25; i += 1) statuses.push((await get(live.db, `/v1/requests/${reference}`, { ip })).status);
+  const stop = statuses.indexOf(429);
+  return (
+    eq(statuses.slice(0, 24).every((s) => s === 200), true, "the first twenty-four answer") &&
+    eq(stop, 24, "the twenty-fifth is refused") &&
+    eq(statuses.filter((s) => s === 429).length, 1, "and only that one")
+  );
+});
+
+await check("the read ceiling is per address, so one guest's burst cannot lock out the next", async () => {
+  const { reference } = await record(live.db, {
+    kind: "table",
+    contact: { name: "Neighbour", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  const noisy = "198.51.100.178";
+  for (let i = 0; i < 26; i += 1) await get(live.db, `/v1/requests/${reference}`, { ip: noisy });
+  const quiet = await get(live.db, `/v1/requests/${reference}`, { ip: "198.51.100.179" });
+  return eq(quiet.status, 200, "a fresh address still gets the receipt");
+});
+
+await check("a refused lookup never says whether the reference was real", async () => {
+  // The guard runs before the shape test, so malformed guesses pay the same rent. If they were answered for
+  // free, the limiter would leak which references exist the moment it engaged.
+  const ip = "198.51.100.180";
+  for (let i = 0; i < 24; i += 1) await get(live.db, "/v1/requests/HH-ZZZZZZ", { ip });
+  const missing = await get(live.db, "/v1/requests/HH-ZZZZZZ", { ip });
+  const malformed = await get(live.db, "/v1/requests/HH-12345", { ip });
+  return (
+    eq(missing.status, 429, "a real-shaped miss") &&
+    eq(malformed.status, 429, "a malformed one is counted too, not answered for free") &&
+    eq(missing.body.code, "slow_down", "code") &&
+    eq(Number.isFinite(missing.body.retry_after_seconds), true, "retry_after_seconds") &&
+    eq(missing.body.message, malformed.body.message, "the same sentence either way")
+  );
+});
+
+await check("a burst of lookups never costs a guest their record — writes have their own bucket", async () => {
+  const ip = "198.51.100.181";
+  for (let i = 0; i < 26; i += 1) await get(live.db, "/v1/requests/HH-ZZZZZZ", { ip });
+  const { status, body } = await post(
+    live.db,
+    { kind: "table", contact: { name: "Still Welcome", phone: nextPhone() }, lines: [{ id: FIRST_ITEM.id, qty: 1 }] },
+    { ip },
+  );
+  return eq(status, 201, "the write lands despite the read ceiling") && eq(typeof body.reference, "string", "reference");
+});
+
 /* --------------------------------------------------------------- the headers */
 
 describe("CORS: who may read a response");

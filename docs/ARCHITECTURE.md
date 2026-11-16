@@ -720,6 +720,73 @@ deleted after reading them back; three earlier verification rows remain, and nob
 notified when a record lands — that is still OPEN-QUESTIONS territory, and money stays dark until they are
 contacted.
 
+### Amendment A14 — the receipt endpoint was the one door with nothing on it, and the lock I fitted turns out to be a speed bump
+
+A13 wired the write path and then audited it. The audit that mattered was the one on the read path, and it
+found a hole nobody had looked at: `GET /v1/requests/:reference` had **no rate limit of any kind**. Every
+other route sat behind something — writes behind the per-IP window and `MIN_SECONDS_PER_PHONE`, payments
+behind a `503` because the Daraja secrets do not exist — but this one answered as many lookups as anyone
+could send, and the answer it gives is a stranger's own free text. The response carries `notes` verbatim
+("high chair, allergic to peanuts, please sit us near the window"), and the only thing standing between that
+and the open internet is a reference: six characters from `REFERENCE_ALPHABET` (28 symbols, `store.mjs`),
+about 29 bits. Six characters is a lot for a person who is guessing once and nothing like enough for a
+loop that costs 480 million requests. The endpoint also has no authentication by design — the reference *is*
+the credential — so there is no better fix available than making a guess expensive.
+
+The change is fifteen lines in `backend/src/index.mjs`. `throttle()` took the limit as a third argument
+(defaulting to the existing `IP_WINDOW_LIMIT`) so there is one counting implementation and not two, the read
+route passes `${ip}:read` into it — a separate bucket key, so a guest hammering receipt links cannot spend
+the write allowance and a bot POSTing cannot be stopped by the reader's ceiling — and the new ceiling is
+`READ_WINDOW_LIMIT = 24` per 60-second window, deliberately looser than the 12 the write path uses because
+nothing on the site fetches a receipt, so no legitimate guest can reach it.
+
+Two ordering decisions in `getOne` carry more weight than the number does:
+
+- The counter runs **before** `shapedReference()`. A caller spraying `HH-AAAAAA`, `HH-AAAAAB` and
+  `HH-###bad###` mixed together must pay the same rent for all of them; if malformed references were
+  refused for free, the limiter would become an oracle that whispers "that one was shaped like a real
+  reference" once it engaged.
+- The refusal sentence is the same whether the reference was well-shaped-but-absent or nonsense, and the
+  status is the same `429 slow_down` the write path uses, so the response a throttled caller gets teaches
+  them nothing about which references exist.
+
+`tests/api.mjs` gained four checks, and the fourth is the one I would defend in review: after 26 exhausted
+reads, a `POST` from a fresh phone still returns **201** — the two buckets genuinely do not share a budget.
+The suite is now **93 passed** (A13's 89 predates this change; that number stays as the record of what was
+true then). `tests/run.mjs` still **102 passed** and `scripts/check-board.mjs` still finds every one of the
+177 board strings.
+
+Then I deployed it — Worker version `4cf923e7-55a8-47c8-91a0-d25402dd41fb` — and the first live probe said
+it was not working. Twenty-six `curl` invocations against a real reference, one process per request:
+twenty-six `200`. Not one `429`. The honest reading at that moment was "the deploy is stale" or "the code is
+wrong", and both were testable, so I ran the cheapest falsifying thing instead of concluding: eighty requests
+over **one** keep-alive connection. That came back **31 × 200 and 49 × 429**, with bodies like
+`{"code":"slow_down","message":"Too many lookups from here. Give it a minute.","retry_after_seconds":2}`.
+
+So the guard is live and firing, and the difference between the two probes is the thing worth writing down:
+`const buckets = new Map()` lives in one isolate, and Cloudflare spreads concurrent requests over many of
+them. One-connection-per-request gave each request a cold bucket to itself; one multiplexed connection gave
+forty-nine of them the same one. A13's neighbour in the file already conceded exactly this about the write
+limiter — "the in-memory one is per-isolate and best effort: it cannot be trusted to be global, and it is
+offered as a speed bump rather than as a defence" — but there the database backed it up with
+`MIN_SECONDS_PER_PHONE`, a real cross-isolate rule. On the read path there is no database rule to back it
+with, because a receipt read that writes a counter row is a write per read, which is the wrong trade for a
+preview.
+
+What that leaves, stated plainly: the ceiling multiplies the price of a guess by something between 1 and the
+isolate count. It stops a script that walks references at human speed, and it slows a fast one by a factor
+that is not in my control. It is not a defence, and the comment above `READ_WINDOW_LIMIT` used to claim it
+was — the first version said "walking the 480-million-key space is a century per address", which the second
+probe disproved for the production Worker, so it now says what was measured and what the durable options
+are. Either a counted read in D1 when this becomes a trading site, or the cheaper fix at launch: eight
+characters instead of six, which is 3.8×10^11 and needs no bookkeeping at all. Lengthening is not free —
+`REFERENCE_RE` is built from `REFERENCE_LENGTH`, so existing six-character receipts would 400 on their own
+links unless the pattern is widened to `{6,N}` before the generator changes. That is a decision for whoever
+takes this over, which is why it is recorded here and in the code comment rather than half-implemented now.
+
+Nothing about the guest-facing behaviour changed: a receipt link that works today works after this deploy,
+and the only caller who notices anything is the one sending forty lookups a minute through a single socket.
+
 ## Risks / must-not-say
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record

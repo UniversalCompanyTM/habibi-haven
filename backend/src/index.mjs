@@ -42,6 +42,20 @@ const REFERENCE_RE = new RegExp(`^HH-[${REFERENCE_ALPHABET}]{${REFERENCE_LENGTH}
 const MIN_SECONDS_PER_PHONE = 20;
 const IP_WINDOW_MS = 60_000;
 const IP_WINDOW_LIMIT = 12;
+// Reading a receipt is the only endpoint with nothing else in front of it. The reference is the whole
+// credential — six characters from a 28-symbol alphabet, about 29 bits — and the response carries a guest's
+// own words in `notes`. Unthrottled, guessing costs nothing but bandwidth. Deliberately looser than the write
+// window: no page fetches a receipt today, so a guest refreshing a link cannot reach this ceiling while an
+// enumerator feels nothing but slow.
+//
+// What it is not: a global limit. `buckets` lives in one isolate, and measured on the deployed Worker on
+// 2026-11-16 the spread is real — 26 lookups spaced one per connection came back 26×200 because they landed on
+// 26 cold buckets, while 80 over one keep-alive connection came back 49×429 and 31×200. So this multiplies the
+// price of a guess by something between one and the isolate count, which stops a script that walks references
+// at human speed and slows a fast one, and is not a defence on its own. The durable fix is either a counted
+// read in D1 (a write per read, which is the wrong trade for a preview) or a longer reference at launch — 8
+// characters is 3.8e11 and needs no bookkeeping. See docs/ARCHITECTURE.md A14.
+const READ_WINDOW_LIMIT = 24;
 
 const DEFAULT_ALLOWED_ORIGINS = ["https://habibihavenpreview.pages.dev"];
 const PROJECT_SUBDOMAIN = ".habibihavenpreview.pages.dev"; // every direct-upload deployment gets one
@@ -69,7 +83,7 @@ export default {
 
       if (segments[0] === "v1" && segments[1] === "requests" && segments.length === 3) {
         const reference = segments[2];
-        if (method === "GET") return await getOne({ env, reference, origin });
+        if (method === "GET") return await getOne({ env, reference, origin, ip: clientIp(request), now: new Date() });
         return cors(json({ code: "bad_route", message: "Record with POST /v1/requests, pay with POST /v1/requests/:reference/payments." }, 405), origin, env);
       }
 
@@ -204,7 +218,18 @@ async function createRequest({ request, env, now, ip, origin }) {
   );
 }
 
-async function getOne({ env, reference, origin }) {
+async function getOne({ env, reference, origin, ip, now }) {
+  // Counted before the shape test, so a caller spraying malformed references pays the same rent as one
+  // spraying well-formed guesses. The sentence is identical whether or not the reference exists — a 429 that
+  // only ever followed real references would turn the rate limiter into an oracle.
+  const blocked = throttle(`${ip}:read`, now, READ_WINDOW_LIMIT);
+  if (blocked)
+    return cors(
+      json({ code: "slow_down", message: "Too many lookups from here. Give it a minute.", retry_after_seconds: blocked.retryAfter }, 429),
+      origin,
+      env,
+    );
+
   const shaped = shapedReference(reference, origin, env);
   if (shaped) return shaped;
   const found = await readRequest(env.DB, reference.toUpperCase());
@@ -334,16 +359,16 @@ function clientIp(request) {
 }
 
 const buckets = new Map();
-function throttle(ip, now) {
+function throttle(key, now, limit = IP_WINDOW_LIMIT) {
   const ms = now.getTime();
-  if (buckets.size > 4096) for (const [key, value] of buckets) if (value.until <= ms) buckets.delete(key);
-  const entry = buckets.get(ip);
+  if (buckets.size > 4096) for (const [stale, value] of buckets) if (value.until <= ms) buckets.delete(stale);
+  const entry = buckets.get(key);
   if (!entry || entry.until <= ms) {
-    buckets.set(ip, { count: 1, until: ms + IP_WINDOW_MS });
+    buckets.set(key, { count: 1, until: ms + IP_WINDOW_MS });
     return null;
   }
   entry.count += 1;
-  if (entry.count > IP_WINDOW_LIMIT) return { retryAfter: Math.max(1, Math.ceil((entry.until - ms) / 1000)) };
+  if (entry.count > limit) return { retryAfter: Math.max(1, Math.ceil((entry.until - ms) / 1000)) };
   return null;
 }
 
