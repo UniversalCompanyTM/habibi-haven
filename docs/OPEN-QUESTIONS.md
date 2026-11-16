@@ -166,3 +166,33 @@ happens where the restaurant already does business.
 data, not on anything the browser typed, so a server-side function can reuse it to recompute the total
 before it asks Daraja for money — the part that must not be trusted to the client. **Ask:** who owns the
 Paybill, and is a card-on-file M-Pesa prompt even wanted for dine-in, or is this a delivery-only flow?
+
+## 11. The day it stops being a preview — three knobs, in this order
+
+The preview is deliberately invisible and deliberately paranoid, and both have to be turned off on purpose
+rather than by accident. Checked against the live host on 2026-11-16, so this is what the deploy does today,
+not what the config says it should:
+
+1. **Indexing is off, and it is off in the pages rather than in a `robots.txt`.** All four routes ship
+   `<meta name="robots" content="noindex, nofollow">` because `PUBLIC_INDEXABLE` defaults to `false`
+   (`site/astro.config.mjs:50`) — the right posture for a site the restaurant has not agreed to yet. There is
+   no `robots.txt` in the build: `https://habibihavenpreview.pages.dev/robots.txt` answers 200 with 1 248 bytes
+   of Cloudflare's own content-signals comments and no `User-agent:` line, and `/sitemap.xml` is 404. Neither
+   is a defect while every page is `noindex`, because a crawler told not to index a page needs no map to it.
+   The order matters at launch: domain first, then `PUBLIC_INDEXABLE=true`, then a sitemap — so the file has
+   something to point at.
+2. **The canonical follows one variable.** `SITE_URL` becomes the real domain at build time, and every
+   `rel=canonical`, `og:url` and JSON-LD `@id` moves with it. `scripts/verify-dist.mjs` compares each page's
+   canonical and `og:url` with the route it was built from, so a stale host fails the build instead of
+   shipping quietly.
+3. **The Worker would then stop accepting the site — this is the one that actually bites.** CORS in
+   `backend/src/index.mjs` allows `https://habibihavenpreview.pages.dev` plus any `*.habibihavenpreview.pages.dev`
+   preview, and nothing else. A new domain is a same-day edit to the allow-list, not a follow-up: leave it
+   alone and the pages still render, the WhatsApp and `tel:` links still work, and only the Record/Book button
+   fails — into the `unreachable` arm, which hands the guest the WhatsApp fallback with their own words in it,
+   so nobody sees a stack trace. Graceful, still broken. **Ask:** the domain, and change the allow-list in the
+   same deploy that uses it.
+
+Nothing in the book notifies anyone yet. A recorded table sits in D1 until someone queries it — for the pitch
+that is exactly what the page claims ("nothing is confirmed", the phone number is who decides); for a trading
+restaurant it is the first thing that needs a watcher. See §8 for who signs off.
