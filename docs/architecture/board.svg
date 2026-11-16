@@ -143,18 +143,20 @@
     <rect x="546" y="892" width="384" height="318" rx="10" fill="#F6EFE2" stroke="#12100E" stroke-width="1.4" stroke-dasharray="6 5"/>
     <text x="566" y="922" fill="#CB9235" font-size="15" font-weight="700" letter-spacing="2">RUNTIME — AFTER THE GATE</text>
     <g font-size="15" fill="#12100E" font-family="'Cascadia Mono', Consolas, monospace">
-      <rect x="566" y="936" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
-      <text x="580" y="964">gate.mjs → tier</text>
-      <rect x="566" y="994" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
-      <text x="580" y="1022">DoorScene (three, lazy)</text>
-      <rect x="566" y="1052" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
-      <text x="580" y="1080">2D fallback — same data</text>
-      <rect x="566" y="1110" width="344" height="46" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
-      <text x="580" y="1138">table.mjs (pure math)</text>
-      <rect x="566" y="1168" width="344" height="28" rx="7" fill="#12100E"/>
-      <text x="580" y="1187" fill="#CB9235">wa.me/254116880000</text>
+      <rect x="566" y="936" width="344" height="40" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="962">gate.mjs → tier</text>
+      <rect x="566" y="980" width="344" height="40" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1006">DoorScene (three, lazy)</text>
+      <rect x="566" y="1024" width="344" height="40" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1050">2D fallback — same data</text>
+      <rect x="566" y="1068" width="344" height="40" rx="7" fill="#FBF4E8" stroke="#7C5920" stroke-width="1.1"/>
+      <text x="580" y="1094">table.mjs (pure math)</text>
+      <rect x="566" y="1112" width="344" height="40" rx="7" fill="#12100E"/>
+      <text x="580" y="1138" fill="#CB9235">POST /v1/requests → D1 record</text>
+      <rect x="566" y="1156" width="344" height="40" rx="7" fill="#F6EFE2" stroke="#7C5920" stroke-width="1.1" stroke-dasharray="5 4"/>
+      <text x="580" y="1182">wa.me/254116880000 — no-JS</text>
     </g>
-    <text x="546" y="1236" fill="#7C5920" font-size="14">No backend. No admin. No second source of truth.</text>
+    <text x="546" y="1236" fill="#7C5920" font-size="14">Server reprices every order. Payments stay dark.</text>
   </g>
 
   <!-- ================= PANEL 03 · THE DOOR WIREFRAME ================= -->

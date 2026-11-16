@@ -38,7 +38,7 @@ still no site code.
 | 6 | v1 scope | **Home + Table + Menu + Visit** (4 routes), clean seams for Events/Gallery |
 | 7 | Visuals | **Real food, designed ambience** — their 173 hosted dish photos; procedural room; no faked or AI venue photos *(premise amended after approval — see Amendments A1: real venue photography and the real logo were in hand all along)* |
 | 8 | Stack | **Astro + islands + Three.js**, static output |
-| 9 | Booking | **WhatsApp handoff, static** — no backend, nothing to confirm a table falsely |
+| 9 | Booking | ~~WhatsApp handoff, static — no backend~~ **(superseded after approval — see Amendment A12: Worker + D1 order records with server-computed totals; the WhatsApp handoff stays as the no-JS path, and payments remain dark until credentials exist)** |
 | 10 | Exposure | **Private preview, pitch-grade** — not published as Habibi's official property before they sign off |
 | 11 | Hours of record | **06:30–23:00 daily (Google Maps)**, both disagreements logged |
 | 12 | Preview image method | **Deterministic architecture board** — vector, generated from this file's own tables; labels that are not in this file cannot appear in the image |
@@ -133,9 +133,18 @@ habibi-haven-site/
   scripts/
     probe-ingest.mjs            # M0 feasibility probe (headless read + image reachability)
     ingest.mjs                  # fetch/parse -> menu.source.json + drift.md
-    build-content.mjs           # source + overrides + taxonomy -> src/data/menu.json (validated)
+    build-content.mjs           # source + overrides + taxonomy -> src/data/menu.json (validated),
+                                #  and the server's own catalog: backend/catalog.json + seed.sql (A12)
     mirror-images.mjs           # download referenced photos -> src/assets/menu/
     check-drift.mjs             # re-run ingest, report, exit non-zero on unreviewed change
+  backend/                      # the server-side half (Amendment A12) — deployed with `wrangler deploy`
+    wrangler.toml               # Worker name + D1 binding; secrets never live here
+    migrations/20261116_0001_init.sql   # the schema, and the only copy of it
+    catalog.json  seed.sql      # build outputs, committed like menu.json (243 prices + hours of record)
+    src/index.mjs               # 5 routes: health, record, read receipt, pay, Daraja callback
+    src/validate.mjs            # what a request may contain; no I/O, no ambient clock
+    src/store.mjs               # every SQL sentence the server says, prepared and bound
+    src/mpesa.mjs               # STK push + callback verification — written, and dark
   site/                         # Astro app
     astro.config.mjs            # static output, image service, sitemap
     src/
@@ -157,6 +166,9 @@ habibi-haven-site/
     OPEN-QUESTIONS.md           # hours disagreement, Uber Eats status, name spelling, photo rights
     ARCHITECTURE.md             # this plan, kept in sync
   tests/
+    run.mjs                     # the site's unit gates: table math, hours sweep, taxonomy (A6 posture)
+    api.mjs                     # backend gate: the real migration + seed on real SQLite, the real handler,
+                                #  a fake Daraja for the money path (A12)
 ```
 
 ### Data flow
@@ -171,12 +183,18 @@ content/menu.source.json  ──► content/drift.md  (human reviews, approves)
    ├─ menu.overrides.json ────────┘ house copy for the 136 items with no description
    ▼
 scripts/build-content.mjs ──► site/src/data/menu.json   (schema-validated, typed)
-   ▼                                                    └► mirror-images.mjs → src/assets/menu/
+   │                        └► mirror-images.mjs → src/assets/menu/
+   └───────────────────────► backend/catalog.json + seed.sql  (the SAME prices, for the server)
+   ▼
 Static build: Home · Table · Menu · Visit  (+ JSON-LD, sitemap, noindex on preview)
    ▼
 Capability gate at runtime ──► 3D door OR 2D table  (identical data, identical price math)
    ▼
-"Send this table" ──► wa.me/254116880000?text=<structured message>   (no backend)
+"Send this table" ──► POST /v1/requests (backend/) ──► server reprices from its own catalog,
+   │                  stores the record, hands back a reference  ┐  (Amendment A12)
+   │                  and the confirmation says, from the server, │
+   │                  that no money is being taken yet            ┘
+   └──────────────► wa.me/254116880000?text=<same table>   ← the no-JS path, and the fallback
 ```
 
 ### The door engine (the only WebGL in the site)
@@ -249,6 +267,7 @@ any teal that enters the token set.
 | Ingest | `probe-ingest.mjs` reports whether a headless read of menu.or.ke is possible; if not, M0 records the scripted-read fallback and the plan proceeds. Image refs HEAD-checked before mirroring. |
 | Content | `build-content.mjs` fails the build if any item lacks family/section/price/photo-reference; count assertions: 243 items in, 243 out, 173 unique photos; `check-drift.mjs` exits non-zero on unreviewed upstream change |
 | Unit | `lib/table.mjs` (party scaling, cake formats, totals, KSh formatting, WhatsApp URL escaping), `lib/hours.mjs` with TZ frozen to Africa/Nairobi at 06:29/06:30/22:59/23:00, taxonomy mapping for the two over-collected headings |
+| Backend | `tests/api.mjs` executes the real migration and the real build-generated seed on `node:sqlite` (foreign keys on, as D1 has them), drives the Worker's `fetch` with real `Request`s, sweeps all 1440 minutes against the site's own `hours.mjs`, and runs the whole Daraja path against a fake Safaricom. Then `wrangler d1 execute --local` + `wrangler dev --local` proves the same in workerd. What neither proves: the remote binding, and Safaricom. (A12) |
 | E2E | _(planned, superseded by Amendment A6)_ Playwright at 1440×900, 1280×800, 390×844: configurator total updates, `/table` URL round-trips, menu search/filter, all four gate tiers forced (reduced-motion, WebGL blocked, save-data) each producing a working checkout |
 | A11y/perf | _(planned, superseded by Amendment A6)_ axe-core 0 AA violations; Lighthouse CI against the budgets above; 30-frame measurement downgrade proven on a throttled profile |
 | Preview | static build served by `astro preview` on 4322 and verified against it; a screen-recorded walkthrough plus a per-route screenshot pack |
@@ -521,6 +540,59 @@ head, the `Restaurant` / `Menu` / `MenuItem` / `Offer` / `OpeningHoursSpecificat
 *(Numbering note: there is no A9 — the sequence skipped it, and the gap is left rather than back-filled so
 the amendment order keeps matching the commit order.)*
 
+### Amendment A12 — decision 9 was reversed on purpose: the site now has a server-side half, and it is honest about what it cannot do
+
+Approved change, from the user: *"Build Worker + D1 order records, payments dark."* Decision 9 ("WhatsApp
+handoff, static — no backend") was written when the only thing a server could add was risk. The brief's
+fourth framework group asks for more than that — server-side keys, server-computed totals, stored order
+records, and Daraja STK push with callback verification — and a total the browser calculated is a total the
+browser chose. So `backend/` exists: one Cloudflare Worker, one D1 database, five routes.
+
+Why a Worker beside Pages instead of Pages Functions inside it: the deploy is a direct upload of a
+runner-built `dist`, and Functions then have to be discovered from a `functions/` folder next to the
+command's working directory, with bindings in a config the deploy also has to be told about — three pieces
+of wiring each able to fail silently, and a silently missing function is a "Book a table" button that does
+nothing. A Worker of its own is one `wrangler deploy` with a `/health` route that answers whether any of it
+is wired. Same product the brief named.
+
+What "payments dark" means precisely: no Daraja credential exists on the deployment, so `paymentStatus()`
+reports `payments_not_configured` with the six missing secret names, both money routes answer 503, and —
+the part that matters for the pitch — the *confirmation the guest reads* takes its `payments.available:
+false` from the server's answer rather than from page copy. Switching money on is a credentials task, not
+an edit to a sentence. The STK-push builder, the timestamp rule, the four callback checks and the audit
+writes are real code, run for real against a fake Safaricom, and have never touched Safaricom.
+
+Two defects that only executing the thing could find:
+
+1. **A valid reference that 400s on the guest's own receipt link.** `makeReference` draws from a
+   26-character alphabet; the router's pattern had been written out by hand as `[2-9A-HJ-KM-NP-RT-Z]`, which
+   silently omits `S`. A guest handed `HH-J7GSQ5` would have been told their reference "looks like
+   HH-4KQ7MR" by the endpoint that is supposed to show it. Fixed by deleting the hand-typed class: the
+   router now builds its regex from the alphabet the generator exports, so the two cannot disagree by an
+   edit. The gate for it writes 26 records — one per character — and reads each back through the real
+   handler.
+2. **A `wrangler.toml` that would not deploy.** The `[migrations]` table I had written is the Worker-version
+   migration bindings, not D1's; D1 wants `migrations_dir` inside the binding. `wrangler deploy --dry-run`
+   said so in one line ("should be an array, got {folder:migrations}") — before anything was uploaded. The
+   same check removed `nodejs_compat`, which was there on a comment's say-so while `src/` imports no `node:`
+   specifier at all.
+
+Proof, in the order it was obtained: `node tests/api.mjs` — **87 assertions, 0 failures** — which executes
+`backend/migrations/20261116_0001_init.sql` and the build's own `backend/seed.sql` through `node:sqlite`
+with `PRAGMA foreign_keys = ON`, behind an adapter modelling only the D1 methods the code uses, then calls
+the Worker's `fetch` export with real `Request`s. Then `wrangler d1 execute --local` (migration, then seed:
+243 prices) and `wrangler dev --local` — the Worker in workerd, not in Node — probed over HTTP: `/health`
+200 with `items=243, payments.mode=off`; a built table 201 with the server's own `total=3100`, drift
+`{claimed 2001 → delta 1099}` reported rather than hidden, and `payments.available=false`; the lowercase
+receipt 200 with no `contact_name` in it; a 19:00 reservation 201 stamped `2026-11-22T16:00:00.000Z` and a
+03:00 one 422 `outside_hours`; both money routes 503 with 6 secrets named; `GET /v1/requests` 405 (there is
+no list endpoint, and saying so is truer than 404); an unknown reference 404; an evil origin getting no
+`Access-Control-Allow-Origin`; and the same phone twice answered 201 then 429 with `retry_after_seconds=20`.
+
+Still not proven, and not claimed: that the remote D1 binding exists (that is the post-deploy probe), that
+`database_id` is filled (it is a placeholder until `wrangler d1 create` runs), that any of the payment path
+works against Safaricom, and that the site's forms talk to this API yet — that is the next milestone.
+
 ### Milestones
 
 1. **M0 — probes** (headless ingest, image reachability, toolchain availability). No UI.
@@ -565,8 +637,17 @@ Five panels, left to right:
    `menu.source.json` + `drift.md` → `taxonomy.json` / `menu.overrides.json` →
    `build-content.mjs` → `src/data/menu.json (243 items · 173 photos)` → `Astro static build` →
    four route boxes; a second input feeding the build: `brand/ (logo + 12 real photos)` and
-   `research/COPY-BANK.md`; a side stack on the runtime column: `gate.mjs` →
-   `DoorScene (three, lazy)` / `2D fallback` → `table.mjs` → `wa.me/254116880000`.
+   `research/COPY-BANK.md`; a side stack on the runtime column — after A12 six bars deep, pitch 44:
+   `gate.mjs → tier` → `DoorScene (three, lazy)` → `2D fallback — same data` →
+   `table.mjs (pure math)` → `POST /v1/requests → D1 record` (the one dark bar, the Worker) →
+   `wa.me/254116880000 — no-JS` (dashed outline, because it is the path that survives with JavaScript
+   off, not the terminal); the line under the column reads `Server reprices every order. Payments stay
+   dark.` — full stop, because the caption is the one string in that card with room for nothing longer
+   (`fit-board.mjs` measured the longer wording 101px over its card and pinned it, which is condensing a
+   lie into a squeeze instead of fixing it). That sentence replaces the pre-A12 board's `No backend.
+   No admin. No second source of truth.` — a claim the Worker made false, and the reason the board is
+   regenerated whenever a decision is amended rather than left to `check-board.mjs`, which only proves
+   a string is *sourced*, never that it is still *true*.
 3. **The door, as wireframe** — an orthographic top-down schematic of a long table with six place
    markers, each annotated only with real menu strings: `Full Mandy KSh 2,300`, `Sinia KSh 6,000`,
    `Lamb Chops KSh 1,350`, `Chicken Biryani KSh 1,300`, `Karak Chai KSh 350`,
