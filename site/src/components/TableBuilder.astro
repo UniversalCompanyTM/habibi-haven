@@ -576,16 +576,22 @@ const change = nextChange();
           : "You just sent one of these. Give it a moment and press Record again.";
         return;
       }
-      /* Nothing reached the book, or the book answered without recording it (5xx, `not_recorded`). The sheet is
-         untouched and the handoff link beside this button carries the same lines — the dishes and the estimate
-         from `whatsappText`, the name and number from `requestMessage` — so a failed write costs the guest one
-         more press rather than the request. Kept in sync on every render, so it is already correct by the time
-         anyone reads this sentence. */
+      /* Two failures, two sentences — the same rule /visit follows. `unreachable` is "nothing arrived";
+         `failed` is "the book received it and wrote nothing", which is a different instruction to the guest:
+         after a refusal the press-again is the book's own, and the sheet's estimate is still what the kitchen
+         will argue about, whereas after a connection failure the sheet never left the device. Both keep the
+         sheet untouched and both leave the handoff carrying the same lines — the dishes and the estimate from
+         `whatsappText`, the name and number from `requestMessage` — so a failed write costs a guest one more
+         press rather than the request. The handoff is kept in sync on every render, so it is already correct
+         by the time anyone reads this sentence. */
       syncHandoff();
+      const serverSaid = result.kind === "failed" && result.messages?.length ? ` It said: ${result.messages.join(" ")}` : "";
       recordState.textContent =
-        "The book could not be reached, so nothing was recorded and no reference was issued. The link beside " +
-        "this button carries this sheet with your name and number — send it there and the kitchen gets the " +
-        "same thing.";
+        result.kind === "failed"
+          ? `The book answered, but it did not record this sheet and no reference was issued.${serverSaid} The link beside this button carries these dishes with your name and number — press Record again, or send it there and the kitchen gets the same thing.`
+          : "The book could not be reached, so nothing was recorded and no reference was issued. The link beside " +
+            "this button carries this sheet with your name and number — send it there and the kitchen gets the " +
+            "same thing.";
     });
 
     render();

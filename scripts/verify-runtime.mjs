@@ -2066,6 +2066,33 @@ for (const route of PHONE_ROUTES) {
   if (stub.length) failures.push(`${route}: ${stub.map((a) => `${a.text} ${a.w}x${a.h}`).join(", ")} in the dock is too small to press on a phone`);
   if (read.buriedCount) failures.push(`${route}: ${read.buriedCount} visible link(s) sit under the dock at the bottom of the page (${read.buried.join(", ")}) — the document is not giving it room`);
   if (read.overflowX > 1) failures.push(`${route}: the page is ${read.overflowX}px wider than a 390px viewport — a phone gets a horizontal scrollbar`);
+
+  // "Sticky" is a behaviour, and everything above can pass on a bar that scrolls away with the document. The
+  // dock is `position: fixed` under 720px (ActionDock.astro), so the honest claim is that it is in the viewport
+  // at every depth — a guest who has walked down to the biryani should not have to climb back for the two
+  // actions this site is a pitch about. Sampled at three depths rather than one, because the interesting failure
+  // is the middle of a long page.
+  const depths = await evaluate(`
+    const bar = document.querySelector("[data-dock]");
+    if (!bar) return { missing: true };
+    const doc = document.documentElement;
+    const out = [];
+    for (const frac of [0, 0.5, 0.95]) {
+      scrollTo({ top: Math.max(0, (doc.scrollHeight - innerHeight) * frac), behavior: "instant" });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const r = bar.getBoundingClientRect();
+      out.push({ frac, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, inView: r.height > 0 && r.top >= 0 && r.bottom <= innerHeight + 1 });
+    }
+    scrollTo({ top: 0, behavior: "instant" });
+    return out;
+  `);
+  results.push({ path: `phone ${route} dock`, value: depths, errors: drain().errors, warnings: [] });
+  if (depths?.missing) failures.push(`${route}: the dock disappeared between the two reads — nothing to sample at depth`);
+  else {
+    const lost = (depths ?? []).filter((d) => !d.inView);
+    if (lost.length)
+      failures.push(`${route}: at ${lost.map((d) => `${Math.round(d.frac * 100)}% scrolled (${d.top}–${d.bottom} of a ${d.vh}px viewport)`).join(", ")} the dock is not on screen — the sticky Order/Book controls do not follow the guest, which is the whole reason they exist`);
+  }
 }
 await inPage("Emulation.clearDeviceMetricsOverride", {});
 
@@ -2259,13 +2286,16 @@ const visitArms = [
     body: { code: "slow_down", message: "Too many at once.", retry_after_seconds: 20 },
     expect: ["Try again in 20 seconds"],
   },
-  { name: "unreachable", network: true, expect: ["could not be reached", "carries everything you typed"] },
+  { name: "unreachable", network: true, expect: ["could not be reached", "carries everything you typed"], reject: ["The book answered"] },
   {
     name: "server-failure",
     status: 500,
     body: { code: "not_recorded", message: "Nothing was saved. Try again, or send it on WhatsApp." },
-    expect: ["could not be reached from here"],
-    reject: ["Recorded"],
+    // The book was reached and refused to write. Until this arm ran, the page called that "could not be
+    // reached", which told the guest something the network never confirmed — and dropped the server's own
+    // sentence, the one thing they could act on. Both halves are now required, and the conflation is forbidden.
+    expect: ["The book answered, but it did not record this", "no reference was issued", "It said: Nothing was saved"],
+    reject: ["could not be reached", "Recorded as"],
   },
 ];
 
@@ -2308,7 +2338,17 @@ const tableArms = [
     body: { code: "slow_down", message: "You just sent one of these.", retry_after_seconds: 20 },
     expect: ["Give it 20 seconds and press Record again", "the sheet is still here"],
   },
-  { name: "unreachable", network: true, expect: ["nothing was recorded and no reference was issued"] },
+  { name: "unreachable", network: true, expect: ["nothing was recorded and no reference was issued"], reject: ["The book answered"] },
+  {
+    name: "server-failure",
+    status: 500,
+    body: { code: "not_recorded", message: "Nothing was saved. Try again, or send it on WhatsApp." },
+    // Same rule as /visit, tested here because /table has more to lose: the sheet is on screen with dishes and
+    // an estimate, and a guest who is told "could not be reached" when the book actually answered will press
+    // again without knowing the refusal was the book's, not the network's.
+    expect: ["The book answered, but it did not record this sheet", "It said: Nothing was saved", "press Record again"],
+    reject: ["could not be reached", "Recorded as"],
+  },
   {
     name: "empty-sheet",
     pre: `

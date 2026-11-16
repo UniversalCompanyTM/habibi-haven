@@ -335,12 +335,21 @@ const frames = [
               : "That number has a request going in right now. Give it a moment.";
             return;
           }
-          // Unreachable or a server-side failure: the WhatsApp button beside the form now carries exactly
-          // what the guest typed, so the request survives the network instead of vanishing into a spinner.
+          /* Two failures, two sentences. `unreachable` means the request never arrived; `failed` means the book
+             received it and answered without writing anything (a 5xx, or `not_recorded`). Saying "could not be
+             reached" about a request that was reached and refused is the same species of error as saying a table
+             is confirmed — the page would be editing what happened, and it would also cost the guest the one
+             useful fact they have: that the number they typed is already in the restaurant's system as a failed
+             write, so pressing again is right and phoning is right, while a connection failure means press again
+             and wait. Both arm the handoff, because in both cases what the guest typed is worth a route that
+             works. */
           handoff.href = whatsAppHref(form.dataset.wa, requestMessage(payload));
+          const serverSaid = result.kind === "failed" && result.messages?.length ? ` It said: ${result.messages.join(" ")}` : "";
           out.textContent =
-            "The book could not be reached from here, so nothing was recorded. The WhatsApp button beside " +
-            "this form now carries everything you typed — send it there and it arrives the same.";
+            result.kind === "failed"
+              ? `The book answered, but it did not record this and no reference was issued.${serverSaid} The WhatsApp button beside this form now carries everything you typed — send it there and it arrives the same.`
+              : "The book could not be reached from here, so nothing was recorded. The WhatsApp button beside " +
+                "this form now carries everything you typed — send it there and it arrives the same.";
         });
       },
     });
