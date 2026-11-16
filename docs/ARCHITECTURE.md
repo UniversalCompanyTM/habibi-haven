@@ -883,15 +883,18 @@ left standing — that no browser has ever executed the page-level submit handle
 A15's closing sentence — no browser had ever executed the page-level submit handlers — is now retired, and it
 earned its keep: the first run that executed them found a defect in what those handlers *say*.
 
-**What ran.** CI run 43856166954 (commit `3569310`) drove both handlers through fourteen arms in headless Chrome
-against `astro preview` — seven exits on `/visit` (recorded, 422 with named fields, the 422 whose field path is
-`lines[0]`, 429 with a countdown, unreachable, a 500 that writes nothing) and seven on `/table` (three
-price-drift sentences, the same indexed path, 429, unreachable, 500, and the empty-sheet guard). All fourteen
-finished with zero console errors. Responses are stubbed by replacing `window.fetch` before
-`form.requestSubmit()`, which is the seam `submitRequest(base, payload, { post = globalThis.fetch })` already
-exposes; the shipped modules do the work, the arm only schedules the answer. Stubbing is not laziness: a passing
-201 on every push would write D1 rows nobody ordered, and two CI cycles of fourteen arms left `requests` at
-**3 rows**, which is the evidence that the interception happens before the network.
+**What runs.** CI run 43858341744 (commit `3c640b7`) is green with sixteen arms driving both handlers in headless
+Chrome against `astro preview`: seven exits on `/visit` (recorded, 422 with named fields, the 422 whose field
+path is `lines[0]`, 429 with a countdown, unreachable, `not_recorded` 500, `server_error` 500) and nine on
+`/table` (three price-drift sentences, the same indexed path, 429, unreachable, both 500 shapes, and the
+empty-sheet guard). Every arm finished with zero console errors. Responses are stubbed by replacing
+`window.fetch` before `form.requestSubmit()`, which is the seam `submitRequest(base, payload, { post =
+globalThis.fetch })` already exposes; the shipped modules do the work, the arm only schedules the answer.
+Stubbing is not laziness: a passing 201 on every push would write D1 rows nobody ordered, and four CI cycles of
+sixteen arms left `requests` at **3 rows** — the measurement that proves the interception happens before the
+network. The two `server_error` arms exist for one specific reason: they require the message that *this* arm
+scheduled and forbid the message the previous arm scheduled, so a handler that recites one hardcoded sentence
+instead of quoting `result.messages` cannot pass both.
 
 **What it found.** `/visit server-failure` reported "the submit produced no sentence at all" — the universal
 gate that the live region must change had caught a case where the new sentence was *identical* to the previous
@@ -927,13 +930,22 @@ is the gate that proves they follow the guest rather than merely exist.
 still contains exactly one "could not be reached" — the genuine connection failure, which is the wording that
 should have survived.
 
-**Not proven, and now the honest edge of this work.** The second 500 shape (`server_error`,
-`backend/src/index.mjs:120`) shares `kind:"failed"` and the message-quoting path, but no arm of its own — a
-fifteenth arm would prove the page quotes the book rather than one hardcoded sentence. Independent subagent
-review of these arms was not available in this environment, so they have been read once, by their author, and
-executed by the runner. And commit `3569310` has a cosmetic defect of its own: the subject line and its first
-paragraph were written without a blank line between them, so git merged them into one 475-character subject. The
-text is all in the log; rewriting it would need a force-push, which is not how this repository is operated.
+**Not proven, and now the honest edge of this work.** No independent reviewer read these arms — subagent review
+was not available in this environment, so they have been read once, by their author, and executed by the runner.
+Commit `3569310` has a cosmetic defect of its own: the subject line and its first paragraph were written without
+a blank line between them, so git merged them into one 475-character subject. The text is all in the log;
+rewriting it would need a force-push, which is not how this repository is operated.
+
+**A flake worth naming, because it was the gate's fault.** Run 43857740739 executed nothing. Sixteen seconds
+after the preview server answered, `waitForBrowser` gave up and threw "no DevTools endpoint on 9333 — is
+Chrome/Edge installed at /usr/bin/google-chrome?", on a workflow whose previous run had been green sixteen
+minutes earlier with the same code. The budget was 60 × 250 ms — sized to the fastest observation rather than the
+slowest machine — and the message blamed an installation for what was most likely a cold runner, which is the
+kind of failure that teaches people to re-run CI instead of reading it. The wait is 180 attempts (45 s), Chrome's
+stdout/stderr are now captured (piped and continuously read, because an unread pipe fills at 64 KiB and a blocked
+Chrome is worse than the failure being diagnosed) and the last twelve lines go into the error, and the
+fast-fail on a browser that already exited still runs first, so a genuinely dead Chrome is still an immediate and
+accurate error. Run 43858341744 is the green one that proves both halves: the arms and the budget.
 
 ## Risks / must-not-say
 
