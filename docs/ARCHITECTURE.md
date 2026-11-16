@@ -878,7 +878,66 @@ committed ones; the suites still read **103 passed** (site) and **93 passed** (a
 not exist and no committed document cites it. That work must be treated as not started, and the sentence A15
 left standing — that no browser has ever executed the page-level submit handlers — is still exactly right.
 
+### Amendment A17 — the handlers were finally executed in a browser, and the browser disagreed with the page
+
+A15's closing sentence — no browser had ever executed the page-level submit handlers — is now retired, and it
+earned its keep: the first run that executed them found a defect in what those handlers *say*.
+
+**What ran.** CI run 43856166954 (commit `3569310`) drove both handlers through fourteen arms in headless Chrome
+against `astro preview` — seven exits on `/visit` (recorded, 422 with named fields, the 422 whose field path is
+`lines[0]`, 429 with a countdown, unreachable, a 500 that writes nothing) and seven on `/table` (three
+price-drift sentences, the same indexed path, 429, unreachable, 500, and the empty-sheet guard). All fourteen
+finished with zero console errors. Responses are stubbed by replacing `window.fetch` before
+`form.requestSubmit()`, which is the seam `submitRequest(base, payload, { post = globalThis.fetch })` already
+exposes; the shipped modules do the work, the arm only schedules the answer. Stubbing is not laziness: a passing
+201 on every push would write D1 rows nobody ordered, and two CI cycles of fourteen arms left `requests` at
+**3 rows**, which is the evidence that the interception happens before the network.
+
+**What it found.** `/visit server-failure` reported "the submit produced no sentence at all" — the universal
+gate that the live region must change had caught a case where the new sentence was *identical* to the previous
+arm's. `outcome()` distinguishes `{kind:"unreachable"}` (nothing arrived) from `{kind:"failed", status,
+messages}` (the book answered and wrote nothing), and both pages threw that distinction away in a shared
+fallback reading "The book could not be reached". For a 500/`not_recorded` that is a claim about the network the
+site never observed, and it discarded the server's own message — the one string a guest can act on ("Nothing was
+saved. Try again, or send it on WhatsApp.", `backend/src/index.mjs:181`). Each page now names which failure
+happened and quotes the book when it quoted back; both still arm the WhatsApp handoff and neither touches the
+sheet. The arms forbid the conflation in both directions, so the two sentences cannot merge again.
+
+**Harness lessons, recorded because they are the reason to keep the harness.** Three of the assertions I wrote
+first were about the harness rather than the site: a phone number I typed instead of reading `data-wa`, an
+`https://` rule on `source` that only the deployment can satisfy (this harness serves over http), and a
+value-preservation read that queried `[data-request-form]` from the shared tail — which runs after the `/table`
+navigation, so the form was legitimately absent. The rule that follows is that an assertion must name the
+document it reads, which is why that read now sits beside the `/visit` battery. The second lesson is structural:
+when the tail threw, Node printed a stack and the run lost the report for thirteen arms that had already
+executed. The report is a function now, and `uncaughtException`/`unhandledRejection` call it with the error as
+the reason, so an interruption costs a line at the top of the evidence instead of the evidence. Those handlers
+displace Node's print-and-die default, so each arms an unref'd 30-second backstop — without it a report that
+never reached `goodbye` would hold Chrome until GitHub cancelled the job an hour later.
+
+**Also gated.** The phone battery used to sample the dock at one scroll position, which a bar that scrolls away
+with the document would pass. `ActionDock.astro` makes it `position: fixed` under 720px, so it is now required to
+be in the viewport at 0%, 50% and 95% — the sticky Order/Book controls are in the brief for this site, and this
+is the gate that proves they follow the guest rather than merely exist.
+
+**Deployed.** The artifact of that run is Pages deployment `a6b2828b`, production at
+`https://habibihavenpreview.pages.dev`: four routes 200, `/nope` 404, live `/visit` pulls
+`visit.astro_astro_type_script_index_0_lang.BDbQsG8K.js` and `/table` pulls
+`TableBuilder.astro_astro_type_script_index_0_lang.DDwHGTIs.js`, both carrying the new sentences. Each chunk
+still contains exactly one "could not be reached" — the genuine connection failure, which is the wording that
+should have survived.
+
+**Not proven, and now the honest edge of this work.** The second 500 shape (`server_error`,
+`backend/src/index.mjs:120`) shares `kind:"failed"` and the message-quoting path, but no arm of its own — a
+fifteenth arm would prove the page quotes the book rather than one hardcoded sentence. Independent subagent
+review of these arms was not available in this environment, so they have been read once, by their author, and
+executed by the runner. And commit `3569310` has a cosmetic defect of its own: the subject line and its first
+paragraph were written without a blank line between them, so git merged them into one 475-character subject. The
+text is all in the log; rewriting it would need a force-push, which is not how this repository is operated.
+
 ## Risks / must-not-say
+
+
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
   and log the rest rather than smoothing it over.
