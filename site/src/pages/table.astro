@@ -40,10 +40,12 @@ const f = menu.meta.facts;
       <div class="stack">
         <h2 class="display--h3">Why this is not a booking form</h2>
         <p class="measure meta">
-          Nothing in their stack looks like a reservations system, and a website that pretend-booked a
-          table would send the floor staff an order they never received. So the site does the part it
-          can actually do — compose the table, price it correctly, and put it in front of the people
-          who can say yes — and says out loud that the answer comes from them.
+          Nothing in their stack looks like a reservations system, and a website that pretend-booked a table
+          would send the floor staff an order they never received. So this sheet does the part it can actually
+          do — compose the table, price it from the kitchen's own data, and put it in front of the people who
+          can say yes — and says out loud that the answer comes from them. The one place the site writes
+          anything down is <a href="/visit#request">the request form on Visit</a>, which records a request and
+          hands back a reference. A reference is not a confirmation, and it never claims to be.
         </p>
         <p class="meta dim">
           The only thing that needs confirming upstream is the hours: {f.hoursOfRecord.open}–{f.hoursOfRecord.close}

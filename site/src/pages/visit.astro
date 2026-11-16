@@ -211,4 +211,131 @@ const frames = [
       </div>
     </div>
   </section>
+  <section class="stage stage--tight" id="request">
+    <div class="shell grid-2">
+      <div class="stack">
+        <h2 class="display--h2" data-kin>Ask for a table</h2>
+        <p class="measure meta">
+          This writes one request into the restaurant's own order book and reads back a reference. It is not a
+          confirmation: {f.phone} is still the number that decides, and the kitchen has not yet agreed to watch
+          the book — which is exactly the conversation this page is here to start.
+        </p>
+        <noscript>
+          <p class="measure meta">
+            The form needs JavaScript to reach the book. Without it, the two buttons below are the way in —
+            WhatsApp opens with the restaurant's number, and the call is one tap.
+          </p>
+        </noscript>
+        <div class="row-wrap">
+          <a class="btn btn--ghost" href={`https://wa.me/${f.whatsapp}`} rel="noopener" target="_blank">Order on WhatsApp</a>
+          <a class="btn btn--ghost" href={`tel:+${f.whatsapp}`}>Call {f.phone}</a>
+        </div>
+      </div>
+
+      <form class="panel stack" data-request-form data-wa={f.whatsapp} data-api={import.meta.env.PUBLIC_API_BASE}>
+        <div class="field">
+          <label for="rq-name">Name</label>
+          <input id="rq-name" name="name" type="text" required autocomplete="name" maxlength="60" placeholder="Who the table is for" />
+        </div>
+        <div class="field">
+          <label for="rq-phone">Phone</label>
+          <input id="rq-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" maxlength="20" placeholder="+254 7…" />
+        </div>
+        <div class="field">
+          <label for="rq-date">Date</label>
+          <input id="rq-date" name="date" type="date" required />
+        </div>
+        <div class="field">
+          <label for="rq-time">Time</label>
+          <input id="rq-time" name="time" type="time" required min={OPEN_LABEL} max={CLOSE_LABEL} step="900" value="19:00" />
+        </div>
+        <div class="field">
+          <label for="rq-party">How many</label>
+          <input id="rq-party" name="party" type="number" required min="1" max="20" step="1" inputmode="numeric" value="2" />
+        </div>
+        <div class="field">
+          <label for="rq-notes">Anything they should know</label>
+          <textarea id="rq-notes" name="notes" rows="3" maxlength="280" placeholder="High chairs, a quiet corner, a birthday"></textarea>
+        </div>
+        <p class="meta dim" data-outcome role="status" aria-live="polite">
+          The room shows {OPEN_LABEL}–{CLOSE_LABEL}. Anything outside that, the form will not let you send.
+        </p>
+        <div class="row-wrap">
+          <button class="btn" type="submit" data-send>Send the request</button>
+          <a class="btn btn--ghost" href={`https://wa.me/${f.whatsapp}`} rel="noopener" target="_blank" data-handoff>Send it on WhatsApp instead</a>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <style>
+    /* The book is a network call, so the form is a JavaScript control. Without it the fields would sit there
+       accepting a submit that goes nowhere — the honest state is no form, and the <noscript> paragraph above
+       saying why. The WhatsApp and call anchors beside it are static markup and work either way. */
+    :global(html:not(.js)) [data-request-form] {
+      display: none;
+    }
+  </style>
+
+  <script>
+    import { component } from "../lib/page.mjs";
+    import { UTC_OFFSET_MINUTES, pad } from "../lib/hours.mjs";
+    import { requestMessage, reservationPayload, submitRequest, whatsAppHref } from "../lib/request-client.mjs";
+
+    /* Bound through the lifecycle primitive rather than at module scope: the router does not re-execute this
+       module after a swap (lib/page.mjs), so a listener attached here would belong to the first /visit and
+       never to the one on screen. */
+    component("[data-request-form]", {
+      mount(form) {
+        const out = form.querySelector("[data-outcome]");
+        const send = form.querySelector("[data-send]");
+        const handoff = form.querySelector("[data-handoff]");
+        const date = form.querySelector("[name=date]");
+
+        // Today in Nairobi, derived from the offset the whole site shares — a build machine's midnight or a
+        // guest's phone timezone must not move the earliest date the book will accept.
+        const nairobi = new Date(Date.now() + UTC_OFFSET_MINUTES * 60_000);
+        const today = `${nairobi.getUTCFullYear()}-${pad(nairobi.getUTCMonth() + 1)}-${pad(nairobi.getUTCDate())}`;
+        date.min = today;
+        if (!date.value) date.value = today;
+
+        form.addEventListener("submit", async (event) => {
+          // Native validity already ran (no `novalidate` here on purpose: `required`, `type=time` with
+          // min/max, and `type=number` with min/max are the guest's instant answer, and the server's 422
+          // stays the real one — lib/request-client.mjs explains why nothing else is checked here).
+          event.preventDefault();
+          const payload = reservationPayload(Object.fromEntries(new FormData(form)), { origin: location.origin });
+          send.disabled = true;
+          out.textContent = "Sending that to the book…";
+          const result = await submitRequest(form.dataset.api, payload);
+          send.disabled = false;
+
+          if (result.kind === "recorded") {
+            // `f.phone` is frontmatter and cannot reach this script (Astro compiles it as its own module), so
+            // the number travels as a data attribute — the same one the WhatsApp handoff is built from.
+            out.textContent = `Recorded as ${result.reference}. The kitchen has the request — +${form.dataset.wa} is still who decides, so call if the table matters.`;
+            return;
+          }
+          if (result.kind === "invalid") {
+            out.textContent = result.messages.join(" ");
+            const first = result.fields.map((field) => form.querySelector(`[name=${field.split(".").pop()}]`)).find(Boolean);
+            first?.focus();
+            return;
+          }
+          if (result.kind === "busy") {
+            out.textContent = result.retryAfterSeconds
+              ? `That number has a request going in right now. Try again in ${result.retryAfterSeconds} seconds.`
+              : "That number has a request going in right now. Give it a moment.";
+            return;
+          }
+          // Unreachable or a server-side failure: the WhatsApp button beside the form now carries exactly
+          // what the guest typed, so the request survives the network instead of vanishing into a spinner.
+          handoff.href = whatsAppHref(form.dataset.wa, requestMessage(payload));
+          out.textContent =
+            "The book could not be reached from here, so nothing was recorded. The WhatsApp button beside " +
+            "this form now carries everything you typed — send it there and it arrives the same.";
+        });
+      },
+    });
+  </script>
 </Base>

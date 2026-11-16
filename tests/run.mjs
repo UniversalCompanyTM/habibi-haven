@@ -1161,6 +1161,68 @@ check("the guard binds one listener however many modules ask for it", () => {
   return eq(scope.bound(), 1, "listeners");
 });
 
+/* ------------------------------------------------ the form that reaches the book */
+// The page is the thin part; the thing that can quietly lie is the payload shape and the reading of the
+// answer. Both are pinned here because the Worker is the only other judge and it is not in this process.
+const rc = await lib("site/src/lib/request-client.mjs");
+
+check("the reservation payload is the shape the Worker reads", () => {
+  const p = rc.reservationPayload(
+    { name: "  Amina  ", phone: " +254700111222 ", date: "2026-11-22", time: "19:00", party: " 4 ", notes: "   " },
+    { origin: "https://habibihavenpreview.pages.dev/" },
+  );
+  const problems = [];
+  if (p.kind !== "reservation") problems.push(`kind ${p.kind}`);
+  if (p.party !== 4) problems.push(`party is ${typeof p.party} ${p.party}, must be the number 4`);
+  if (p.contact?.name !== "Amina" || p.contact?.phone !== "+254700111222") problems.push("contact is not nested and trimmed");
+  if (p.visitDate !== "2026-11-22" || p.visitTime !== "19:00") problems.push("the visit pair did not survive");
+  if ("notes" in p) problems.push("a blank notes field was sent");
+  if (p.source !== "https://habibihavenpreview.pages.dev/visit") problems.push(`source is ${p.source}`);
+  return problems.length ? problems.join("; ") : true;
+});
+
+check("the flat contact the Worker would refuse is never built, and no origin means no source", () => {
+  const p = rc.reservationPayload({ name: "A", phone: "+254700111222" }, {});
+  if ("contactName" in p || "contactPhone" in p) return "contact was flattened";
+  if ("source" in p) return `invented a source: ${p.source}`;
+  return eq(p.notes, undefined, "absent notes");
+});
+
+check("every answer the Worker can give maps to one thing the page says", () => {
+  const cases = [
+    [{ status: 201, body: { reference: "HH-AMQZN5", totalKes: 3100 } }, "recorded"],
+    [{ status: 422, body: { errors: [{ field: "visitTime", code: "outside_hours", message: "Pick a time inside that." }] } }, "invalid"],
+    [{ status: 429, body: { retry_after_seconds: 20 } }, "busy"],
+    [{ status: 500, body: null }, "failed"],
+    [{ status: 0, network: true }, "unreachable"],
+  ];
+  const seen = cases.map(([input, want]) => {
+    const got = rc.outcome(input);
+    if (got.kind !== want) return `${input.status} read as ${got.kind}, not ${want}`;
+    return null;
+  });
+  const invalid = rc.outcome(cases[1][0]);
+  if (invalid.messages.join() !== "Pick a time inside that.") return `lost the server's own words: ${invalid.messages.join()}`;
+  if (invalid.fields.join() !== "visitTime") return `lost the field to focus: ${invalid.fields.join()}`;
+  if (rc.outcome(cases[3][0]).messages.length !== 1) return "a bodyless 500 still needs one sentence";
+  const found = seen.filter(Boolean);
+  return found.length ? found.join("; ") : true;
+});
+
+check("a request the book never took still leaves the guest able to send it", () => {
+  const p = rc.reservationPayload(
+    { name: "Amina", phone: "+254700111222", date: "2026-11-22", time: "19:00", party: "4", notes: "high chair" },
+    {},
+  );
+  const msg = rc.requestMessage(p);
+  const missing = ["Amina", "+254700111222", "2026-11-22", "19:00", "4", "high chair"].filter((bit) => !msg.includes(bit));
+  if (missing.length) return `the handover message dropped ${missing.join(", ")}`;
+  const href = rc.whatsAppHref("254116880000", msg);
+  if (!href.startsWith("https://wa.me/254116880000?text=")) return `handoff link is ${href.slice(0, 40)}`;
+  if (href.includes(" ")) return "an unencoded space would truncate the link";
+  return true;
+});
+
 /* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {

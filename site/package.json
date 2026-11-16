@@ -10,6 +10,7 @@
     "data": "node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
     "prebuild": "node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
     "build": "astro build",
+    "postbuild": "node ../tests/api.mjs",
     "preview": "astro preview",
     "check": "node ../scripts/check-ssr-safety.mjs && node ../scripts/check-astro-parse.mjs && node ../scripts/check-css.mjs && node ../tests/run.mjs && node ../scripts/check-drift.mjs",
     "test": "node ../tests/run.mjs"

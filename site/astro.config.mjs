@@ -48,6 +48,11 @@ export default defineConfig({
   vite: {
     define: {
       "import.meta.env.PUBLIC_INDEXABLE": JSON.stringify(process.env.PUBLIC_INDEXABLE ?? "false"),
+      // The Worker that holds the order book (backend/). Absolute and https so the built page never guesses
+      // an origin, and overridable per build for anyone who deploys their own.
+      "import.meta.env.PUBLIC_API_BASE": JSON.stringify(
+        process.env.PUBLIC_API_BASE ?? "https://habibi-haven-api.adanjemeshack.workers.dev",
+      ),
     },
   },
 });
