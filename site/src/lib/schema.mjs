@@ -96,11 +96,14 @@ export function restaurantSchema({ menu, origin, canonical, description }) {
     },
   };
 
-  // GPS. `f.coordinates` is absent from the captured facts because no source we recorded carries it: the
-  // listing gives a plus code (PR99+82, which is on /visit as written), OpenStreetMap has no node for the
-  // venue, and a street centroid would be a different location wearing this venue's name. So the field is
-  // implemented and stays dark until the restaurant hands over a pin — one edit to menu.overrides turns it
-  // on, and tests/run.mjs covers both branches so it cannot half-work.
+  // GPS. Published, with its source named: `coordinates` is the centre of the ~14 m cell that the venue's
+  // own plus code (PR99+82) denotes — recovered in research/tools/pluscode.mjs, and the subject of
+  // docs/OPEN-QUESTIONS.md §9, which is honest about the fact that one source, not two, supports it. Two
+  // things keep this honest rather than merely present: scripts/build-content.mjs re-derives the plus code
+  // from these numbers and fails the build if they name a different cell than the one published as text,
+  // and site/src/content-schema.mjs refuses a coordinate without a `coordinatesSource` sentence.
+  // The gate itself stays, because a venue can hand over a real pin at any time and the switch should be
+  // one edit in scripts/build-content.mjs rather than a code change; tests/run.mjs pins both branches.
   const lat = Number(f.coordinates?.latitude);
   const lon = Number(f.coordinates?.longitude);
   if (Number.isFinite(lat) && Number.isFinite(lon)) {

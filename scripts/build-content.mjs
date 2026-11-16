@@ -33,6 +33,7 @@ try {
 }
 
 const { assertMenu } = await import(pathToFileURL(join(ROOT, "site/src/content-schema.mjs")).href);
+const { agrees } = await import(pathToFileURL(join(ROOT, "site/src/lib/pluscode.mjs")).href);
 
 const fail = (msg) => {
   throw new Error(msg);
@@ -275,6 +276,16 @@ const menu = {
       whatsapp: "254116880000",
       address: "Koinange Street, Nairobi CBD",
       plusCode: "PR99+82",
+      // GPS, published with its source named. This is not a coordinate we found: it is the centre of the
+      // ~14 m cell that the venue's OWN published plus code (PR99+82) denotes, recovered against a reference
+      // near the venue and checked digit by digit — `6GCRPR99+82`, centre -1.281687, 36.817562. OpenStreetMap
+      // snaps the point onto Koinage Street, its spelling of the published address, but has no node for the
+      // venue, so the chain rests on one source rather than two. research/tools/pluscode.mjs is the method
+      // and docs/OPEN-QUESTIONS.md §9 is the argument; the assertion below is the guard. Owner confirmation
+      // is still outstanding — see the `coordinatesSource` string, which is what the page prints.
+      coordinates: { latitude: -1.281687, longitude: 36.817562 },
+      coordinatesSource:
+        "decoded from the venue's published plus code PR99+82 (full form 6GCRPR99+82); centre of a ~14 m cell; not yet confirmed by Habibi Haven",
       mapsQuery: "Habibi Haven Koinange Street Nairobi",
       hoursOfRecord: { open: "06:30", close: "23:00", days: "Mon–Sun", zone: "Africa/Nairobi" },
       hoursDisagreements: [
@@ -322,6 +333,25 @@ for (const spec of taxonomy.families) {
 }
 
 assertMenu(menu);
+
+// The two location claims in `facts` have to be the same place.
+//
+// `plusCode` is the venue's own published code and `coordinates` is the centre of that code's ~14 m cell,
+// recovered by hand in research/tools/pluscode.mjs. Both are hand-typed into this file, and the distance
+// between a correct digit and a wrong one is 111 m — comfortably enough to leave Koinange Street. So the
+// build re-derives the code from the coordinates and compares it with the code it also publishes; if
+// somebody edits one half and not the other, or the owner hands over a real pin and the plus code behind
+// it changes, the content step fails instead of a guest arriving at a different door.
+{
+  const { latitude, longitude } = menu.meta.facts.coordinates;
+  const pin = menu.meta.facts.plusCode;
+  const check = agrees(latitude, longitude, pin);
+  if (!check.matches)
+    fail(
+      `${latitude}, ${longitude} names cell ${check.short} but the site publishes ${pin} — ` +
+        `the coordinates and the plus code are different places`,
+    );
+}
 
 await mkdir(join(ROOT, "site/src/data"), { recursive: true });
 await writeFile(join(ROOT, "site/src/data/menu.json"), JSON.stringify(menu, null, 1) + "\n", "utf8");

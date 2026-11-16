@@ -1004,21 +1004,72 @@ check("every price in the schema block is the price on the menu row", () => {
   return true;
 });
 
-check("the schema block publishes no GPS nobody gave us", () => {
-  if (built.geo !== undefined) return `geo appeared without a sourced coordinate: ${JSON.stringify(built.geo)}`;
-  const withPin = restaurantSchema({
+const plus = await lib("site/src/lib/pluscode.mjs");
+
+check("the GPS we publish is the cell the venue's own plus code names", () => {
+  const f = menu.meta.facts;
+  if (!f.coordinates) return "the facts carry no coordinates, so the structured data publishes no pin";
+  // "Publish it, source noted" is two requirements, and this is where the second one is enforced.
+  if (!f.coordinatesSource) return `a pin is published with no source: ${JSON.stringify(f.coordinates)}`;
+  const pin = plus.agrees(f.coordinates.latitude, f.coordinates.longitude, f.plusCode);
+  if (!pin.matches)
+    return `${f.coordinates.latitude}, ${f.coordinates.longitude} names cell ${pin.short}, the listing publishes ${f.plusCode} — two different doors`;
+  return eq(
+    JSON.stringify(built.geo),
+    JSON.stringify({ "@type": "GeoCoordinates", latitude: f.coordinates.latitude, longitude: f.coordinates.longitude }),
+    "geo equals the sourced cell centre",
+  );
+});
+
+check("that guard can fail — a pin 30 m off is not the published cell", () => {
+  // A test that only ever passes is a comment with extra steps. One cell north-east is ~14 m; two is
+  // ~28 m, and at that distance the point has left the doorway whatever the map data says.
+  const shifted = plus.agrees(-1.281407, 36.817562, menu.meta.facts.plusCode);
+  if (shifted.matches) return `a coordinate 30 m from the venue still matched ${menu.meta.facts.plusCode}`;
+  const back = plus.decode(plus.encodeFull(menu.meta.facts.coordinates.latitude, menu.meta.facts.coordinates.longitude));
+  const metres = Math.hypot(
+    (back.centre.lat - menu.meta.facts.coordinates.latitude) * 111320,
+    (back.centre.lon - menu.meta.facts.coordinates.longitude) * 111320 * Math.cos((back.centre.lat * Math.PI) / 180),
+  );
+  if (metres > 1) return `the published coordinate is ${metres.toFixed(1)} m from the cell centre it claims`;
+  return true;
+});
+
+check("geo stays dark when the facts carry no coordinates", () => {
+  const unpinned = restaurantSchema({
     menu: {
       ...menu,
-      meta: {
-        ...menu.meta,
-        facts: { ...menu.meta.facts, coordinates: { latitude: -1.24, longitude: 36.8 } },
-      },
+      meta: { ...menu.meta, facts: { ...menu.meta.facts, coordinates: undefined, coordinatesSource: undefined } },
     },
     origin: ORIGIN,
     canonical: `${ORIGIN}/`,
     description: "test",
   });
-  return eq(JSON.stringify(withPin.geo), JSON.stringify({ "@type": "GeoCoordinates", latitude: -1.24, longitude: 36.8 }), "geo once pinned");
+  return unpinned.geo === undefined ? true : `geo appeared without a coordinate: ${JSON.stringify(unpinned.geo)}`;
+});
+
+check("the content schema refuses a pin it cannot stand behind", () => {
+  const cases = [
+    [{ latitude: 0, longitude: 0 }, "Null Island"],
+    [{ latitude: -1.281687, longitude: 200 }, "longitude off the edge of the map"],
+    [{ latitude: "south of the roundabout", longitude: 36.817562 }, "a string where a number belongs"],
+  ];
+  for (const [coordinates, why] of cases) {
+    const m = JSON.parse(JSON.stringify(menu));
+    m.meta.facts.coordinates = coordinates;
+    const out = schema.validateMenu(m);
+    if (out.ok) return `schema accepted ${JSON.stringify(coordinates)} (${why})`;
+    if (!out.errors.some((e) => e.startsWith("meta.facts.coordinates")))
+      return `${JSON.stringify(coordinates)} (${why}) rejected for the wrong reason: ${out.errors.join(" | ")}`;
+  }
+  // and the rule with teeth: a coordinate with no sentence naming where it came from is not publishable
+  const orphan = JSON.parse(JSON.stringify(menu));
+  delete orphan.meta.facts.coordinatesSource;
+  const out = schema.validateMenu(orphan);
+  if (out.ok) return "schema accepted a published coordinate with no source";
+  return out.errors.some((e) => e.includes("coordinatesSource"))
+    ? true
+    : `sourceless pin rejected for the wrong reason: ${out.errors.join(" | ")}`;
 });
 
 check("availability follows the kitchen's own inStock flag, both ways", () => {

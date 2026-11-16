@@ -17,7 +17,17 @@ const f = menu.meta.facts;
 const open = isOpen();
 const change = nextChange();
 const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(f.mapsQuery)}`;
-const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(f.mapsQuery)}`;
+// The two links do different jobs now that a coordinate exists.
+//
+// "Open in Maps" searches by name and lands on the venue's listing — photos, reviews, the works.
+// "Directions" is sent to the number pair instead, because a text search is a guess wearing the venue's
+// name: it can drop someone at the wrong end of Koinange Street or on the cloud-kitchen listing, and the
+// matcher decides which on the day. The destination here is the centre of the ~14 m cell that the
+// restaurant's OWN published plus code denotes, and it is the same pair the JSON-LD publishes, so the page
+// and the structured data cannot point two different ways. Provenance and its one-source weakness are
+// printed under the buttons rather than hidden: docs/OPEN-QUESTIONS.md §9.
+const pin = f.coordinates ? `${f.coordinates.latitude},${f.coordinates.longitude}` : null;
+const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(pin ?? f.mapsQuery)}`;
 
 // Frames we hold, in the order a guest would walk them: street, door, courtyard, table.
 const frames = [
@@ -54,6 +64,14 @@ const frames = [
           <dt>Plus code</dt>
           <dd class="num">{f.plusCode}</dd>
         </div>
+        {
+          pin ? (
+            <div class="fact">
+              <dt>Coordinates</dt>
+              <dd class="num">{pin}</dd>
+            </div>
+          ) : null
+        }
         <div class="fact">
           <dt>Phone · WhatsApp</dt>
           <dd>
@@ -82,8 +100,10 @@ const frames = [
           <a class="btn btn--ghost" href={directions} target="_blank" rel="noopener noreferrer">Directions</a>
         </div>
         <p class="meta dim">
-          Both links ask Google Maps to centre on “{f.mapsQuery}” rather than on a coordinate we
-          invented. The pin you see is theirs.
+          Directions go to {pin} — the centre of the ~14 m cell that plus code {f.plusCode} names, decoded
+          from the venue’s own listing and the same pair the structured data publishes. Habibi Haven has not
+          confirmed it yet, so “Open in Maps” still searches the listing by name, which is where the photos
+          and reviews live.
         </p>
 
         <div class="panel stack" style="padding:1.1rem">

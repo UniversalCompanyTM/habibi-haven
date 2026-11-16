@@ -8,11 +8,27 @@
 // then reverse-geocodes the recovered point and measures it against the street the address names —
 // because a coordinate that disagrees with the address next to it is worse than no coordinate.
 //
-// Recorded outcome for PR99+82 on 2026-11-15: recovered 6GCRPR99+82 = -1.281747, 36.817503, which
-// OSM reads as Monrovia Street and sits 478 m from the nearest vertex of OSM's "Koinange Street"
-// way. That failed corroboration is exactly why `geo` stays dark in the build.
+// Recorded outcome for PR99+82, re-run 2026-11-15 after the centre of the cell was corrected: recovered
+// 6GCRPR99+82, corner -1.281750, 36.817500, centre -1.281687, 36.817562. Nominatim puts that point on
+// "Koinage Street" at both zoom 18 and zoom 17 — OpenStreetMap's spelling of the published address — and
+// the nearest Java House/Sapee Lounge/Kowloon Garden nodes are 42-61 m away, which is what a block of
+// restaurants looks like. It is still one source: OSM has no node for the venue at all, so nothing
+// independent confirms the door. See docs/OPEN-QUESTIONS.md §9 for the full reading.
+//
+// Status 2026-11-16: the owner of this preview decided to publish the cell centre as `geo` with the source
+// named, so `meta.facts.coordinates` now exists and the structured data carries it. Re-running this script
+// is still the check to do if Habibi Haven ever hands over a different pin.
 
-const ALPHA = "23456789CFGHJMPQRVWX";
+import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The grid arithmetic lives in one file in this repo. A second copy here is what produced the 7 m error
+// that made this lookup answer "Monrovia Street" for a venue on Koinange Street.
+const { ALPHABET, decode } = await import(
+  pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "../../site/src/lib/pluscode.mjs")).href
+);
+
 const SHORT = process.argv[2] ?? "PR99+82";
 const REFERENCE = process.argv[3] ?? "Koinange Street, Nairobi, Kenya";
 const headers = { "User-Agent": "habibihaven-preview-verification/1.0 (pitch QA, one-off lookup)" };
@@ -34,18 +50,6 @@ const json = async (url, init) => {
   throw new Error(`${lastError?.message ?? lastError} for ${url}`);
 };
 
-/** Decode 10 code characters into a corner plus its cell size. */
-function decode(code) {
-  let lat = -90, lon = -180, latRes = 20, lonRes = 20;
-  for (let i = 0; i < 10; i += 2) {
-    lat += ALPHA.indexOf(code[i]) * latRes;
-    lon += ALPHA.indexOf(code[i + 1]) * lonRes;
-    latRes /= 20;
-    lonRes /= 20;
-  }
-  return { lat, lon, cellDeg: latRes * 20 }; // cellDeg = the last pair's resolution
-}
-
 const [head, tail] = SHORT.split("+");
 if (!head || !tail) throw new Error(`"${SHORT}" is not a plus code with a + separator`);
 const present = head + tail; // the pairs the short code keeps
@@ -63,7 +67,7 @@ console.log(`reference  ${REFERENCE}\n           ${refLat.toFixed(5)}, ${refLon.
 
 // --- 2. brute-force the two dropped pairs, keep the cell nearest the reference
 const pad = [];
-for (const a of ALPHA) for (const b of ALPHA) pad.push(a + b);
+for (const a of ALPHABET) for (const b of ALPHABET) pad.push(a + b);
 const km = (la, lo) => Math.hypot((la - refLat) * 111.32, (lo - refLon) * 111.32 * Math.cos((refLat * Math.PI) / 180));
 let best = null;
 for (const outer of pad) {
@@ -72,7 +76,7 @@ for (const outer of pad) {
   for (const inner of pad) {
     const full = outer + inner + present;
     const d = decode(full);
-    const cLat = d.lat + d.cellDeg / 2, cLon = d.lon + d.cellDeg / 2;
+    const cLat = d.centre.lat, cLon = d.centre.lon; // centre comes from the shared lib, never from a half-cell added here
     const dist = km(cLat, cLon);
     if (!best || dist < best.km) best = { full, cLat, cLon, km: dist, cellM: d.cellDeg * 111320 };
   }

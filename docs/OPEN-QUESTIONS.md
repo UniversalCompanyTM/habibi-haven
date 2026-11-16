@@ -85,11 +85,18 @@ the photography.
 
 ## 9. The pin on the map
 
-The structured data publishes name, address, hours, cuisine, phone and prices, and a plus code
-(**PR99+82**) on the Visit page — but no latitude/longitude, because no source we captured carries one.
-OpenStreetMap's Nominatim returns nothing for "Habibi Haven", the Google listing gives a street address
-and a plus code, and a street centroid on Koinange Street would be a different location wearing this
-venue's name. Sending someone to the wrong door is the one mapping error a restaurant cannot forgive.
+**Decided 2026-11-16: published, with the source named on the page that shows it.** The structured data now
+carries `geo` — `-1.281687, 36.817562` — and [Visit](../site/src/pages/visit.astro) sends *Directions* to
+that pair while *Open in Maps* still searches the listing by name. The rest of this section is why that is a
+defensible number rather than a guessed one, and what is still worth confirming.
+
+The earlier position here was "no latitude/longitude, because no source we captured carries one". That was
+accurate about the captures and incomplete about the venue: the listing does carry a location, just in
+plus-code form rather than as degrees.
+
+OpenStreetMap's Nominatim returns nothing for "Habibi Haven", the Uber Eats capture carries no coordinates,
+and a street centroid on Koinange Street would be a different location wearing this venue's name — those
+three sentences are still true, and they are the reason the decode below had to be done at all.
 
 **What the plus code turns out to resolve to.** A short code is recoverable: `PR99+82` + a reference
 near the venue expands to the full code **`6GCRPR99+82`**, whose ~14 m cell centres on
@@ -113,15 +120,30 @@ independent confirms the door. An earlier run of this check printed "Monrovia St
 centre was off by half a cell (7 m), which is all it took to flip the answer at a junction. The tool now
 prints the centre, both zooms and both spellings so a lucky snap cannot hide behind a metric.
 
-**Preview position.** `site/src/lib/schema.mjs` implements `geo` and leaves it dark until
-`meta.facts.coordinates` exists, so the switch is one edit in `content/menu.overrides.json` rather than a
-code change; both branches are pinned by `tests/run.mjs`, and `scripts/verify-dist.mjs` rejects a `geo`
-that is not a real coordinate. Directions work today through the map links.
+**What the build now guarantees.** `site/src/lib/pluscode.mjs` holds the grid arithmetic — one copy, because
+a second copy is what produced the 7 m error described above, and `research/tools/pluscode.mjs` imports it
+rather than re-typing it. Three things are pinned:
 
-**Ask (sharpened, and answerable in ten seconds on the owner's phone).** Open the Google Business
-listing's place page and read either the two numbers behind the pin or the plus code, then compare with
-`−1.281687, 36.817562`. If they match, publishing `geo` is one edit. If they do not, the code stored in
-`menu.json` is wrong — worth knowing before anyone drives anywhere on the strength of it.
+- `scripts/build-content.mjs` re-encodes the published coordinates and fails the build if the result is not
+  the plus code the site also publishes. The two location claims are hand-typed into the same file, and 111 m
+  separates a right digit from a wrong one, so agreement is checked, not assumed. (Writing this assertion
+  caught a bug in the helper itself: rounding the cell *centre* to the nearest cell steps into the next one,
+  so `PR99+82` re-encoded as `PR99+93`. The function floors, which is the definition of "the cell containing
+  this point", and a test now proves the guard can fail by shifting the pin 30 m.)
+- `site/src/content-schema.mjs` refuses a coordinate that is not finite, not in range, exactly `0,0`, or
+  published without a `coordinatesSource` sentence. A pin with no provenance attached is not publishable on
+  this site.
+- `tests/run.mjs` pins both branches — `geo` present and equal to the facts, and `geo` absent when the facts
+  carry no coordinates — so turning it off later is one edit with the same safety net.
+
+`scripts/verify-dist.mjs` still rejects a `geo` that is not a real coordinate in the built output, and the
+Visit page prints the provenance under the buttons instead of leaving the number to speak for itself.
+
+**Ask (unchanged, and still ten seconds on the owner's phone).** Open the Google Business listing's place
+page and read either the two numbers behind the pin or the plus code, then compare with
+`−1.281687, 36.817562`. If they match, the published `geo` is confirmed and the caveat can come off the
+page. If they do not, the code stored in `menu.json` is wrong — worth knowing before anyone drives anywhere
+on the strength of it.
 
 ## 10. Taking money — what M-Pesa would actually need
 

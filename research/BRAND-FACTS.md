@@ -18,6 +18,7 @@ nothing in the design rests on an unsourced claim.
 | Phone | 0116 880000 (+254 116 880 000, WhatsApp `wa.me/254116880000`) | Google Maps, menu.or.ke |
 | Address | Koinange Street, Nairobi CBD (Uber Eats: "Nairobi, EMEA 00100") | Google Maps, Uber Eats |
 | Plus code | PR99+82 | Google Maps |
+| Coordinates | −1.281687, 36.817562 — **derived, not captured**: the centre of the ~14 m cell that PR99+82 denotes (full form 6GCRPR99+82). Published as `geo` with the source named; OSM agrees on the street, nothing independent confirms the door. | decoded from Google's own code — see docs/OPEN-QUESTIONS.md §9 |
 | Socials | instagram.com/habibi.haven · facebook.com/profile.php?id=61575101935569 · tiktok.com/@habibi.haven | supplied by user |
 | Digital ordering | menu.or.ke/Habibi_Haven/habibi-haven.html (PWA, WhatsApp handoff), Uber Eats store | both read live |
 | **Website** | **Google Maps shows "Add website" — they have no website listed.** This build fills a real, empty slot rather than replacing something. | Google Maps |

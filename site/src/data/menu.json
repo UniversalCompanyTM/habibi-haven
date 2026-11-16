@@ -27,6 +27,11 @@
    "whatsapp": "254116880000",
    "address": "Koinange Street, Nairobi CBD",
    "plusCode": "PR99+82",
+   "coordinates": {
+    "latitude": -1.281687,
+    "longitude": 36.817562
+   },
+   "coordinatesSource": "decoded from the venue's published plus code PR99+82 (full form 6GCRPR99+82); centre of a ~14 m cell; not yet confirmed by Habibi Haven",
    "mapsQuery": "Habibi Haven Koinange Street Nairobi",
    "hoursOfRecord": {
     "open": "06:30",

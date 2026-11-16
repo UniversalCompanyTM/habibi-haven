@@ -34,6 +34,24 @@ export function validateMenu(menu) {
     if (!isInt(meta.photos) || meta.photos < 1) err("meta.photos", "must be a positive integer");
     if (!isInt(meta.priceRange?.min) || !isInt(meta.priceRange?.max))
       err("meta.priceRange", "min and max must be integers");
+    // GPS is the one fact on this site that can send someone to the wrong building, so the schema is where
+    // its two rules live. A coordinate must be a real coordinate — finite and inside its range, because
+    // "0, 0" is a valid JSON number pair and an Atlantic location — and it may not exist without a sentence
+    // saying where it came from. `coordinatesSource` is not decoration: docs/OPEN-QUESTIONS.md §9 shows this
+    // pin rests on a single source, and a published claim of that kind has to arrive with its provenance or
+    // not at all.
+    const c = meta.facts?.coordinates;
+    if (c !== undefined) {
+      const okLat = Number.isFinite(c.latitude) && c.latitude >= -90 && c.latitude <= 90;
+      const okLon = Number.isFinite(c.longitude) && c.longitude >= -180 && c.longitude <= 180;
+      if (!okLat) err("meta.facts.coordinates.latitude", `must be a finite number in [-90, 90], got ${c.latitude}`);
+      if (!okLon)
+        err("meta.facts.coordinates.longitude", `must be a finite number in [-180, 180], got ${c.longitude}`);
+      if (okLat && okLon && c.latitude === 0 && c.longitude === 0)
+        err("meta.facts.coordinates", "0,0 is Null Island in the Gulf of Guinea, not Nairobi");
+      if (!isStr(meta.facts?.coordinatesSource) || meta.facts.coordinatesSource.trim() === "")
+        err("meta.facts.coordinatesSource", "a published coordinate must name where it came from");
+    }
   }
 
   if (!Array.isArray(menu?.families) || menu.families.length < 1) err("families", "must be a non-empty array");
