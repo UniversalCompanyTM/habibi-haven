@@ -128,8 +128,19 @@ const chrome = spawn(
     "--window-size=1440,1000",
     "about:blank",
   ],
-  { stdio: "ignore" },
+  { stdio: ["ignore", "pipe", "pipe"] },
 );
+
+// Chrome's own words are kept so a browser that refuses to open its debugging port can say why. They are read
+// continuously and only the tail is held: an un-read pipe fills at 64 KiB, and a headless Chrome whose stdout
+// blocks takes the run down with it — which is a worse failure than the one being diagnosed.
+let chromeLog = "";
+const captureChrome = (chunk) => {
+  chromeLog += chunk.toString();
+  if (chromeLog.length > 32_000) chromeLog = chromeLog.slice(-16_000);
+};
+chrome.stdout?.on("data", captureChrome);
+chrome.stderr?.on("data", captureChrome);
 
 const cleanup = () => {
   chrome.kill();
@@ -155,7 +166,13 @@ function send(method, params = {}, sessionId) {
 
 async function waitForBrowser() {
   let info = null;
-  for (let i = 0; i < 60; i += 1) {
+  // 180 attempts, not 60. Run 43857740739 failed the whole gate with "no DevTools endpoint on 9333" sixteen
+  // seconds after the preview server answered, on the same workflow that had been green sixteen minutes earlier
+  // — so the binary was found and the port simply was not open inside fifteen seconds. Which runner was slow,
+  // and why, is not proven: what is proven is that a budget tuned to the fastest observation is a coin flip on
+  // the slowest machine, and a harness that fails for that reason trains everyone to re-run CI instead of
+  // reading it. The message below now carries Chrome's own output, so the next one of these says something.
+  for (let i = 0; i < 180; i += 1) {
     // Fail fast, and out loud, if the browser we started is gone: that is the one state where waiting
     // forever looks like a slow page.
     if (chrome.exitCode !== null || chrome.killed) {
@@ -167,11 +184,17 @@ async function waitForBrowser() {
     } catch {
       // Chrome has not opened the endpoint yet. Every transport error lands here as a failed fetch, so
       // nothing distinguishes "not listening yet" from "refused" — the retry loop is the answer to both,
-      // and the exit check above is what makes a dead browser a real error instead of a 15-second wait.
+      // and the exit check above is what makes a dead browser a real error instead of a 45-second wait.
       await sleep(250);
     }
   }
-  if (!info) throw new Error(`no DevTools endpoint on ${port} — is Chrome/Edge installed at ${browser}?`);
+  if (!info) {
+    const tail = chromeLog.trim().split("\n").slice(-12).join("\n");
+    throw new Error(
+      `no DevTools endpoint on ${port} after 45s — is Chrome/Edge installed at ${browser}?` +
+        (tail ? `\n--- browser output ---\n${tail}` : "\n(the browser wrote nothing to stdout or stderr)"),
+    );
+  }
   // Loud on purpose: an endpoint that belongs to a different run answers on the port, and connecting to it
   // produced the worst failure this harness ever had — a run that hung for minutes on pages from someone
   // else's browser, in a temporary profile that run had already deleted.
