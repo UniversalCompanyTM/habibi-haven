@@ -10,9 +10,17 @@
 //
 // What this file deliberately does NOT do: re-state the restaurant's policy. The opening window is enforced
 // in the markup by `min`/`max` on the time input and on the server by the hours row read out of D1, so there
-// is no third copy of 06:30–23:00 here to drift. The same goes for the booking horizon, the name length and
-// the phone format: the browser's own `required`/`type` checks give the guest an instant answer, and the
-// server's 422 gives the real one. Anything the server might refuse is the server's to define.
+// is no copy of 06:30–23:00 *in this file* to drift, and the same holds for the name length and the phone
+// format: the browser's own `required`/`type` checks give the guest an instant answer, and the server's 422
+// gives the real one.
+//
+// One correction to that sentence, because it used to claim the booking horizon had no client-side copy
+// either. It does now — `HORIZON_DAYS` and `lastBookableDay()` in `lib/hours.mjs` — because a date input with
+// no upper bound let a guest pick a year the book refuses as `visitDate`, a field the form has no control
+// named (A15), so the refusal arrived with no cursor and no remedy. The difference between that and a drifting
+// copy is that the number is compared with `LIMITS.horizonDays` and the boundary is executed on both kinds in
+// `tests/api.mjs`, the same treatment `PARTY_MAX` and `LINES_MAX` get. Anything the server might refuse is
+// still the server's to define; the client is only allowed to stop offering it, loudly and in one place.
 //
 // Every function here is pure except `submitRequest`, which touches only `fetch` — so tests/run.mjs can pin
 // the payload and the outcome mapping with no DOM and no network, and check-ssr-safety can import the module
