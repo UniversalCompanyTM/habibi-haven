@@ -2297,6 +2297,16 @@ const visitArms = [
     expect: ["The book answered, but it did not record this", "no reference was issued", "It said: Nothing was saved"],
     reject: ["could not be reached", "Recorded as"],
   },
+  {
+    // The Worker has a second 500 — `server_error` at backend/src/index.mjs:120 — with different words. This arm
+    // exists to prove the page is quoting the book and not reciting a sentence it wrote for one occasion: the
+    // previous arm's message must be absent here, and this one's must be present.
+    name: "server-error",
+    status: 500,
+    body: { code: "server_error", message: "Something broke on our side. Nothing was recorded — try again, or send it on WhatsApp." },
+    expect: ["The book answered, but it did not record this", "It said: Something broke on our side"],
+    reject: ["could not be reached", "It said: Nothing was saved"],
+  },
 ];
 
 const tableArms = [
@@ -2348,6 +2358,14 @@ const tableArms = [
     // again without knowing the refusal was the book's, not the network's.
     expect: ["The book answered, but it did not record this sheet", "It said: Nothing was saved", "press Record again"],
     reject: ["could not be reached", "Recorded as"],
+  },
+  {
+    name: "server-error",
+    status: 500,
+    body: { code: "server_error", message: "Something broke on our side. Nothing was recorded — try again, or send it on WhatsApp." },
+    // Same proof on the sheet: the sentence must carry this arm's words, not the previous arm's.
+    expect: ["The book answered, but it did not record this sheet", "It said: Something broke on our side"],
+    reject: ["could not be reached", "It said: Nothing was saved"],
   },
   {
     name: "empty-sheet",
