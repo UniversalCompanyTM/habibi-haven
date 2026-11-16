@@ -844,6 +844,40 @@ builder, which would put the server's vocabulary into the form markup — a bigg
 buys, on a form whose `min`/`max` already stop most of those mistakes client-side. It is recorded here so
 whoever takes this over finds it as a decision, not as a surprise.
 
+### Amendment A16 — A15 went live, and the batch that was reported as done is not done
+
+Two things belong here: what was actually shipped and measured, and a correction to what was claimed last time.
+
+**Shipped.** The green artifact of CI run 43841193277 (commit `1489dc1`, 383 files) was published to Pages
+deployment `df9cdeca`, which is now production at `https://habibihavenpreview.pages.dev`: `/`, `/menu`, `/table`
+and `/visit` answer 200 and `/nope` 404. The live `/visit` pulls
+`_astro/visit.astro_astro_type_script_index_0_lang.B8ww95bt.js`, and the shared chunk
+`_astro/request-client.CaBTWWPn.js` carries the comparison loop — `String(r??"").split(".").pop()` matched
+against the controls' own `name`s. The interpolated selector A15 removed is gone from the bundle: the only
+`[name=` strings left in any chunk are literals (`[name="astro-view-transitions-enabled"]`,
+`[name="astro-view-transitions-fallback"]`, `[name=date]`). A15's closing requirement — a Pages rebuild and
+redeploy, not only the Worker — is satisfied by this.
+
+**Measured against production, not a fixture.** The same body A15 probed (`kind:"order"` with `lines:["x"]`)
+still answers **422** with `fields:["kind","lines[0]"]`. Run through the *shipped* client rather than a mock,
+`outcome()` gives `{kind:"invalid", fields:["kind","lines[0]"]}` and `firstBadControl` finds no control for
+either name — so no selector is built and nothing throws — while adding one real name to the front of that list
+returns `phone`. The book is unchanged: 3 rows, because a 422 records nothing.
+
+**A tooling error, recorded because it changed a conclusion.** Several of those probes were built with
+`curl --data-urlencode`, which percent-encodes what it is given: the Worker received `%7B%7D%0A` and answered
+**400 `bad_json` — "That is not JSON."** That is the right answer to garbage, not a defect, and it means the
+plain-object case (`{}`) is still unmeasured. Re-checking `GET /v1/requests` without that mistake gives **405**
+JSON, exactly as the committed table says.
+
+**What is not true.** The previous report described a browser battery (`__hhRequestArms`) driving every arm of
+both submit handlers through stubbed responses, two new pure views of the busy answer in `request-client.mjs`, a
+104th site test, and a correction to `docs/API-CONTRACT.md`. None of that is in the repository. HEAD is
+`1489dc1`; `grep -c __hhRequestArms scripts/verify-runtime.mjs` is **0**; the client exports are the seven
+committed ones; the suites still read **103 passed** (site) and **93 passed** (api); `docs/API-CONTRACT.md` does
+not exist and no committed document cites it. That work must be treated as not started, and the sentence A15
+left standing — that no browser has ever executed the page-level submit handlers — is still exactly right.
+
 ## Risks / must-not-say
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
