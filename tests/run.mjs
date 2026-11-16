@@ -1109,6 +1109,58 @@ check("the handoff link the kitchen receives points at where the guest was stand
   return true;
 });
 
+/* ------------------------------------------------- the interrupted page swap */
+// The router aborts an in-flight view transition when a second navigation starts, and leaves the resulting
+// rejection unhandled (site/src/lib/transition-guard.mjs). A gate that fails the build on any uncaught
+// exception is only worth having if the one thing we swallow is provably that abort, so the swallowing rule
+// is a pure predicate with a test rather than a regex buried in an event handler.
+const guard = await lib("site/src/lib/transition-guard.mjs");
+
+const fakeRejections = () => {
+  const bound = [];
+  return {
+    addEventListener: (type, fn) => type === "unhandledrejection" && bound.push(fn),
+    bound: () => bound.length,
+    // Returns whether the event was cancelled, which is the whole observable behaviour.
+    fire: (reason) => {
+      let cancelled = false;
+      for (const fn of bound) fn({ reason, preventDefault: () => (cancelled = true) });
+      return cancelled;
+    },
+  };
+};
+
+check("the guard cancels the router's skipped-transition abort", () => {
+  const scope = fakeRejections();
+  guard.installTransitionGuard(scope);
+  const abort = new DOMException("Transition was skipped. skipTransition() called", "AbortError");
+  return eq(scope.fire(abort), true, "cancelled");
+});
+
+check("the guard cancels nothing else, including the other abort we can cause", () => {
+  const scope = fakeRejections();
+  guard.installTransitionGuard(scope);
+  const kept = [
+    new DOMException("The user aborted a request.", "AbortError"), // a superseded fetch
+    new TypeError("cannot read property of null"),
+    new Error("Transition was skipped"), // right words, wrong kind: not the router's rejection
+    null,
+    undefined,
+  ];
+  const cancelled = kept.map((reason) => scope.fire(reason));
+  if (cancelled.some(Boolean)) return `cancelled ${cancelled.filter(Boolean).length} of ${kept.length}`;
+  return eq(cancelled.length, 5, "cases run");
+});
+
+check("the guard binds one listener however many modules ask for it", () => {
+  const scope = fakeRejections();
+  const first = guard.installTransitionGuard(scope);
+  const second = guard.installTransitionGuard(scope);
+  if (eq(first, true, "first install") !== true) return eq(first, true, "first install");
+  if (eq(second, false, "second install") !== true) return eq(second, false, "second install");
+  return eq(scope.bound(), 1, "listeners");
+});
+
 /* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {

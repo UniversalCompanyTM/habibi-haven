@@ -482,6 +482,30 @@ whose default UA timing is slower than this site's motion budget. `global.css:18
 `prefers-reduced-motion: reduce`. The harness counts the authored rules rather than trusting the intent:
 `vtRules = { total: 2, medias: [null, "(prefers-reduced-motion: reduce)"], inMedia: 1 }`.
 
+**An interrupted swap rejected, and this is the part no markup review could find.** Run 43808133369 failed
+the runtime battery with `uncaught: AbortError: Transition was skipped. skipTransition() called` on the
+clicked sequence `/ ⇄ /menu ⇄ /table`, on a commit whose only repository change was `backend/` — the defect
+was older than the failure, and the harness's click cadence had simply never landed inside the 180 ms window
+before. The cause is upstream and specific: when a second navigation starts, `router.js:310` calls
+`skipTransition()` on the running transition and `router.js:359` attaches `.finally()` to its `finished`
+promise. Chrome rejects that promise on skip, `.finally()` forwards the rejection to a derived promise nobody
+awaits, and the browser reports an unhandled rejection. Nothing about the swap itself is wrong — the probe
+below shows the incoming document installed, the update callback resolved and the guest arriving where they
+tapped. Impatience is a normal gesture on a phone in a courtyard, so the site tolerates it:
+`site/src/lib/transition-guard.mjs` cancels the `unhandledrejection` event for that one rejection, matched on
+both `name === "AbortError"` and the message `Transition was skipped`, and for nothing else.
+
+The mechanism was chosen by experiment rather than by taste, and the intuitive fix lost. Attaching our own
+`catch` at the source was tested three ways in real Chrome (`.tmp/vt-repro.mjs`, three pages, CDP
+`Runtime.exceptionThrown` counted after each): a handler on the *original* `finished` still reports, because
+it is Astro's derived promise that goes unhandled; shadowing the property with an already-handled promise via
+`Object.defineProperty` on a `Document.prototype.startViewTransition` wrapper still reports; only
+`preventDefault()` on `unhandledrejection` produced zero exceptions — and the page still ended with
+`swapped: "1"`, `done: true`, so nothing was swept under the rug that the battery had not already measured.
+`tests/run.mjs` pins the predicate in both directions, including the *other* `AbortError` this site can
+produce (a superseded `fetch`, message "The user aborted a request."), which must survive to the console.
+The gate itself was not loosened: `verify-runtime.mjs` still fails on any uncaught exception.
+
 Measured on the runner (headless Chrome, `verify-runtime`, run 43760830456). Four clicked navigations plus
 one reduced-motion navigation, each counted with handlers that attach once per step and detach after the
 settle window:
@@ -589,9 +613,34 @@ receipt 200 with no `contact_name` in it; a 19:00 reservation 201 stamped `2026-
 no list endpoint, and saying so is truer than 404); an unknown reference 404; an evil origin getting no
 `Access-Control-Allow-Origin`; and the same phone twice answered 201 then 429 with `retry_after_seconds=20`.
 
-Still not proven, and not claimed: that the remote D1 binding exists (that is the post-deploy probe), that
-`database_id` is filled (it is a placeholder until `wrangler d1 create` runs), that any of the payment path
-works against Safaricom, and that the site's forms talk to this API yet — that is the next milestone.
+Proven since, against the deployment rather than a laptop: `wrangler d1 create habibi-haven-preview` →
+`2d3577ad-9691-489a-b4f1-a24e2cf4ac1f`, which replaced the placeholder in `backend/wrangler.toml`; migration
+(9 commands) and seed (492 rows across 6 tables) applied remotely; `wrangler deploy` →
+`https://habibi-haven-api.adanjemeshack.workers.dev`, version `8d7f2a7d-1696-407d-961b-c13f41208fbc`, with the
+`DB` binding resolved. The probe re-run against that host read `/health` 200 with `items=243` and
+`hoursOfRecord {06:30, 23:00}` coming out of remote D1, a built table 201 as `HH-AMQZN5` with server total
+3100 against a claimed 2001, the lowercase receipt 200 `status:"recorded"`,
+`POST /v1/requests/HH-AMQZN5/payments` 503 naming the same 6 secrets, a 03:00 reservation 422 `outside_hours`,
+`GET /v1/requests` 405, an unknown reference 404, the Pages origin echoed in `Access-Control-Allow-Origin`
+where an evil origin got no header at all, and `cache-control: no-store` on every response.
+
+Two errors in the first probe, both mine, both closed by re-running rather than by reasoning about it: it
+posted `/v1/requests/{ref}/payment` and read the 404 as a missing route when the route is plural
+(`/payments`), and it put an outside-hours instant in the free-text `when` field — which the server keeps as a
+label and is right not to police — instead of the machine-checkable `visitDate`/`visitTime` pair, so a correct
+201 looked like a hole in the hours rule. The hours rule was enforced on both kinds all along
+(`backend/src/validate.mjs:282-315`); it took the second probe to demonstrate it.
+
+And a wrong premise, said plainly because a decision was collected on it. `wrangler deploy` first refused with
+"you need to register a workers.dev subdomain", which read as a missing namespace and was put to the user as
+one. The actual cause was the placeholder `database_id`: the account already had `adanjemeshack.workers.dev`,
+nothing was registered or needed registering, and filling in the real id made the deploy succeed on the first
+attempt. No resource was created on the strength of that question.
+
+Not proven, and not claimed: that any of the payment path works against Safaricom — deferred by the user ("the
+Daraja we will have to skip it until communicate with them"), so the credentials stay absent and both money
+routes answer 503 by construction — and that the site's forms talk to this API yet, which is the next
+milestone.
 
 ### Milestones
 

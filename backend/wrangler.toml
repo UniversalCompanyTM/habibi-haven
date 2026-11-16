@@ -30,7 +30,7 @@ binding = "DB"
 database_name = "habibi-haven-preview"
 # The id comes out of `wrangler d1 create habibi-haven-preview`. It is an identifier, not a credential,
 # and it is committed because a binding nobody can read is a binding nobody can deploy.
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "2d3577ad-9691-489a-b4f1-a24e2cf4ac1f"
 # `wrangler d1 migrations apply DB --remote` reads this folder. It is also the default, spelled out so
 # the next reader does not have to know that. (A top-level `[migrations]` table here would be the
 # Worker-version migration bindings, not this — wrangler rejects it, and `--dry-run` says so.)

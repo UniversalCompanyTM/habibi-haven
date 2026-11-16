@@ -86,7 +86,7 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
         hour the guest just dialled reset to the build's clock. The router keeps one document and swaps its
         contents, which is the difference between a site that feels loaded and a site that is loading.
 
-        Three things about how this is wired, because each is a place where a router quietly breaks a
+        Four things about how this is wired, because each is a place where a router quietly breaks a
         hand-built page:
         · The page change is animated, and not by anything we asked Astro for. With no `transition:animate`
           directive in the project the browser still paints its own ~0.25 s cross-fade between the two root
@@ -105,6 +105,12 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
           visitor dialled — are re-asserted on `astro:after-swap`, in the script block at the bottom of
           this file. Without that, the router would strip `html.js` on the first click and every reveal
           rule would drop out with it.
+        · An interrupted transition rejects and the router never awaits it: a guest who taps a second link
+          inside that 180 ms is enough to log an uncaught `AbortError`, which the harness caught on a fast
+          click sequence (/ ⇄ /menu ⇄ /table) and no amount of reading the markup would have shown. Hence
+          `installTransitionGuard()` as the first call of the script below — it cancels that one rejection by
+          name and message, and leaves every other exception for the gate to fail on
+          (lib/transition-guard.mjs).
         A link that must really reload carries `data-astro-reload`; with JavaScript switched off none of
         this exists and the site behaves exactly as it did before the line was added. */}
     <ClientRouter />
@@ -153,6 +159,12 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 <script>
   import { applyHour, liveHour } from "../lib/rig-client.mjs";
   import { component, onPage } from "../lib/page.mjs";
+  import { installTransitionGuard } from "../lib/transition-guard.mjs";
+
+  /* A second tap while a swap is still painting aborts the first view transition, the router never awaits
+     the rejection that produces, and Chrome logs it as an uncaught error. One narrow listener, documented
+     in the module it comes from, so the zero-exception gate below keeps its teeth. */
+  installTransitionGuard();
 
   /* Reveal on scroll, once. Where IntersectionObserver is missing the fallback adds the class
      immediately rather than never, so the failure mode is "no animation", not "invisible content". */
