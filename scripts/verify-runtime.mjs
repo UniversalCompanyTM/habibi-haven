@@ -29,6 +29,11 @@ import { tmpdir } from "node:os";
 import { join, delimiter } from "node:path";
 import { platform } from "node:process";
 
+// The row cap the harness enforces has to be the row cap the site states. Importing it is the difference
+// between a gate and a guess: `LINES_MAX` is the same constant the button, the hint, the guard and (through
+// tests/api.mjs) the Worker's `LIMITS.linesMax` read, so a fifth copy of the number cannot disagree here.
+import { LINES_MAX } from "../site/src/lib/table.mjs";
+
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
@@ -2482,6 +2487,123 @@ await evaluate(`
   const keys = Object.keys(localStorage).filter((k) => k.startsWith("habibi-haven:"));
   for (const key of keys) localStorage.removeItem(key);
   return keys;
+`);
+
+// ---- the two sheet controls no browser had pressed: the house set and the row cap
+//
+// `LINES_MAX` is the number `backend/src/validate.mjs` refuses above with a 422, and TableBuilder disables its
+// own button and writes a hint about it — but nothing had ever put a sheet over that line in a page, so the two
+// sentences it writes about the cap (the hint under the button, the guard inside the submit handler) had never
+// been compared with each other, let alone read by a guest. Same for "Put the whole house set on the table":
+// one press that writes a line per dish the page itself offers, gated by nothing. Both are built here the way a
+// guest builds them — presses on `[data-add]`, no localStorage writes — because the state under test is what the
+// controls produce, and a sheet assembled by hand would prove the guard works on a state nobody can reach.
+//
+// The cap is imported rather than typed: the number the harness enforces has to be the number the site states,
+// or this becomes a fifth copy of a rule that already lives in four places (see PARTY_MIN in table.mjs).
+const houseRead = await (async () => {
+  await goto("/table");
+  return evaluate(`
+    const all = (s) => [...document.querySelectorAll(s)];
+    const text = (s) => document.querySelector(s)?.textContent.trim() ?? null;
+    const button = document.querySelector("[data-add-all]");
+    if (!button) return { missing: true };
+    const before = all("[data-inc]").length;
+    const offers = all("[data-add]").length;
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const stored = JSON.parse(localStorage.getItem("habibi-haven:table:v1") ?? "{}");
+    const wa = document.querySelector("[data-whatsapp]");
+    return {
+      before,
+      offers,
+      after: all("[data-inc]").length,
+      lines: Array.isArray(stored.lines) ? stored.lines.length : null,
+      total: text("[data-total]"),
+      sendDisabled: document.querySelector("[data-record-send]")?.disabled ?? null,
+      hint: text("[data-record-hint]"),
+      waDisabled: wa ? wa.getAttribute("aria-disabled") === "true" : null,
+    };
+  `);
+})();
+{
+  const logged = drain();
+  results.push({ path: "/table house-set", value: houseRead, errors: logged.errors, warnings: logged.warnings });
+  if (houseRead.missing) failures.push("/table: there is no [data-add-all] control — the whole-house-set button this page advertises is not in the document");
+  else {
+    if (houseRead.before !== 0) failures.push(`/table: the house-set press started from ${houseRead.before} line(s), not an empty sheet — the counts below measure a sheet that was already written`);
+    if (houseRead.after !== houseRead.offers) failures.push(`/table: one press of the house set wrote ${houseRead.after} row(s) while the page offers ${houseRead.offers} dishes — the button and its own list disagree`);
+    if (houseRead.lines !== houseRead.after) failures.push(`/table: the sheet shows ${houseRead.after} rows while the store holds ${houseRead.lines} lines — a reload would change the table the guest is looking at`);
+    if (!houseRead.after) failures.push("/table: the house set wrote no rows at all");
+    if (houseRead.sendDisabled !== false) failures.push(`/table: the house set filled the sheet and Record is still disabled (${houseRead.sendDisabled}) — the guest cannot record the table the button just built`);
+    if (houseRead.waDisabled === true) failures.push("/table: the WhatsApp handoff still says 'add something first' with a full sheet on it — the render did not refresh it");
+    if (logged.errors.length) failures.push(`/table house-set: ${logged.errors.length} console error(s) from one press (${logged.errors.join(" | ")})`);
+  }
+}
+
+// Past the cap: fill from /menu (243 dishes live there, the house set's six do not), then try to record.
+await goto("/menu");
+const overSeed = await evaluate(`
+  const adds = [...document.querySelectorAll("[data-add]")];
+  const count = () => {
+    const stored = JSON.parse(localStorage.getItem("habibi-haven:table:v1") ?? "{}");
+    return Array.isArray(stored.lines) ? stored.lines.length : 0;
+  };
+  const target = ${LINES_MAX} + 1;
+  let clicks = 0;
+  for (const button of adds) {
+    if (count() >= target) break;
+    button.click();
+    clicks += 1;
+    if (clicks % 10 === 0) await new Promise((resolve) => setTimeout(resolve, 90));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return { clicks, lines: count(), offers: adds.length };
+`);
+if (overSeed.lines < LINES_MAX + 1)
+  failures.push(`/menu: could not build an over-cap sheet (${overSeed.lines} lines from ${overSeed.clicks} presses of ${overSeed.offers} controls) — the cap arm below would be measuring a normal table`);
+
+const capSetup = await armSetup("[data-record-form]", []);
+const capFill = await armFill("[data-record-form]", { name: GUEST.name, phone: GUEST.phone });
+if (capFill.length) failures.push(`/table over-cap: the typed form is not valid before the refusal (${capFill.join("; ")}) — the guard never runs and the arm measures nothing`);
+const capRead = await armSubmit("[data-record-form]", { wait: false });
+const capHint = await evaluate(`
+  const text = (s) => document.querySelector(s)?.textContent.trim() ?? null;
+  const wa = document.querySelector("[data-whatsapp]");
+  return { hint: text("[data-record-hint]"), state: text("[data-record-state]"), waDisabled: wa ? wa.getAttribute("aria-disabled") === "true" : null };
+`);
+{
+  const logged = drain();
+  results.push({
+    path: "/table over-cap",
+    value: { lines: capRead.rows[0], state: capRead.state, hint: capHint.hint, sendEnabled: capRead.sendEnabled, requests: capRead.newRequests, thrown: capRead.thrown, waDisabled: capHint.waDisabled },
+    errors: logged.errors,
+    warnings: logged.warnings,
+  });
+  if (!capSetup.api) failures.push("/table over-cap: data-api is empty, so this refusal cannot be told apart from a page that was never able to send anything");
+  if (capSetup.visible !== true) failures.push("/table over-cap: the record form is not displayed under html.js — the refusal below is not a state a guest can reach");
+  if (capRead.newRequests) failures.push(`/table over-cap: the page sent ${capRead.newRequests} request(s) for a sheet it knows the book will refuse — the guard is not the button's only job`);
+  if (capRead.sendEnabled) failures.push("/table over-cap: Record is enabled over the cap — the guest can press into a 422 the site promised to prevent");
+  if (capRead.thrown.length) failures.push(`/table over-cap: the refusal threw (${capRead.thrown.join("; ")}) instead of explaining itself`);
+  if (logged.errors.length) failures.push(`/table over-cap: ${logged.errors.length} console error(s) (${logged.errors.join(" | ")})`);
+  const capFromGuard = Number((capRead.state.match(/(\d+)\s+different dishes/) ?? [])[1] ?? NaN);
+  const capFromHint = Number((capHint.hint?.match(/(\d+)\s+different dishes/) ?? [])[1] ?? NaN);
+  if (!Number.isInteger(capFromGuard) || capFromGuard !== LINES_MAX)
+    failures.push(`/table over-cap: the submit guard reads "${capRead.state}" and does not name the cap the site actually holds (${LINES_MAX})`);
+  if (!Number.isInteger(capFromHint) || capFromHint !== LINES_MAX)
+    failures.push(`/table over-cap: the hint under the button reads "${capHint.hint}" and does not name the same cap (${LINES_MAX}) — two sentences, two rules, one guest`);
+  if (capFromHint !== capFromGuard) failures.push(`/table over-cap: the hint says ${capFromHint} dishes and the guard says ${capFromGuard} — the page states its own limit twice, differently`);
+  if (!capRead.state.includes(`this sheet has ${capRead.rows[0]}`)) failures.push(`/table over-cap: the guard does not name the sheet it is refusing (${capRead.rows[0]} rows → "${capRead.state}")`);
+  if (capRead.rows[1] !== capRead.rows[0]) failures.push(`/table over-cap: refusing the sheet changed it (${capRead.rows[0]} → ${capRead.rows[1]} rows) — a refusal must cost the guest nothing`);
+  if (capHint.waDisabled === true) failures.push("/table over-cap: the WhatsApp route is disabled over the cap, but the page's own sentence recommends it — a message has no row limit");
+}
+
+// Leave the sheet where a guest would find it: nothing recorded, nothing half-written behind us.
+await evaluate(`
+  const clear = document.querySelector("[data-clear]");
+  if (clear) clear.click();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return document.querySelectorAll("[data-inc]").length;
 `);
 
 // ---------------------------------------------------------------- report
