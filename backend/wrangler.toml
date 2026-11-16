@@ -1,0 +1,46 @@
+# backend/wrangler.toml — the site's server-side half, deployed on its own.
+#
+# Why a Worker next to Pages rather than Pages Functions inside it: this project's deploy is a
+# direct-upload of a runner-built `dist`, and Pages Functions then have to be discovered and bundled by
+# wrangler from a `functions/` folder next to the command's working directory, with D1 bindings carried in
+# a wrangler config that the deploy also has to be told about. That is three pieces of wiring, each of
+# which can fail silently — and a silently missing function is a "Book a table" button that does nothing.
+# A Worker of its own is one `wrangler deploy` from this directory, its own binding file, its own D1, and
+# a `/health` route that answers whether any of it is actually wired. Same platform, same product the
+# brief named ("Serverless Functions (Cloudflare Workers)"), one less way to be broken.
+#
+# Secrets are never in this file. They go in with
+#   npx wrangler secret put DARAJA_CONSUMER_KEY   (and friends)   — only once Daraja credentials exist.
+
+name = "habibi-haven-api"
+main = "src/index.mjs"
+compatibility_date = "2026-11-01"
+
+# No compatibility_flags: every global this Worker uses — `btoa`, `crypto.getRandomValues`, `Request`,
+# `Response`, `Headers`, `fetch` — is a Worker global, and `node:sqlite` is a test-side dependency that
+# never appears in src/. `wrangler deploy --dry-run` was the check; the flag was in this file until it was
+# tested, justified by a comment about "Node-style specifiers" that this code does not import.
+
+# habibi-haven-api.<account-subdomain>.workers.dev is what the site is built against; the URL is the
+# default of PUBLIC_API_BASE in site/astro.config.mjs, so both halves name the same place.
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "habibi-haven-preview"
+# The id comes out of `wrangler d1 create habibi-haven-preview`. It is an identifier, not a credential,
+# and it is committed because a binding nobody can read is a binding nobody can deploy.
+database_id = "REPLACE_AFTER_D1_CREATE"
+# `wrangler d1 migrations apply DB --remote` reads this folder. It is also the default, spelled out so
+# the next reader does not have to know that. (A top-level `[migrations]` table here would be the
+# Worker-version migration bindings, not this — wrangler rejects it, and `--dry-run` says so.)
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+[vars]
+# Extra browser origins allowed to read responses, comma-separated. The Pages project and its deployment
+# subdomains, plus localhost, are allowed in code (backend/src/index.mjs `allowedOrigin`); this is for a
+# future custom domain, and adding a wildcard here would hand the receipt endpoint to the internet.
+ALLOWED_ORIGINS = ""
