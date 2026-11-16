@@ -140,11 +140,66 @@ const change = nextChange();
         <button type="button" class="btn btn--small btn--ghost" data-clear>Empty the table</button>
       </div>
       <p class="meta" data-copy-state aria-live="polite"></p>
+
+      <!-- The sheet is a wish-list; this is the part that writes. The fields below are the only thing the
+           guest has to supply — the lines, the party and the When pair already exist on this page, so the
+           payload is assembled from the sheet's own state (lib/request-client.mjs `tablePayload`) rather than
+           from a second copy of the form. Same reason /visit's form works: the book reprices everything, so
+           what arrives is the kitchen's total, and the number on this screen travels only as a claim.
+
+           The button is a network call, so the form is a JavaScript control. Left visible with the script off
+           it would accept a submit that goes nowhere — a GET reload with the guest's name in the address bar —
+           which is worse than no form, so `html:not(.js)` hides it and the note below says what to do instead.
+           Same rule /visit applies to its request form. -->
+      <noscript>
+        <p class="meta dim">
+          Recording a table needs JavaScript to reach the order book. Without it, the WhatsApp button above is
+          the way in — it opens a message to the restaurant, and you are the one who sends it.
+        </p>
+      </noscript>
+      <form class="stack" data-record-form data-wa={f.whatsapp} data-api={import.meta.env.PUBLIC_API_BASE} style="margin-top:0.7rem;padding-top:0.7rem;border-top:var(--edge)">
+        <div class="field">
+          <label for="tb-name">Name</label>
+          <input id="tb-name" name="name" type="text" required autocomplete="name" maxlength="60" placeholder="Who the table is for" />
+        </div>
+        <div class="field">
+          <label for="tb-phone">Phone</label>
+          <input id="tb-phone" name="phone" type="tel" required autocomplete="tel" inputmode="tel" maxlength="20" placeholder="+254 7…" />
+        </div>
+        <div class="field">
+          <label for="tb-notes">Anything they should know</label>
+          <textarea id="tb-notes" name="notes" rows="2" maxlength="280" placeholder="A quiet corner, a birthday, a swap"></textarea>
+        </div>
+        <div class="row-wrap">
+          <button class="btn btn--small" type="submit" data-record-send>Record this table</button>
+          <a class="btn btn--small btn--ghost" href={`https://wa.me/${f.whatsapp}`} rel="noopener" target="_blank" data-handoff>Send it on WhatsApp with my details</a>
+        </div>
+        <!-- Three sentences, three lifetimes, and the reason they are not one element:
+             · `data-record-hint` is the standing explanation, present in the server HTML so a guest with
+               JavaScript off reads what the button does. The render pass rewrites it with the one thing that
+               can be true after a record — that the sheet on screen is no longer the sheet that went in — so it
+               holds only text the script may replace.
+             · the phone line below it never changes and is never touched by the script, which is why the number
+               and its `tel:` link survive every arm of the hint above. They used to live inside it, and the
+               first rewrite deleted the link along with the sentence.
+             · `data-record-state` is the live region, written only by a submit, so a guest tabulating through
+               the sheet hears one sentence per action instead of a re-announcement every time a plate changes. -->
+        <p class="meta dim" data-record-hint>
+          This writes the sheet above into the kitchen's order book and reads back a reference. Nothing is sent
+          until you press the button.
+        </p>
+        <p class="meta dim">
+          A reference is not a confirmation — <a href={`tel:+${f.whatsapp}`}>{f.phone}</a> is the number that
+          says yes.
+        </p>
+        <p class="meta dim" data-record-state role="status" aria-live="polite"></p>
+      </form>
     </div>
 
     <p class="meta" style="margin-top:0.6rem">
-      This is a wish-list, not a booking. Nothing leaves your browser until you press the button, and the
-      message opens in WhatsApp so you are the one who sends it.
+      This is a wish-list, not a booking. "Send it on WhatsApp" carries the table only when you press it, and
+      the message opens in your own app, so you are the one who sends it. Recording the sheet writes it into
+      the order book and hands back a reference — still not a confirmation.
     </p>
   </aside>
 </div>
@@ -159,10 +214,12 @@ const change = nextChange();
     clearTable,
     dropLine,
     getTable,
+    getTotals,
     setParty,
     tableLink,
   } from "../lib/table-client.mjs";
-  import { findItem, money, partyAdvice, totals, whatsappUrl } from "../lib/table.mjs";
+  import { LINES_MAX, clampParty, findItem, money, partyAdvice, totals, whatsappText, whatsappUrl } from "../lib/table.mjs";
+  import { requestMessage, submitRequest, tablePayload, whatsAppHref } from "../lib/request-client.mjs";
   import { UTC_OFFSET_MINUTES, hourToLabel, nairobiHour } from "../lib/hours.mjs";
   import { component } from "../lib/page.mjs";
 
@@ -191,6 +248,11 @@ const change = nextChange();
     const dayEl = builder.querySelector<HTMLInputElement>("[data-when-day]")!;
     const timeEl = builder.querySelector<HTMLSelectElement>("[data-when-time]")!;
     const copyStateEl = builder.querySelector<HTMLElement>("[data-copy-state]")!;
+    const recordForm = builder.querySelector<HTMLFormElement>("[data-record-form]")!;
+    const recordSend = builder.querySelector<HTMLButtonElement>("[data-record-send]")!;
+    const recordState = builder.querySelector<HTMLElement>("[data-record-state]")!;
+    const recordHint = builder.querySelector<HTMLElement>("[data-record-hint]")!;
+    const handoffEl = builder.querySelector<HTMLAnchorElement>("[data-handoff]")!;
 
     // Today in Nairobi, not today on the laptop: a guest in Dubai picking "yesterday" because their
     // clock is two hours behind is a bug the site can simply refuse to have.
@@ -293,6 +355,37 @@ const change = nextChange();
       return at === -1 ? { id: key, option: undefined as string | undefined } : { id: key.slice(0, at), option: key.slice(at + 2) };
     };
 
+    /* The record form's standing sentence lives in the markup, not here, so there is one copy of it and a
+       guest with JavaScript off reads the same thing a guest with JavaScript does. These two variables are
+       the only state the write path keeps: the identity of the sheet that went in, and the reference the book
+       handed back for it. Both are compared against the sheet on screen, which is what lets the hint say
+       "you have changed it since" instead of leaving a stale reference looking current. */
+    const defaultHint = recordHint.textContent ?? "";
+    let recordedKey = "";
+    let recordedRef = "";
+
+    /* The WhatsApp link the sheet has always had carries the dishes; this one carries the dishes *and* the
+       name and number from the record form, which is what makes it the way through when the book cannot be
+       reached. It is rebuilt on every render and on every keystroke in the form rather than only on a failed
+       submit, because the sheet's own render pass owns the other WhatsApp anchor and would quietly drop the
+       contact block the next time a plate changed hands. */
+    const syncHandoff = () => {
+      const sheet = getTable();
+      const priced = getTotals();
+      const payload = tablePayload(Object.fromEntries(new FormData(recordForm)), {
+        table: sheet,
+        claimed: priced.subtotal,
+        day: dayEl.value,
+        time: timeEl.value,
+        when: whenLabel(),
+        origin,
+      });
+      handoffEl.href = whatsAppHref(
+        builder.dataset.phone ?? "",
+        `${whatsappText(menu, sheet, whenLabel(), origin)}\n\n${requestMessage(payload)}`,
+      );
+    };
+
     const render = () => {
       const table = getTable();
       const t = totals(menu, table);
@@ -328,6 +421,20 @@ const change = nextChange();
         waEl.setAttribute("aria-disabled", "true");
         waEl.textContent = "Add something first";
       }
+      /* Recording an empty sheet is a 422 about dishes, and a sheet with more rows than the book takes is a 422
+         about a number nobody told the guest. Both are decided here, in the same place the sentence is written,
+         so the button and its explanation can never disagree. The WhatsApp link stays live through the long one
+         — it is a message, and a message has no row limit. */
+      const overCap = t.lineCount > LINES_MAX;
+      recordSend.disabled = t.count === 0 || overCap;
+      const sheetKey = JSON.stringify(table.lines);
+      recordHint.textContent = !t.count
+        ? "Nothing on the sheet to record yet."
+        : overCap
+          ? `At most ${LINES_MAX} different dishes go into the book at once, and this sheet has ${t.lineCount}. Empty some off, or use WhatsApp above — that route has no cap.`
+          : recordedKey && recordedKey !== sheetKey
+            ? `You sent ${recordedRef}, and that one stays in the book. The sheet has changed since — press Record again to send what is on it now.`
+            : defaultHint;
       // The house-set buttons on this very page say what they have already done, so pressing "Add"
       // twice is visibly two plates rather than a mystery.
       for (const id of signatureIds) {
@@ -335,9 +442,13 @@ const change = nextChange();
         const row = t.rows.find((r) => r.id === id);
         if (button) button.textContent = row ? `On the table · ${row.qty}` : "Add";
       }
+      syncHandoff();
     };
 
     document.addEventListener(EVENT, render);
+    // Typing a name is not a table change, so no event fires for it — and the handoff link's message is
+    // supposed to hold that name.
+    recordForm.addEventListener("input", syncHandoff);
 
     /* ---------------- the controls ---------------- */
 
@@ -374,7 +485,7 @@ const change = nextChange();
       const party = target?.closest?.<HTMLElement>("[data-party]");
       if (party) {
         const delta = Number(party.dataset.party ?? 0);
-        setParty(Math.max(1, Math.min(30, getTable().party + delta)));
+        setParty(clampParty(getTable().party + delta));
         return;
       }
       const copy = target?.closest?.("[data-copy-link]");
@@ -403,6 +514,80 @@ const change = nextChange();
     dayEl.addEventListener("change", render);
     timeEl.addEventListener("change", render);
 
+    /* ---------------- writing the sheet into the book ---------------- */
+
+    recordForm.addEventListener("submit", async (event) => {
+      /* Native validity runs before this handler (no `novalidate`), and that is the whole client-side check:
+         name and phone are `required`, and the When pair this page builds is already clamped to the hours the
+         render is standing on. Prices, the party ceiling and the phone format are the Worker's to refuse, so
+         its 422 is the sentence the guest reads — lib/request-client.mjs explains why nothing is re-typed here. */
+      event.preventDefault();
+      const table = getTable();
+      const priced = getTotals();
+      /* The button is disabled in both of these states, so reaching here means the guest pressed Enter in a
+         field. Saying it beats sending a request the book is certain to refuse. */
+      if (!priced.count || priced.lineCount > LINES_MAX) {
+        recordState.textContent = !priced.count
+          ? "There is nothing on the sheet to record."
+          : `The book takes ${LINES_MAX} different dishes at a time, and this sheet has ${priced.lineCount}.`;
+        return;
+      }
+      const payload = tablePayload(Object.fromEntries(new FormData(recordForm)), {
+        table,
+        claimed: priced.subtotal,
+        day: dayEl.value,
+        time: timeEl.value,
+        when: whenLabel(),
+        origin,
+      });
+
+      recordSend.disabled = true;
+      recordState.textContent = "Sending the sheet to the book…";
+      const result = await submitRequest(recordForm.dataset.api, payload);
+      recordSend.disabled = false;
+
+      if (result.kind === "recorded") {
+        recordedKey = JSON.stringify(table.lines);
+        recordedRef = result.reference;
+        const drift = result.priceDrift;
+        // Three arms, because "the numbers matched" and "we never compared them" are different sentences, and
+        // the guest is about to be quoted a total at the table. The server's figure is named as the one on the
+        // record either way — the page's number is evidence of a gap, never an amount.
+        recordState.textContent =
+          drift && drift.deltaKes
+            ? `Recorded as ${result.reference}. The kitchen's own price list makes it ${money(drift.serverKes)} — ${money(Math.abs(drift.deltaKes))} ${drift.deltaKes > 0 ? "more" : "less"} than this sheet said, and that gap is on the record with you. Nothing is confirmed: +${builder.dataset.phone} is who decides.`
+            : drift
+              ? `Recorded as ${result.reference} — ${money(result.totalKes)}, the same figure this sheet shows. Nothing is confirmed: +${builder.dataset.phone} is who decides.`
+              : `Recorded as ${result.reference}. Nothing is confirmed: +${builder.dataset.phone} is who decides.`;
+        render();
+        return;
+      }
+      if (result.kind === "invalid") {
+        recordState.textContent = result.messages.join(" ");
+        const first = result.fields
+          .map((field) => recordForm.querySelector(`[name=${field.split(".").pop()}]`))
+          .find(Boolean);
+        first?.focus();
+        return;
+      }
+      if (result.kind === "busy") {
+        recordState.textContent = result.retryAfterSeconds
+          ? `You just sent one of these. Give it ${result.retryAfterSeconds} seconds and press Record again — the sheet is still here.`
+          : "You just sent one of these. Give it a moment and press Record again.";
+        return;
+      }
+      /* Nothing reached the book, or the book answered without recording it (5xx, `not_recorded`). The sheet is
+         untouched and the handoff link beside this button carries the same lines — the dishes and the estimate
+         from `whatsappText`, the name and number from `requestMessage` — so a failed write costs the guest one
+         more press rather than the request. Kept in sync on every render, so it is already correct by the time
+         anyone reads this sentence. */
+      syncHandoff();
+      recordState.textContent =
+        "The book could not be reached, so nothing was recorded and no reference was issued. The link beside " +
+        "this button carries this sheet with your name and number — send it there and the kitchen gets the " +
+        "same thing.";
+    });
+
     render();
 
     // Subscribed by its own name so this is the same function object, and the rows, the party dots and the
@@ -411,3 +596,11 @@ const change = nextChange();
   }
 </script>
 
+<style>
+  /* The record form is a network control, so it belongs to the JavaScript page and not to the paper one.
+     Hidden by the same rule /visit uses for its request form, with the <noscript> sentence above saying what
+     to do instead — the WhatsApp anchor and the phone link are static markup and work either way. */
+  :global(html:not(.js)) [data-record-form] {
+    display: none;
+  }
+</style>

@@ -125,8 +125,12 @@ if (!fails.length) ok("entry graph", `three (${threeChunk[0] ?? "n/a"}) is refer
 const CONTRACTS = {
   "/": ["data-dial", "data-dial-input", "data-scene", "data-door", "data-reveal", "data-cursor", "data-ring", "data-kin", "data-magnetic"],
   "/menu": ["data-explorer", "data-q", "data-sort", "data-band", "data-min", "data-max", "data-tag", "data-reset", "data-count", "data-groups", "data-group", "data-subgroup", "data-card", "data-add", "data-signed"],
-  "/table": ["data-builder", "data-origin", "data-phone", "data-party", "data-card", "data-add", "data-magnetic"],
-  "/visit": ["data-dial", "data-dial-input"],
+  "/table": [
+    "data-builder", "data-origin", "data-phone", "data-party", "data-card", "data-add", "data-magnetic",
+    "data-when-day", "data-when-time", "data-whatsapp",
+    "data-record-form", "data-record-send", "data-record-hint", "data-record-state", "data-handoff", "data-api",
+  ],
+  "/visit": ["data-dial", "data-dial-input", "data-request-form", "data-send", "data-outcome", "data-handoff", "data-api"],
 };
 for (const [route, needed] of Object.entries(CONTRACTS)) {
   const src = all.find(([r]) => r === route)?.[1];
@@ -189,7 +193,7 @@ if (!fails.some((f) => f.includes("class:list"))) ok("class:list", "the dial ele
 // not on the raw `content/menu.source.json` ingest. Reading the wrong file threw on the first run of
 // this check; reading `item.signature` off the ingest silently returned an empty set. The page's inputs
 // are the ones to verify against.
-const { signatureItems } = await import(new URL("../site/src/lib/table.mjs", import.meta.url).href);
+const { PARTY_MAX, PARTY_MIN, signatureItems } = await import(new URL("../site/src/lib/table.mjs", import.meta.url).href);
 const menu = JSON.parse(await readFile(join(root, "site", "src", "data", "menu.json"), "utf8"));
 // The built menu is a tree — families > sections > items — and `meta.items` is the flat count the copy
 // quotes. Flatten to compare like with like instead of reaching for a top-level `items` array that does
@@ -337,6 +341,88 @@ for (const [route, src] of all) {
 }
 if (!fails.some((f) => f.includes("origin") || f.includes("schema")))
   ok("origin + schema", "one parsing Restaurant block per page, KES prices, hours, cuisine, tel: and map links, no stale origin");
+
+// ---------------------------------------------------------------- the book write path
+//
+// Two forms on this site POST to the order book: the request form on /visit and "Record this table" on the
+// sheet. They are the only places the site writes anything, and every way they break is a way `astro build`
+// still reports success:
+//
+//   · an API base that is http — the live page is https, so the browser refuses the call as mixed content
+//     before it leaves the machine, and the guest only sees "the book could not be reached";
+//   · a renamed or de-`required` field, which the Worker answers with a 422 the guest cannot fix;
+//   · a party ceiling that drifted from the Worker's, which is the bug /visit actually shipped with
+//     (it said 20 while the book said 30, so a party of 25 got a browser error there and a 422 from the
+//     sheet) — this time the number under test is the one lib/table.mjs exports, not a copy of it;
+//   · a form left visible with JavaScript switched off, which turns a network control into a plain GET: the
+//     page reloads and the guest's name and phone number land in the address bar.
+//
+// The static anchors are asserted in the same breath because they are the other half of the design: the
+// WhatsApp link and the tel: link are what a guest with no script gets, and they have to survive.
+const BOOK_ROUTES = ["/visit", "/table"];
+const cssFiles = [];
+for (const dir of [dist, join(dist, "_astro")]) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith(".css")) cssFiles.push(await readFile(join(dir, entry.name), "utf8"));
+  }
+}
+const css = cssFiles.join("\n");
+
+for (const route of BOOK_ROUTES) {
+  const src = all.find(([r]) => r === route)?.[1];
+  if (!src) continue;
+
+  const bases = [...src.matchAll(/data-api="([^"]+)"/g)].map((m) => m[1]);
+  if (!bases.length) bad("book write", `${route} renders no data-api — submitRequest() would be called with undefined`);
+  for (const base of bases) {
+    if (!/^https:\/\//.test(base)) bad("book write", `${route} points the form at ${base} — an http API base is blocked as mixed content on the https page`);
+  }
+
+  // The two fields the book refuses without, present in the server HTML and marked required there, so the
+  // instant answer comes from the browser and the 422 stays the real one.
+  for (const field of ["name", "phone"]) {
+    const tag = src.match(new RegExp(`<input\\b[^>]*name="${field}"[^>]*>`))?.[0];
+    if (!tag) bad("book write", `${route} has no input named ${field} — the payload would arrive without it`);
+    else if (!/\brequired\b/.test(tag)) bad("book write", `${route}: the ${field} input is not required, so an empty one reaches the book as a 422`);
+  }
+
+  // One hook to the fetch: if the page's chunks no longer contain the path, the form is decoration.
+  const chunks = [...new Set([...src.matchAll(/\/_astro\/[\w.-]+\.js/g)].map((m) => m[0]))];
+  let callsBook = false;
+  for (const ref of chunks) {
+    try {
+      if ((await readFile(join(dist, ref), "utf8")).includes("/v1/requests")) callsBook = true;
+    } catch {
+      /* a chunk the page references but dist does not hold is already a broken reference elsewhere */
+    }
+  }
+  if (!callsBook) bad("book write", `${route} ships no chunk that names /v1/requests — the form cannot reach the book`);
+
+  // The form is a script control; without the script it must not be on the page.
+  const formAttr = route === "/visit" ? "data-request-form" : "data-record-form";
+  if (!new RegExp(`html:not\\(\\.js\\)\\s*\\[${formAttr}\\]`).test(css))
+    bad("book write", `${route}: no html:not(.js) rule hides [${formAttr}] — with JavaScript off its submit becomes a GET that puts the guest's phone in the address bar`);
+
+  for (const anchor of [/https:\/\/wa\.me\/\d+/, /href="tel:\+\d+/]) {
+    if (!anchor.test(src)) bad("book write", `${route} lost its no-JS handoff (${anchor})`);
+  }
+}
+
+// The party ceiling, read from the constant the site and the Worker are both supposed to share.
+{
+  const visit = all.find(([r]) => r === "/visit")?.[1];
+  const party = visit?.match(/<input id="rq-party"[^>]*>/)?.[0];
+  if (!party) bad("book write", "/visit renders no #rq-party input for the limit check to read");
+  else {
+    for (const [want, attr] of [[PARTY_MIN, "min"], [PARTY_MAX, "max"]]) {
+      const got = party.match(new RegExp(`${attr}="(\\d+)"`))?.[1];
+      if (got !== String(want))
+        bad("book write", `/visit says ${attr}="${got ?? "nothing"}" where lib/table.mjs says ${want} — the browser and the book would refuse different parties`);
+    }
+  }
+  if (!fails.some((f) => f.includes("book write")))
+    ok("book write", `both forms carry an https data-api, required name and phone, a chunk naming /v1/requests, a no-JS hide rule, and a live wa.me + tel: fallback; #rq-party matches PARTY_MIN/PARTY_MAX (${PARTY_MIN}–${PARTY_MAX})`);
+}
 
 // ---------------------------------------------------------------- weight
 let kb = 0;

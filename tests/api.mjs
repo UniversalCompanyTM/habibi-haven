@@ -759,6 +759,81 @@ await check("a party of 200 is a phone call, not a form submission", async () =>
   );
 });
 
+/* ------------------------------------------------------ what the pages actually send */
+// The site is a separate program with its own copies of these numbers, and three of the four places that
+// state the party policy were written independently — /visit shipped `max="20"` while this file said 30, so
+// a party of 25 got a browser error there and a 422 here for one rule. These checks are what turns "we agree"
+// from a comment into a build failure.
+
+// A book of their own: these two checks write records, and the counts in `live` belong to other assertions.
+const sending = freshDb();
+
+await check("the ceilings the site prints are the ceilings this Worker refuses above", async () => {
+  const site = await lib("site/src/lib/table.mjs");
+  const problems = [];
+  if (site.PARTY_MIN !== validate.LIMITS.partyMin) problems.push(`partyMin: site ${site.PARTY_MIN} vs worker ${validate.LIMITS.partyMin}`);
+  if (site.PARTY_MAX !== validate.LIMITS.partyMax) problems.push(`partyMax: site ${site.PARTY_MAX} vs worker ${validate.LIMITS.partyMax}`);
+  if (site.LINES_MAX !== validate.LIMITS.linesMax) problems.push(`linesMax: site ${site.LINES_MAX} vs worker ${validate.LIMITS.linesMax}`);
+  // The boundary, executed rather than compared: the last allowed party goes in, the next one does not.
+  const at = await post(sending.db, {
+    kind: "table",
+    party: site.PARTY_MAX,
+    contact: { name: "Boundary Table", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  if (at.status !== 201) problems.push(`a party of ${site.PARTY_MAX} was refused with ${at.status}`);
+  const past = await post(sending.db, {
+    kind: "table",
+    party: site.PARTY_MAX + 1,
+    contact: { name: "Over Table", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  if (past.status !== 422) problems.push(`a party of ${site.PARTY_MAX + 1} was accepted with ${past.status}`);
+  return problems.length ? problems.join("; ") : true;
+});
+
+await check("a payload built by the site's own code is accepted, repriced, and reports its drift", async () => {
+  const rc = await lib("site/src/lib/request-client.mjs");
+  const sheet = {
+    party: 3,
+    lines: [
+      { id: FIRST_ITEM.id, qty: 2 },
+      { id: SECOND_ITEM.id, option: "Chips", qty: 1 },
+    ],
+  };
+  const payload = rc.tablePayload(
+    { name: "Amina Wanjiru", phone: nextPhone(), notes: "Terrace if possible" },
+    {
+      table: sheet,
+      claimed: 1, // deliberately wrong: the page's figure is evidence, never the bill
+      day: nairobiDateOffset(4),
+      time: "19:30",
+      when: "Sat 19:30",
+      origin: "https://habibihavenpreview.pages.dev",
+    },
+  );
+  const { status, body } = await post(sending.db, payload);
+  if (status !== 201) return `the sheet's own payload was refused: ${status} ${JSON.stringify(body.errors ?? body)}`;
+  const want = FIRST_ITEM.priceKes * 2 + SECOND_ITEM.priceKes;
+  // What the book actually holds, not only what it said back: the side choice has to survive as its own row,
+  // and the page's address has to be stored as the record's provenance.
+  const row = sending.sql("SELECT source_url, claimed_subtotal_kes, price_delta_kes FROM requests WHERE reference = ?", body.reference)[0];
+  const rows = sending.sql("SELECT item_id, option_label, qty FROM request_lines WHERE request_reference = ? ORDER BY id", body.reference);
+  return (
+    eq(body.totalKes, want, "server total") &&
+    eq(body.priceDrift.claimedKes, 1, "the claim kept as sent") &&
+    eq(body.priceDrift.serverKes, want, "the server figure") &&
+    eq(body.priceDrift.deltaKes, want - 1, "the gap") &&
+    eq(body.lineCount, 2, "lines") &&
+    eq(row?.source_url, "https://habibihavenpreview.pages.dev/table", "stored source") &&
+    eq(row?.claimed_subtotal_kes, 1, "stored claim") &&
+    eq(row?.price_delta_kes, want - 1, "stored delta") &&
+    eq(rows.length, 2, "two rows") &&
+    eq(rows[1].option_label, "Chips", "the side choice kept") &&
+    eq(rows.map((r) => `${r.item_id}:${r.qty}`).join(","), `${FIRST_ITEM.id}:2,${SECOND_ITEM.id}:1`, "ids and quantities")
+  );
+});
+
 /* ------------------------------------------------------------------ the body */
 
 describe("POST /v1/requests — what a hostile or broken client sends");

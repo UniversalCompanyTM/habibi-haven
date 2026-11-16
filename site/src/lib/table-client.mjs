@@ -13,6 +13,7 @@
 import menu from "../data/menu.json";
 import {
   addLine,
+  clampParty,
   decodeTable,
   emptyTable,
   findItem,
@@ -63,7 +64,11 @@ function writeStored(table) {
  */
 export function sanitize(table) {
   const lines = table.lines.filter((line) => Boolean(findItem(menu, line.id)));
-  const party = Number.isFinite(table.party) && table.party > 0 ? Math.min(99, Math.round(table.party)) : 2;
+  // The party is clamped to the site's own limit rather than to a wider one: a stored table from an older
+  // build (or a hand-edited share link) that says 99 would be accepted here and then 422'd by the book, so
+  // the guest would be told the sheet they are looking at is impossible. clampParty is the same window the
+  // stepper and the decoder use, and tests/api.mjs compares it against the Worker's.
+  const party = clampParty(table.party);
   return { party, lines };
 }
 

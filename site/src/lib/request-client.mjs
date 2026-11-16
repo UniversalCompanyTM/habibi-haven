@@ -37,13 +37,73 @@ export function reservationPayload(values, { origin, kind = "reservation" } = {}
 }
 
 /**
+ * The built table from /table, in the shape `kind:"table"` wants.
+ *
+ * `values` is the two-or-three fields the record form adds (name, phone, an optional note); everything else is
+ * already on the sheet, so it arrives as context rather than as form fields: `table` is the guest's
+ * `{ party, lines }` from lib/table-client.mjs, `claimed` is what lib/table.mjs priced it at, and
+ * `day` / `time` / `whenLabel` are the sheet's own When controls.
+ *
+ * Four rules in here that the reservation payload does not have to care about:
+ *  · the lines carry item ids and quantities, never names or prices. The Worker looks the money up in its own
+ *    database, so a price written by the page would be ignored at best — and if it were the only number sent,
+ *    it would be a bill the kitchen never agreed to (backend/src/index.mjs `createRequest`);
+ *  · `claimedSubtotal` goes as the guest's figure and nothing else: it is stored beside the server's total and
+ *    the gap is reported back rather than buried. A non-integer is dropped rather than sent, because the
+ *    Worker 422s on `claimedSubtotal` and losing the drift is cheaper than failing the whole request;
+ *  · the day/time pair travels whole or not at all. For a table the Worker validates the pair whenever either
+ *    half is present, so a lone `19:00` would be a 422 about a date the guest never saw;
+ *  · `when` is a label the server stores unpolicied up to 60 characters. A longer string is dropped instead of
+ *    truncated, because silently cutting a person's words in half is an edit, not a fallback.
+ */
+export function tablePayload(values, { table, claimed, day, time, when: whenLabel, origin } = {}) {
+  const text = (v) => (typeof v === "string" ? v.trim() : "");
+  const party = Number(text(values?.party) || table?.party);
+
+  const payload = {
+    kind: "table",
+    party: Number.isFinite(party) && party > 0 ? Math.round(party) : null,
+    contact: { name: text(values?.name), phone: text(values?.phone) },
+    lines: (table?.lines ?? []).flatMap((line) => {
+      const qty = Number(line?.qty);
+      if (!line?.id || !Number.isInteger(qty) || qty < 1) return [];
+      return [{ id: line.id, ...(line.option ? { option: line.option } : {}), qty }];
+    }),
+  };
+
+  const date = text(day);
+  const hour = text(time);
+  if (date && hour) {
+    payload.visitDate = date;
+    payload.visitTime = hour;
+  }
+
+  const claim = Number(claimed);
+  if (Number.isInteger(claim) && claim >= 0) payload.claimedSubtotal = claim;
+
+  const when = text(whenLabel);
+  if (when && when.length <= 60) payload.when = when;
+
+  const notes = text(values?.notes);
+  if (notes) payload.notes = notes;
+
+  if (origin) payload.source = `${String(origin).replace(/\/$/, "")}/table`;
+  return payload;
+}
+
+/**
  * Turn a Worker response into one of five things the page knows how to say. Kept separate from the fetch so
  * the mapping is testable: `status` is the HTTP code, `body` the parsed JSON or null, `network` true when the
  * request never completed.
  */
 export function outcome({ status, body, network = false }) {
   if (network) return { kind: "unreachable" };
-  if (status === 201 && body?.reference) return { kind: "recorded", reference: body.reference, totalKes: body.totalKes ?? null };
+  // `priceDrift` is the server's own arithmetic on the gap between what the page thought the table cost and
+  // what their price list says. It arrives null when no claim was sent, and null when the two agree — the page
+  // has to be able to tell "nothing to report" from "they matched", which is why it is passed through as the
+  // object the Worker sent rather than flattened into a number here.
+  if (status === 201 && body?.reference)
+    return { kind: "recorded", reference: body.reference, totalKes: body.totalKes ?? null, priceDrift: body.priceDrift ?? null };
   if (status === 422) return { kind: "invalid", messages: errorMessages(body), fields: errorFields(body) };
   if (status === 429)
     return { kind: "busy", retryAfterSeconds: Number.isFinite(body?.retry_after_seconds) ? body.retry_after_seconds : null };
@@ -59,6 +119,21 @@ const errorFields = (body) =>
   Array.isArray(body?.errors) ? body.errors.map((e) => e.field).filter((f) => typeof f === "string") : [];
 
 export function requestMessage(payload) {
+  // A table payload's dishes, party, when and estimate already live in the sheet message the page builds with
+  // `whatsappText` (lib/table.mjs), because that is the one place the names and prices are known. Repeating
+  // them here would put the same number twice in one text a floor manager reads, so the fallback for /table is
+  // the contact block only — and the two halves are documented as a pair in TableBuilder's submit handler.
+  if (payload.kind === "table") {
+    const lines = [
+      "Table request — Habibi Haven",
+      `Name: ${payload.contact?.name || "—"}`,
+      `Phone: ${payload.contact?.phone || "—"}`,
+    ];
+    if (payload.visitDate || payload.visitTime) lines.push(`For: ${payload.visitDate || "?"} at ${payload.visitTime || "?"}`);
+    lines.push(`Party: ${payload.party ?? "?"}`);
+    if (payload.notes) lines.push(`Note: ${payload.notes}`);
+    return lines.join("\n");
+  }
   const lines = [
     `Table request — Habibi Haven`,
     `Name: ${payload.contact?.name || "—"}`,

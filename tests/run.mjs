@@ -1223,6 +1223,116 @@ check("a request the book never took still leaves the guest able to send it", ()
   return true;
 });
 
+/* ------------------------------------------------------ the sheet that writes itself down */
+// /table's record button sends the same `{id, qty}` rows the share link uses, so the two failure modes worth
+// pinning are (a) the page's own prices leaking into a payload the Worker is going to reprice, and (b) the
+// half-built request a guest would get back as a 422 about a field they never saw on screen.
+
+check("the table payload sends ids and quantities, never names or prices", () => {
+  const sheet = {
+    party: 5,
+    lines: [
+      { id: "grilled-chicken-breast", option: "Mandy Rice", qty: 2 },
+      { id: "liver-malawa", qty: 1 },
+      { id: "ghost-dish", qty: 0 },
+      { id: "", qty: 3 },
+    ],
+  };
+  const p = rc.tablePayload(
+    { name: " Amina ", phone: " +254700111222 ", notes: "  " },
+    { table: sheet, claimed: 3600, day: "2026-11-22", time: "19:00", when: "Sun 22 Nov, 7:00 pm", origin: "https://habibihavenpreview.pages.dev/" },
+  );
+  const problems = [];
+  if (p.kind !== "table") problems.push(`kind ${p.kind}`);
+  if (p.party !== 5) problems.push(`party came from the sheet as ${p.party}`);
+  if (p.contact?.name !== "Amina" || p.contact?.phone !== "+254700111222") problems.push("contact is not nested and trimmed");
+  // the two dead rows: qty 0 and a missing id. A line the Worker cannot price is a line it 422s on.
+  if (p.lines.length !== 2) problems.push(`sent ${p.lines.length} lines, expected the 2 real ones`);
+  if (p.lines.some((l) => "price" in l || "amount" in l || "name" in l)) problems.push("a price or name travelled in a line");
+  if (p.lines[0]?.option !== "Mandy Rice") problems.push(`the side choice was dropped (${JSON.stringify(p.lines[0])})`);
+  if ("option" in (p.lines[1] ?? {})) problems.push("a line without a side grew an undefined option key");
+  if (p.claimedSubtotal !== 3600) problems.push(`claimedSubtotal is ${p.claimedSubtotal}`);
+  if (p.visitDate !== "2026-11-22" || p.visitTime !== "19:00") problems.push("the day/time pair did not survive together");
+  if (p.when !== "Sun 22 Nov, 7:00 pm") problems.push(`when label lost: ${p.when}`);
+  if ("notes" in p) problems.push("a blank notes field was sent");
+  if (p.source !== "https://habibihavenpreview.pages.dev/table") problems.push(`source is ${p.source}`);
+  return problems.length ? problems.join("; ") : true;
+});
+
+check("a table payload refuses to invent half a pair, a long label, or a fractional total", () => {
+  const base = { party: 2, lines: [{ id: "liver-malawa", qty: 1 }] };
+  const onlyTime = rc.tablePayload({ name: "A", phone: "+2547" }, { table: base, time: "19:00" });
+  if ("visitTime" in onlyTime || "visitDate" in onlyTime) return "a lone time was sent — the book validates the pair and would 422 about a date the guest never saw";
+  const long = rc.tablePayload({ name: "A", phone: "+2547" }, { table: base, when: "x".repeat(61) });
+  if ("when" in long) return "a 61-character label was sent instead of dropped; the 60-char limit is the server's";
+  const odd = rc.tablePayload({ name: "A", phone: "+2547" }, { table: base, claimed: 3600.5 });
+  if ("claimedSubtotal" in odd) return "a non-integer claim was sent, which the book rejects outright";
+  const noParty = rc.tablePayload({ name: "A", phone: "+2547" }, { table: { party: 0, lines: [] } });
+  if (noParty.party !== null) return `party 0 became ${noParty.party} instead of null`;
+  const bare = rc.tablePayload({ name: "A", phone: "+2547" }, { table: base });
+  if ("source" in bare) return `invented a source: ${bare.source}`;
+  if (bare.lines.length !== 1) return "the one real line was lost";
+  return true;
+});
+
+check("the drift the book reports back reaches the page as drift, not as a silent correction", () => {
+  const withGap = rc.outcome({
+    status: 201,
+    body: { reference: "HH-AMQZN5", totalKes: 3900, priceDrift: { claimedKes: 3600, serverKes: 3900, deltaKes: 300 } },
+  });
+  if (withGap.priceDrift?.deltaKes !== 300) return `the gap was flattened away: ${JSON.stringify(withGap.priceDrift)}`;
+  if (withGap.totalKes !== 3900) return "the server's total is what the guest should be told";
+  const matched = rc.outcome({ status: 201, body: { reference: "HH-AMQZN5", totalKes: 3600, priceDrift: null } });
+  if (matched.priceDrift !== null) return "an agreed price came back as something else";
+  const noClaim = rc.outcome({ status: 201, body: { reference: "HH-AMQZN5", totalKes: 3600 } });
+  if (noClaim.priceDrift !== null) return "a 201 with no drift key read as " + JSON.stringify(noClaim.priceDrift);
+  return true;
+});
+
+check("the /table fallback says who is calling and leaves the dishes to the sheet's own message", () => {
+  const built = { party: 5, lines: [{ id: "grilled-chicken-breast", option: "Mandy Rice", qty: 2 }] };
+  const p = rc.tablePayload({ name: "Amina", phone: "+254700111222", notes: "high chair" }, {
+    table: built, claimed: 3600, day: "2026-11-22", time: "19:00", when: "Sun 22 Nov, 7:00 pm",
+  });
+  const contact = rc.requestMessage(p);
+  const missing = ["Amina", "+254700111222", "2026-11-22", "19:00", "5", "high chair"].filter((bit) => !contact.includes(bit));
+  if (missing.length) return `the handover block dropped ${missing.join(", ")}`;
+  // The two halves together must be as complete as the reservation message alone: the sheet's own text carries
+  // the dishes and the estimate, so if it stopped doing that this split would be losing the order.
+  const sheetMsg = table.whatsappText(menu, built, "Sun 22 Nov, 7:00 pm", "https://habibihavenpreview.pages.dev");
+  const joined = `${sheetMsg}\n\n${contact}`;
+  const lost = ["Grilled Chicken Breast", "Mandy Rice", "KSh", "Estimated total", "Amina", "+254700111222"].filter((bit) => !joined.includes(bit));
+  if (lost.length) return `WhatsApp fallback for a recorded table loses ${lost.join(", ")}`;
+  if ((contact.match(/KSh/g) ?? []).length) return "the contact block repeated prices the sheet already sent";
+  return true;
+});
+
+check("the party window is one number the browser, the link and the book all read", () => {
+  const problems = [];
+  // A share link can say anything, because a guest can edit it. Each arm is a different kind of nonsense,
+  // and the rule is: come back inside the window, unless there was no number to put there.
+  const cases = [
+    ["99", table.PARTY_MAX, "over the cap"],
+    ["-5", table.PARTY_MIN, "below the floor"],
+    ["0", table.PARTY_DEFAULT, "no party at all"],
+    ["two", table.PARTY_DEFAULT, "not a number"],
+  ];
+  for (const [raw, want, why] of cases) {
+    const got = table.decodeTable(`${raw}|liver-malawa x1`).party;
+    if (got !== want) problems.push(`${why} (${raw}) decoded to ${got}, expected ${want}`);
+  }
+  // The shape that used to escape: a stored fraction passes a `> 0` test and rounds down out of the window.
+  for (const [value, want] of [[0.4, table.PARTY_MIN], [2.6, 3], [undefined, table.PARTY_DEFAULT], [NaN, table.PARTY_DEFAULT]]) {
+    if (table.clampParty(value) !== want) problems.push(`clampParty(${String(value)}) gave ${table.clampParty(value)}, expected ${want}`);
+  }
+  const round = table.encodeTable({ party: table.PARTY_MAX, lines: [] });
+  if (table.decodeTable(round).party !== table.PARTY_MAX) problems.push("the cap does not survive an encode/decode round trip");
+  if (table.emptyTable().party !== table.PARTY_DEFAULT) problems.push("a fresh sheet does not start at the default party");
+  if (table.PARTY_MIN > 1 || table.PARTY_MAX < 30) problems.push(`the policy moved to ${table.PARTY_MIN}–${table.PARTY_MAX} without the book agreeing (tests/api.mjs compares them)`);
+  return problems.length ? problems.join("; ") : true;
+});
+
+
 /* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {
@@ -1230,4 +1340,4 @@ if (failures.length) {
   for (const f of failures) console.log(`  ${f.group}\n    ${f.what}: ${f.message}`);
   process.exit(1);
 }
-console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity, page lifecycle`);
+console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity, page lifecycle, request payloads`);

@@ -10,6 +10,7 @@ import menu from "../data/menu.json";
 import press from "../data/press.json";
 import voice from "../data/voice.json";
 import { OPEN_LABEL, CLOSE_LABEL, isOpen, nextChange } from "../lib/hours.mjs";
+import { PARTY_MAX, PARTY_MIN } from "../lib/table.mjs";
 import SocialLinks from "../components/SocialLinks.astro";
 import HoursClock from "../components/HoursClock.astro";
 
@@ -251,7 +252,12 @@ const frames = [
         </div>
         <div class="field">
           <label for="rq-party">How many</label>
-          <input id="rq-party" name="party" type="number" required min="1" max="20" step="1" inputmode="numeric" value="2" />
+          <!-- The ceiling is PARTY_MAX, the same constant the sheet's stepper and the share-link decoder use,
+               and the number the Worker's LIMITS.partyMax refuses above. This input used to say 20 — a policy
+               this site invented in one place while three other places said 30, so a party of 25 got a browser
+               error on /visit and a 422 with different words on the same request. tests/api.mjs now compares the
+               two files, so the next copy that disagrees fails the build instead of the guest. -->
+          <input id="rq-party" name="party" type="number" required min={String(PARTY_MIN)} max={String(PARTY_MAX)} step="1" inputmode="numeric" value="2" />
         </div>
         <div class="field">
           <label for="rq-notes">Anything they should know</label>

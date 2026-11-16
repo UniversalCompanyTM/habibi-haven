@@ -9,6 +9,59 @@
 
 const KE = "en-KE";
 
+/* ------------------------------------------------------------------ limits */
+
+/**
+ * The smallest and largest party this site will build, ask for, or decode from a link.
+ *
+ * It is a constant rather than a number written at each call site because the same policy currently sits in
+ * four places: the stepper in TableBuilder, the `min`/`max` on the /visit party input, the share-link decoder
+ * here, and `LIMITS.partyMax` in backend/src/validate.mjs, which is the one that actually refuses a request.
+ * Three of those four were written independently, and one of them (/visit) said 20 — so a party of 25 got a
+ * browser error on one page and a 422 on another for a rule the book states as 30. tests/api.mjs now compares
+ * this pair against the Worker's, so a fifth copy that disagrees fails the build rather than the guest.
+ */
+export const PARTY_MIN = 1;
+export const PARTY_MAX = 30;
+
+/**
+ * The party a sheet starts with, and the party a share link falls back to when its first field is not a
+ * number, is zero, or is negative.
+ *
+ * Not PARTY_MIN, deliberately: a guest who opens a link whose party went corrupt still has dishes on the
+ * sheet, and a table for one with three mains reads as an error in the page rather than as a default. Three
+ * places needed this figure — `emptyTable`, the share-link decoder, and the store's `sanitize` in
+ * lib/table-client.mjs — and each had its own literal `2`, which is how one default becomes three.
+ */
+export const PARTY_DEFAULT = 2;
+
+/**
+ * Bring any candidate party into the window.
+ *
+ * The three sources of a party — a stored table, a hand-edited share link, and the stepper — all need this,
+ * and each used to write its own `Math.max`/`Math.min` around a `Number()` that could still land outside the
+ * range it was clamping. A stored `0.4` was the live case: it passed the `> 0` test, rounded down to `0`, and
+ * reached the book with no party at all. Round first, then clamp, and the only value that can escape is one
+ * that was never a number — which becomes the default rather than an edge of the window, so a corrupt link
+ * reads as "a table, size unknown" instead of "a table for one".
+ */
+export function clampParty(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return PARTY_DEFAULT;
+  return Math.max(PARTY_MIN, Math.min(PARTY_MAX, Math.round(n)));
+}
+
+/**
+ * How many different rows one recorded table may hold.
+ *
+ * The same argument as above, and the same bug class: `LIMITS.linesMax` in backend/src/validate.mjs answers
+ * a 41st distinct dish with a 422 the guest cannot act on, while nothing on this site ever told them the
+ * sheet had a ceiling. The sheet itself is uncapped on purpose — the WhatsApp message is a paragraph and a
+ * long one is nobody's error — so the cap belongs at the button that writes, which disables itself and says
+ * what it is doing. tests/api.mjs compares this number with the Worker's.
+ */
+export const LINES_MAX = 40;
+
 /* ------------------------------------------------------------------ money */
 
 const formatter = new Intl.NumberFormat(KE, { maximumFractionDigits: 0 });
@@ -95,7 +148,7 @@ export function setOption(table, id, option, nextOption) {
   return { ...table, lines };
 }
 
-export function emptyTable(party = 2) {
+export function emptyTable(party = PARTY_DEFAULT) {
   return { party, lines: [] };
 }
 
@@ -200,7 +253,7 @@ export function decodeTable(raw) {
   if (!text) return null;
   const parts = text.split("|").filter(Boolean);
   if (parts.length < 1) return null;
-  const party = Math.max(1, Math.min(30, Number(parts[0]) || 2));
+  const party = clampParty(Number(parts[0]) || PARTY_DEFAULT);
   const lines = [];
   for (const part of parts.slice(1)) {
     const m = part.match(/^(.*)x(\d{1,2})$/);
