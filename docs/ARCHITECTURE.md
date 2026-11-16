@@ -947,9 +947,70 @@ Chrome is worse than the failure being diagnosed) and the last twelve lines go i
 fast-fail on a browser that already exited still runs first, so a genuinely dead Chrome is still an immediate and
 accurate error. Run 43858341744 is the green one that proves both halves: the arms and the budget.
 
+### Amendment A18 — three rules that were written twice, and one unit that was not hours
+
+A17's arms opened a page-level gap this session could not have found on its own, and chasing it turned up three
+separate defects of the same shape: a rule stated in two places, one of them incompletely, and one value fed to a
+function that expected a different unit.
+
+**One visit rule, two callers.** `backend/src/validate.mjs` checked "that time has already gone by" and the
+90-day horizon inside the `kind:"reservation"` branch. The `kind:"table"` branch parsed the same `visitDate`,
+checked only the opening window, and wrote the row. So a table for yesterday — or for 2126 — was accepted with a
+201 and a reference, and the reference's entire purpose is to say the kitchen has the request. Measured before
+claiming it: the book held 3 rows, the two tables with `visit_at = NULL` (no When had been sent) and the
+reservation on a valid future date, so the branch was wrong, had been reachable, and had not yet corrupted
+anything. `checkVisit` now serves both, keeping the one difference that is real — a reservation without a date is
+broken, a table's When is optional — and `tests/api.mjs` executes the boundary on both kinds, which is how the
+93 became 95.
+
+**The horizon has a client end now.** Neither date picker had an upper bound, so a guest could scroll past 90
+days and be refused for `visitDate` — a field neither form has a control named, so `firstBadControl` lands
+nowhere and the sentence arrives with no pointer (A15's asymmetry, exactly as it recorded it).
+`hours.mjs` gained `HORIZON_DAYS` and `lastBookableDay()`, both forms set `max`, and the number is compared with
+`LIMITS.horizonDays` with the edge executed on both kinds — the same treatment `PARTY_MAX` and `LINES_MAX` get,
+which is the reason a fifth copy is safe this time. What it costs is measured, not asserted loosely: the bound is
+the last day whose *latest* sitting fits, so when the horizon falls mid-afternoon the next day's 06:30 would have
+been accepted and is not offered — one day, never two, and the direction of the error is chosen deliberately (a
+day a guest cannot reach beats a record the book holds against a field the page cannot name).
+
+**`hourToLabel` takes hours, and the sheet's slot loop passed minutes.** `TableBuilder` built its "When" options
+with `hourToLabel(m)` over `OPEN_MINUTES..CLOSE_MINUTES-30` in thirties. The helper multiplies by 60 and wraps at
+1440, so 390 minutes became "06:00", 420 "18:00", 450 "12:00", 480 "00:00": a four-option list where the comment
+above it promised thirty-three half-hour sittings, two of the four (`06:00`, `00:00`) outside the opening window —
+confirmed against the live Worker today, both answer 422 `outside_hours` — and `pickDefaultSlot` only sets the
+select if its own label is present, which it never was, so the form sat on its first option. Pressing Record
+without touching Time therefore sent a value the book refuses, named a field that form has no control for, and
+the guest saw a sentence with no pointer. This is the third time in this repository that a value crossed the
+hours/minutes line wrongly — `rigFor`'s own docstring records the first — so it is now gated rather than trusted:
+`/table bounds` compares every offered option, the count, and the value on load against the window the site
+itself states, built in the harness from `OPEN_MINUTES`/`CLOSE_MINUTES` rather than typed.
+
+**Why fourteen arms did not catch it.** The arms stub the book's answer, which is what lets them prove a refusal
+without summoning one. That also means no arm ever asks whether the page offered a value the book would reject:
+the /table arms posted a valid When, got the planned 201, and passed over a default submission that production
+would have refused. A stubbed answer proves the page's reaction; only a comparison with the contract proves the
+question was ever answerable. Both halves are now in the file.
+
+**New browser coverage this tranche.** Sixteen arms (the two `server_error` arms added so quoting `result.messages`
+is proven rather than assumed), plus `/table house-set` (one press of "Put the whole house set on the table",
+which had no gate in any language), `/table over-cap` (41 distinct dishes built by pressing `/menu`'s own
+controls, then refused without a request, with the hint and the guard required to state the same number), and the
+bounds rows above. The dock is sampled at 0%, 50% and 95% of the page, because "sticky" is a behaviour and a bar
+that scrolls away would have passed everything before it.
+
+**Deployed.** Worker version `52a68a46` (the visit-rule fix). Pages deployment `6c9a2991` is production at
+`https://habibihavenpreview.pages.dev` — four routes 200, `/nope` 404, the served When list is 33 slots from
+06:30 to 22:30 with none outside the window. CI run `43867501478` is green with all of it.
+
+**Left open, honestly.** The probes I ran against production today wrote one row — `HH-6ZAS89`, "Probe Only", a
+12:00 table — so `requests` is at 4, not the 3 that had been there; it is my own test data, and clearing it is a
+deletion of production rows that should be said out loud rather than done quietly. `run.mjs` is at 104. No
+independent reviewer read any of this: the first review attempt died after 164 calls without reporting, and the
+retry was scoped to one section — the agent runtime on this machine cannot name plugin-provided agents in a
+filename (their IDs contain `:`), which is the real reason "independent review" has kept failing here. And
+`3569310`'s commit subject still swallowed its first paragraph.
+
 ## Risks / must-not-say
-
-
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
   and log the rest rather than smoothing it over.
