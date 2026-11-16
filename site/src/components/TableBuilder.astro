@@ -12,7 +12,7 @@
 // /menu and a row changed here go through the same code path.
 import menu from "../data/menu.json";
 import { money, partyAdvice, signatureItems, totals as computeTotals } from "../lib/table.mjs";
-import { hourToLabel, OPEN_MINUTES, CLOSE_MINUTES, nextChange, nairobiMinutes } from "../lib/hours.mjs";
+import { CLOSE_MINUTES, hourToLabel, minutesToLabel, nextChange, nairobiMinutes, OPEN_MINUTES } from "../lib/hours.mjs";
 import { getTable } from "../lib/table-client.mjs";
 
 const f = menu.meta.facts;
@@ -21,8 +21,14 @@ const origin = Astro.site ?? new URL("https://habibi-haven.example");
 
 // Half-hour slots across the day they are actually open. The last one is 22:30 rather than 23:00:
 // asking a guest to arrive at the minute the kitchen closes would be a rude interface.
+//
+// `minutesToLabel`, not `hourToLabel`: the loop below counts minutes, and `hourToLabel` multiplies its argument
+// by 60 before wrapping at 1440. Passing minutes into it turned 390 into 06:00, 420 into 18:00, 450 into 12:00
+// and 480 into 00:00 — a four-option list where half the options (06:00, 00:00) are outside the opening window
+// the book enforces, and the default was the first of them. The refusal names `visitTime`, which is not a
+// control name on this form, so the guest got the sentence and no cursor: exactly the dead end A15 describes.
 const slots: string[] = [];
-for (let m = OPEN_MINUTES; m <= CLOSE_MINUTES - 30; m += 30) slots.push(hourToLabel(m));
+for (let m = OPEN_MINUTES; m <= CLOSE_MINUTES - 30; m += 30) slots.push(minutesToLabel(m));
 const uniqueSlots = [...new Set(slots)];
 
 const initialTable = getTable();

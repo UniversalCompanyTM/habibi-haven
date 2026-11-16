@@ -34,6 +34,17 @@ import { platform } from "node:process";
 // tests/api.mjs) the Worker's `LIMITS.linesMax` read, so a fifth copy of the number cannot disagree here.
 import { LINES_MAX } from "../site/src/lib/table.mjs";
 
+// The same reasoning for the When pair: the harness asserts against the constants the pages use, never against
+// dates it worked out for itself, so a change in the horizon moves the gate with the site rather than breaking it.
+import { CLOSE_LABEL, CLOSE_MINUTES, HORIZON_DAYS, LAST_SITTING_LABEL, OPEN_LABEL, OPEN_MINUTES, minutesToLabel } from "../site/src/lib/hours.mjs";
+
+// The slots /table offers, derived from the same hours the page's own loop uses. Asserting against a list built
+// here rather than a count typed here is the only reason this gate exists: the page once offered
+// 06:00/12:00/18:00/00:00 — two of which the book refuses — because its loop fed minutes to a function that
+// takes hours, and nothing on either side compared the list with the window.
+const openSlots = [];
+for (let m = OPEN_MINUTES; m <= CLOSE_MINUTES - 30; m += 30) openSlots.push(minutesToLabel(m));
+
 const argv = process.argv.slice(2);
 const arg = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
@@ -2617,6 +2628,100 @@ await evaluate(`
   await new Promise((resolve) => setTimeout(resolve, 250));
   return document.querySelectorAll("[data-inc]").length;
 `);
+
+// ---- the When pair's bounds, read out of the forms a guest actually uses
+//
+// `lastBookableDay()` and `LAST_SITTING_LABEL` have Node tests, which prove the arithmetic and prove nothing
+// about the page: a form can hold the right constant and still ship an input with no `max`, which is the state
+// that produced the refusals A15 could not point at. So read the attributes the browser enforces on both
+// routes, then try to send a date one day past the end and require that nothing leaves the page at all — the
+// handler must never run, because native validity stops the submit before the script sees it.
+for (const [route, daySel, timeSel] of [["/visit", "#rq-date", "#rq-time"], ["/table", "[data-when-day]", "[data-when-time]"]]) {
+  await goto(route);
+  const bound = await evaluate(`
+    const day = document.querySelector(${JSON.stringify(daySel)});
+    if (!day) return { missing: location.pathname + " has no " + ${JSON.stringify(daySel)} };
+    const time = document.querySelector(${JSON.stringify(timeSel)});
+    const options = time && time.tagName === "SELECT" ? Array.from(time.options).map((o) => o.value) : [];
+    return {
+      dayMin: day.min || null,
+      dayMax: day.max || null,
+      dayValue: day.value || null,
+      timeMin: time ? time.min || null : null,
+      timeMax: time ? time.max || null : null,
+      timeStep: time ? time.step || null : null,
+      timeValue: time ? time.value || null : null,
+      lastOption: options.length ? options[options.length - 1] : null,
+      options,
+      rangeOverflow: day.validity ? day.validity.rangeOverflow === true : null,
+    };
+  `);
+  const logged = drain();
+  results.push({ path: `${route} bounds`, value: bound, errors: logged.errors, warnings: logged.warnings });
+  if (bound.missing) { failures.push(`${route}: ${bound.missing}`); continue; }
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(bound.dayMax ?? "")) failures.push(`${route}: the date input has no upper bound (max is ${JSON.stringify(bound.dayMax)}) — a guest can pick a year the book refuses as visitDate, a name no control answers to`);
+  if (!iso.test(bound.dayMin ?? "")) failures.push(`${route}: the date input has no lower bound (min is ${JSON.stringify(bound.dayMin)})`);
+  if (iso.test(bound.dayMax ?? "") && iso.test(bound.dayMin ?? "") && bound.dayMax < bound.dayMin)
+    failures.push(`${route}: max ${bound.dayMax} is before min ${bound.dayMin} — the picker offers nothing`);
+  if (iso.test(bound.dayMax ?? "")) {
+    // The bound must be the horizon the site holds, not a stale date baked into a build: it has to sit within a
+    // day of `now + HORIZON_DAYS`, whatever day this run happens to fall on.
+    const want = new Date(`${bound.dayMax}T12:00:00Z`);
+    const days = Math.round((want.getTime() - (Date.now() + HORIZON_DAYS * 86_400_000)) / 86_400_000);
+    if (Math.abs(days) > 1) failures.push(`${route}: max is ${bound.dayMax}, which is ${days} day(s) off the ${HORIZON_DAYS}-day horizon the site states`);
+  }
+  if (route === "/visit") {
+    if (bound.timeMax !== LAST_SITTING_LABEL) failures.push(`/visit: the time input's max is ${JSON.stringify(bound.timeMax)}, not the last sitting the site derives (${LAST_SITTING_LABEL}) — the page and the picker disagree about when the room stops taking sittings`);
+    if (bound.timeMin !== OPEN_LABEL) failures.push(`/visit: the time input opens at ${JSON.stringify(bound.timeMin)} instead of ${OPEN_LABEL}`);
+    if (Number(bound.timeStep) !== 900) failures.push(`/visit: the time step is ${JSON.stringify(bound.timeStep)}, not the 900 seconds the site's own step constant says — the offered values and the bound come from different numbers`);
+  } else {
+    const offered = Array.isArray(bound.options) ? bound.options : [];
+    const wrong = offered.filter((v) => !openSlots.includes(v));
+    const missing = openSlots.filter((v) => !offered.includes(v));
+    if (offered.length !== openSlots.length || wrong.length || missing.length)
+      failures.push(`/table: the When list offers ${offered.length} slots (${offered.slice(0, 4).join(", ")}${offered.length > 4 ? ", …" : ""}) but the room's half-hour window is ${openSlots.length} (${openSlots[0]}–${openSlots[openSlots.length - 1]}) — refused: ${wrong.join(",") || "none"}, absent: ${missing.join(",") || "none"}. A slot outside the window is a 422 about visitTime, which this form has no control named`);
+    if (offered.length && !openSlots.includes(bound.timeValue))
+      failures.push(`/table: the Time select is showing ${JSON.stringify(bound.timeValue)}, which is not a slot the book would accept — pressing Record without touching it sends a refusal`);
+  }
+  if (bound.rangeOverflow === true) failures.push(`${route}: the default date is already past its own max — every submit from a fresh page would be refused before the script runs`);
+}
+
+// The behavioural half, on the page that has the free-form time input: a date past the end must not reach the book.
+await goto("/visit");
+const overflowSetup = await armSetup("[data-request-form]", []);
+const overflowFill = await armFill("[data-request-form]", { ...GUEST });
+if (overflowFill.length) failures.push(`/visit bounds probe: the typed form is invalid before the overflow submit (${overflowFill.join("; ")}) — the check below measures nothing`);
+const overflowRead = await evaluate(`
+  const day = document.querySelector("#rq-date");
+  const live = document.querySelector("[data-outcome]");
+  const before = { state: live.textContent, sent: window.__hhArms.sent.length, max: day.max };
+  const past = new Date(day.max + "T12:00:00Z");
+  past.setUTCDate(past.getUTCDate() + 1);
+  day.value = past.toISOString().slice(0, 10);
+  day.dispatchEvent(new Event("input", { bubbles: true }));
+  document.querySelector("[data-request-form]").requestSubmit();
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  return {
+    attempted: past.toISOString().slice(0, 10),
+    max: before.max,
+    overflow: day.validity.rangeOverflow === true,
+    valid: document.querySelector("[data-request-form]").checkValidity() === true,
+    sent: window.__hhArms.sent.length - before.sent,
+    stateChanged: live.textContent !== before.state,
+    thrown: window.__hhArms.thrown.slice(),
+  };
+`);
+{
+  const logged = drain();
+  results.push({ path: "/visit date past max", value: overflowRead, errors: logged.errors, warnings: logged.warnings });
+  if (overflowRead.overflow !== true) failures.push(`/visit: ${overflowRead.attempted} (one day past ${overflowRead.max}) is not flagged as an overflow by the browser — the bound is decoration, not a check`);
+  if (overflowRead.sent) failures.push(`/visit: a date one day past the max still reached the book (${overflowRead.sent} request(s)) — the horizon is enforced after the fact, which is the state that produces a refusal the cursor cannot point at`);
+  if (overflowRead.stateChanged) failures.push("/visit: the overflow submit wrote a sentence in the live region although native validity should have stopped it before the handler ever ran — the guest is being told something about a request that was never attempted");
+  if (overflowRead.thrown.length) failures.push(`/visit: the overflow submit threw (${overflowRead.thrown.join("; ")})`);
+  if (logged.errors.length) failures.push(`/visit date past max: ${logged.errors.length} console error(s) (${logged.errors.join(" | ")})`);
+  if (!overflowSetup.api) failures.push("/visit: data-api is empty, so this probe could not have reached the book even if it tried");
+}
 
 // ---------------------------------------------------------------- report
 // Both exit paths run through here: the batteries end by calling it with nothing, and the two crash handlers
