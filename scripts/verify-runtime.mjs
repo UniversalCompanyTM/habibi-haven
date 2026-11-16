@@ -507,6 +507,27 @@ function meanStep(frames) {
 const results = [];
 const failures = [];
 
+// The report has to be unskippable. Every finding this script makes is pushed into the two arrays above, and
+// until now the only code that printed them sat at the bottom of a script that can throw on any of the
+// browser round-trips above it. It did throw, on the first CI cycle of the arm battery: one diagnostic read
+// `[data-request-form]` from the wrong document, Node printed a stack, and the thirteen arms that had already
+// executed left no evidence of anything they had learned. These two handlers turn that case into a line at the
+// top of a report that still contains the rows, which is the difference between a red run that tells you where
+// to look and a red run that tells you to run it again. They are installed here, before the first battery,
+// because a crash on the way in has not reached the bottom of the file.
+process.on("uncaughtException", (error) => {
+  setTimeout(() => process.exit(1), 30_000).unref();
+  printReport(error).catch(() => process.exit(1));
+});
+process.on("unhandledRejection", (reason) => {
+  setTimeout(() => process.exit(1), 30_000).unref();
+  printReport(reason ?? new Error("promise rejected with no reason")).catch(() => process.exit(1));
+});
+// The timer is unref'd so it cannot keep a healthy run alive, and it exists because installing these
+// handlers removes Node's own default of printing and dying: if the report ever failed to reach goodbye,
+// the runner would sit holding a Chrome process until GitHub cancelled it after six hours — a worse
+// outcome than the crash it was meant to report.
+
 // `ignore` carries the complaints a route is supposed to produce. The 404 check asks for a URL that does
 // not exist, so "failed to load resource: 404" is the experiment working — filtering it after page() had
 // already pushed the failure into the report is what made the run look red for a green reason.
@@ -2308,6 +2329,22 @@ const seedSheet = `
 `;
 
 const visitBook = await armRows("/visit", "[data-request-form]", visitArms, { values: { ...GUEST } });
+
+// Read the fields while the /visit document is still the page, and check it here rather than in the shared
+// tail below. Both of those were wrong before: the tail runs after the /table navigation, so the query for
+// `[data-request-form]` returned null and the read threw `Cannot read properties of null (reading
+// 'elements')` — a harness defect, not a site defect, and it cost a CI cycle plus the report for all
+// thirteen arms. The distance from the page it belongs to is why the check now sits beside the battery.
+const visitKept = await evaluate(`
+  const form = document.querySelector("[data-request-form]");
+  if (!form) return { missing: location.pathname + location.search };
+  return { name: form.elements.name.value, phone: form.elements.phone.value, notes: form.elements.notes.value };
+`);
+if (visitKept.missing)
+  failures.push(`/visit: [data-request-form] is not in the document at ${visitKept.missing} — the arms above were reading a page that had already left /visit`);
+else if (visitKept.name !== GUEST.name || visitKept.phone !== GUEST.phone || visitKept.notes !== GUEST.notes)
+  failures.push(`/visit did not leave the typed request in the fields (${JSON.stringify(visitKept)}) — a guest on bad Wi-Fi would retype their name, number and note`);
+
 const tableBook = await armRows("/table", "[data-record-form]", tableArms, { values: { name: GUEST.name, phone: GUEST.phone }, seed: seedSheet });
 
 // What the arms above cannot tell from their own sentences: whether the body that left the page is the body
@@ -2337,13 +2374,8 @@ if (visitBook.by.unreachable.href?.includes("text=") !== true)
   failures.push("/visit could not be reached and still the WhatsApp button carries no message — the typed request vanished with the network");
 else if (!decodeURIComponent(visitBook.by.unreachable.href).includes(GUEST.phone))
   failures.push("/visit armed the handoff with a message that does not contain the guest's number — the restaurant could not call back");
-// The guest's words must survive a failure that is not their fault.
-const visitKept = await evaluate(`
-  const form = document.querySelector("[data-request-form]");
-  return { name: form.elements.name.value, phone: form.elements.phone.value, notes: form.elements.notes.value };
-`);
-if (visitKept.name !== GUEST.name || visitKept.phone !== GUEST.phone || visitKept.notes !== GUEST.notes)
-  failures.push(`/visit did not leave the typed request in the fields (${JSON.stringify(visitKept)}) — a guest on bad Wi-Fi would retype their name, number and note`);
+// The guest's words surviving a failure that is not their fault is checked beside the /visit battery, where
+// the document still is /visit.
 
 const sheetSent = tableArms.filter((arm) => !arm.noRequest).map((arm) => tableBook.by[arm.name].request.json);
 if (sheetSent.some((json) => json?.kind !== "table")) failures.push(`/table sent a kind that is not "table" (${JSON.stringify(sheetSent[0]?.kind)})`);
@@ -2372,30 +2404,43 @@ await evaluate(`
 `);
 
 // ---------------------------------------------------------------- report
-const pad = (s, n) => String(s).padEnd(n);
-console.log(`verify-runtime  browser ${browser.split("/").pop()}  ${base}\n`);
-for (const r of results) {
-  console.log(`${pad(r.path, 22)} errors ${r.errors.length}  warnings ${r.warnings.length}`);
-  for (const e of r.errors) console.log(`   ERR ${e}`);
-  for (const w of r.warnings) console.log(`   warn ${w}`);
-}
-// The verdict line below promises "no console errors on any route". Until now it printed that over any
-// number of errors, because a row's errors were only ever echoed — nothing turned them into a problem. A
-// promise the reporter cannot keep is worse than no promise, so the count is now a gate. Every route in
-// the last run reported errors 0, so this is tightening, not tripping.
-const loudRows = results.filter((r) => r.errors.length);
-if (loudRows.length)
-  failures.push(`${loudRows.reduce((n, r) => n + r.errors.length, 0)} console error(s) across ${loudRows.map((r) => r.path).join(", ")} — the run cannot also say the routes are clean`);
-console.log("\n--- measurements");
-console.log(JSON.stringify(results.map((r) => ({ [r.path]: r.value })), null, 1));
+// Both exit paths run through here: the batteries end by calling it with nothing, and the two crash handlers
+// call it with the error that stopped them. `reason` is the only argument, and the only difference it makes is
+// that the report says the run was interrupted — the rows it collected before the interruption are printed
+// either way, because they are the reason the run exists.
+async function printReport(reason = null) {
+  const pad = (s, n) => String(s).padEnd(n);
+  console.log(`verify-runtime  browser ${browser.split("/").pop()}  ${base}\n`);
+  if (reason) {
+    const why = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason?.stack ?? reason);
+    console.error(`harness stopped before the batteries finished:\n${why}\n`);
+    failures.push(`the harness threw before reaching the end of the file (${why.split("\n")[0]}) — the rows below are what it managed to learn first, and they are not a complete run`);
+  }
+  for (const r of results) {
+    console.log(`${pad(r.path, 22)} errors ${r.errors.length}  warnings ${r.warnings.length}`);
+    for (const e of r.errors) console.log(`   ERR ${e}`);
+    for (const w of r.warnings) console.log(`   warn ${w}`);
+  }
+  // The verdict line below promises "no console errors on any route". Until now it printed that over any
+  // number of errors, because a row's errors were only ever echoed — nothing turned them into a problem. A
+  // promise the reporter cannot keep is worse than no promise, so the count is now a gate. Every route in
+  // the last run reported errors 0, so this is tightening, not tripping.
+  const loudRows = results.filter((r) => r.errors.length);
+  if (loudRows.length)
+    failures.push(`${loudRows.reduce((n, r) => n + r.errors.length, 0)} console error(s) across ${loudRows.map((r) => r.path).join(", ")} — the run cannot also say the routes are clean`);
+  console.log("\n--- measurements");
+  console.log(JSON.stringify(results.map((r) => ({ [r.path]: r.value })), null, 1));
 
-if (failures.length) {
-  console.error(`\nverify-runtime: ${failures.length} problem(s)`);
-  console.error(failures.map((f) => `  ${f}`).join("\n"));
-  await goodbye(1);
+  if (failures.length) {
+    console.error(`\nverify-runtime: ${failures.length} problem(s)`);
+    console.error(failures.map((f) => `  ${f}`).join("\n"));
+    await goodbye(1);
+  }
+  console.log("\nverify-runtime: ok — no console errors on any route, door paints, dial drives the rig, menu and table interactions respond, no-JS still renders");
+  await goodbye(0);
 }
-console.log("\nverify-runtime: ok — no console errors on any route, door paints, dial drives the rig, menu and table interactions respond, no-JS still renders");
-await goodbye(0);
+
+await printReport();
 
 // The report is the last thing this script needs from the browser. An open DevTools socket and a live
 // Chrome child keep Node's event loop alive forever, so a green run printed its verdict and then never
