@@ -368,6 +368,24 @@ for (const dir of [dist, join(dist, "_astro")]) {
 }
 const css = cssFiles.join("\n");
 
+/* Astro does not emit a `:global()` rule the way it was written. Two transformations sit between this file's
+   source and the artefact: a component's `<style>` is inlined into the page HTML instead of being left in
+   `_astro/*.css`, and the attribute inside `:global(html:not(.js)) [data-x]` gains the component's scope
+   marker, so the /visit rule builds as
+       html:not(.js) [data-astro-cid-metl4j7v][data-request-form]{display:none}
+   Matching the source text literally therefore fails on a rule that works — which is precisely what this
+   section's first run did. So read a rule as a set of conditions instead: a declaration block that sets
+   display:none, whose selector tests both `html:not(.js)` and `[data-x]`, satisfies it wherever Astro put the
+   cid or which file the rule ended up in. */
+function hidesWithoutJs(text, attr) {
+  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/display\s*:\s*none/.test(rule[2])) continue;
+    if (!rule[1].includes("html:not(.js)")) continue;
+    if (rule[1].includes(`[${attr}]`)) return true;
+  }
+  return false;
+}
+
 for (const route of BOOK_ROUTES) {
   const src = all.find(([r]) => r === route)?.[1];
   if (!src) continue;
@@ -386,21 +404,34 @@ for (const route of BOOK_ROUTES) {
     else if (!/\brequired\b/.test(tag)) bad("book write", `${route}: the ${field} input is not required, so an empty one reaches the book as a 422`);
   }
 
-  // One hook to the fetch: if the page's chunks no longer contain the path, the form is decoration.
-  const chunks = [...new Set([...src.matchAll(/\/_astro\/[\w.-]+\.js/g)].map((m) => m[0]))];
+  // One hook to the fetch: if nothing the page loads contains the path, the form is decoration. And the chunk
+  // named in the HTML is not the end of the graph — once two pages import request-client.mjs, Vite hoists that
+  // module into a shared chunk that neither HTML names and both import, so scanning only the chunks written
+  // into the page finds the string in neither. Follow the imports.
+  const seen = new Set();
+  const queue = [...src.matchAll(/\/_astro\/[\w.-]+\.js/g)].map((m) => m[0]);
   let callsBook = false;
-  for (const ref of chunks) {
+  while (queue.length && !callsBook) {
+    const ref = queue.shift();
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+    let code = "";
     try {
-      if ((await readFile(join(dist, ref), "utf8")).includes("/v1/requests")) callsBook = true;
+      code = await readFile(join(dist, ref), "utf8");
     } catch {
-      /* a chunk the page references but dist does not hold is already a broken reference elsewhere */
+      continue; // a chunk the page references but dist does not hold is already a broken reference elsewhere
     }
+    if (code.includes("/v1/requests")) callsBook = true;
+    // Vite links sibling chunks by relative name inside a chunk ("./shared.Xyz.js") and absolute in the HTML,
+    // so the walk keys on the file name and looks in the one directory every emitted script lives in.
+    for (const m of code.matchAll(/[\w.-]{4,}\.js\b/g)) queue.push(`/_astro/${m[0].split("/").pop()}`);
   }
-  if (!callsBook) bad("book write", `${route} ships no chunk that names /v1/requests — the form cannot reach the book`);
+  if (!callsBook)
+    bad("book write", `${route} loads no script, nor anything those scripts import, that names /v1/requests — the form cannot reach the book`);
 
   // The form is a script control; without the script it must not be on the page.
   const formAttr = route === "/visit" ? "data-request-form" : "data-record-form";
-  if (!new RegExp(`html:not\\(\\.js\\)\\s*\\[${formAttr}\\]`).test(css))
+  if (!hidesWithoutJs(`${src}\n${css}`, formAttr))
     bad("book write", `${route}: no html:not(.js) rule hides [${formAttr}] — with JavaScript off its submit becomes a GET that puts the guest's phone in the address bar`);
 
   for (const anchor of [/https:\/\/wa\.me\/\d+/, /href="tel:\+\d+/]) {
