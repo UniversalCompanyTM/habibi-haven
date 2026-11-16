@@ -2048,6 +2048,329 @@ for (const route of PHONE_ROUTES) {
 }
 await inPage("Emulation.clearDeviceMetricsOverride", {});
 
+// ---- the book's answer, arm by arm, in a browser
+/*
+   Both submit handlers have five exits — recorded, invalid, busy, unreachable, and a server that answered
+   without recording — and until now a browser had never taken a single one of them. The unit suites in
+   tests/run.mjs pin `outcome()` and `firstBadControl()` as pure functions, and A13–A16 pin what the deployed
+   Worker actually replies with; neither of those is the claim this section makes, which is that the page in
+   front of a guest turns one into the right sentence, the right cursor, the right handoff link and an
+   enabled button.
+
+   `window.fetch` is replaced with a planned queue, not pointed at the deployment. That is deliberate twice
+   over. A passing 201 arm writes a row into D1, and this file runs on every push, so the live book would
+   fill with test bookings and a real floor manager would read them as guests. And the arms a live Worker
+   will agree to answer are only the ones it happens to accept today: a 422 for a party of 2, a 429 on
+   someone else's timing, a priceDrift that only appears if the two price lists disagree. The refusals are
+   the interesting arms, and they cannot be summoned on demand from production. What the production replies
+   actually are stays measured in A13–A16; this section is about the page's reading of them.
+
+   `submitRequest` takes `post` as a default parameter bound at call time (`{ post = globalThis.fetch }`), so
+   replacing `window.fetch` before `requestSubmit()` is the seam the shipped code already exposes rather than
+   a patch into it.
+*/
+const GUEST = { name: "Amani Wanjiru", phone: "+254 712 345 678", notes: "A quiet corner if there is one" };
+
+const armSetup = (formSel, plan) =>
+  evaluate(`
+    const state = { plan: ${JSON.stringify(plan.map((arm) => ({ status: arm.status, body: arm.body, network: !!arm.network })))}, sent: [], thrown: [] };
+    window.__hhArms = state;
+    window.addEventListener("unhandledrejection", (event) => state.thrown.push(String(event.reason?.message ?? event.reason)));
+    window.fetch = async (input, init) => {
+      const arm = state.plan.shift();
+      state.sent.push({
+        url: typeof input === "string" ? input : (input && input.url) || String(input),
+        method: (init && init.method) || (input && input.method) || "GET",
+        json: init && typeof init.body === "string" ? JSON.parse(init.body) : null,
+      });
+      if (!arm) throw new TypeError("the arm plan ran out — the page sent a request nobody planned for");
+      if (arm.network) throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify(arm.body), { status: arm.status, headers: { "content-type": "application/json" } });
+    };
+    const form = document.querySelector(${JSON.stringify(formSel)});
+    // A form the CSS has hidden cannot be focused into, and the html.js class is what makes these forms exist
+    // at all, so the precondition is stated here rather than assumed: measured, and reported if the page is
+    // not the JavaScript page. (No backticks are allowed inside one of these bodies — they end the template.)
+    return { api: form?.dataset.api ?? null, wa: form?.dataset.wa ?? null, visible: !!form && getComputedStyle(form).display !== "none", controls: form ? [...form.elements].filter((e) => e.name).map((e) => e.name) : [] };
+  `);
+
+const armFill = (formSel, values) =>
+  evaluate(`
+    const form = document.querySelector(${JSON.stringify(formSel)});
+    for (const [name, value] of Object.entries(${JSON.stringify(values)})) {
+      const el = form.elements[name];
+      if (!el) continue;
+      el.value = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    return [...form.elements]
+      .filter((el) => el.willValidate && !el.checkValidity())
+      .map((el) => el.name + ": " + el.validationMessage);
+  `);
+
+// One submit, read back as a guest would notice it: the sentence in the live region, where the cursor went,
+// what the handoff link now carries, whether the sheet survived, whether the button can be pressed again.
+//
+// `wait` is false for the refusals that never leave the handler: the empty-sheet guard returns before it
+// touches the button, which is the correct behaviour, so waiting for it to re-enable would burn the whole
+// 8-second deadline and then report a working page as broken.
+const armSubmit = (formSel, { wait = true } = {}) =>
+  evaluate(`
+    const form = document.querySelector(${JSON.stringify(formSel)});
+    const live = form.querySelector("[data-outcome], [data-record-state]");
+    const send = form.querySelector("[data-send], [data-record-send]");
+    const handoff = form.querySelector("[data-handoff]");
+    const rows = () => document.querySelectorAll("[data-inc]").length;
+    const before = { state: live.textContent, href: handoff?.getAttribute("href") ?? null, rows: rows(), sent: window.__hhArms.sent.length };
+    form.requestSubmit();
+    if (${wait}) {
+      const until = performance.now() + 8000;
+      await new Promise((resolve) => {
+        const step = () => {
+          if (!send.disabled) resolve();
+          else if (performance.now() > until) resolve();
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+    }
+    return {
+      state: live.textContent.trim(),
+      changed: live.textContent !== before.state,
+      sendEnabled: !send.disabled,
+      focused: document.activeElement ? document.activeElement.name || document.activeElement.id || document.activeElement.tagName : null,
+      href: handoff?.getAttribute("href") ?? null,
+      hrefChanged: handoff ? handoff.getAttribute("href") !== before.href : null,
+      rows: [before.rows, rows()],
+      request: window.__hhArms.sent.slice(-1)[0] ?? null,
+      sentCount: window.__hhArms.sent.length,
+      newRequests: window.__hhArms.sent.length - before.sent,
+      thrown: window.__hhArms.thrown.slice(),
+      waited: window.__hhArms.plan.length,
+    };
+  `);
+
+async function armRows(route, formSel, plan, { values, seed } = {}) {
+  await goto(route);
+  // The sheet is the thing a table request is about, so an empty one has to be filled the way a guest fills
+  // it — the same [data-add] press the M4 battery uses, not a localStorage write.
+  const seeded = seed ? await evaluate(seed) : null;
+  const setup = await armSetup(formSel, plan);
+  const invalid = values ? await armFill(formSel, values) : [];
+  const by = {};
+  if (setup.visible !== true) failures.push(`${route}: ${formSel} is not displayed under html.js — the arms below cannot be read as what a guest sees`);
+  if (invalid.length) failures.push(`${route}: the typed form is not valid before any submit (${invalid.join("; ")}) — the handler never runs and every arm is measuring nothing`);
+  if (!setup.api) failures.push(`${route}: ${formSel} has an empty data-api, so submitRequest would answer "unreachable" without a network call and the arms would prove nothing`);
+  let index = 0;
+  for (const arm of plan) {
+    index += 1;
+    if (arm.pre) await evaluate(arm.pre);
+    const read = await armSubmit(formSel, { wait: !arm.noRequest });
+    const logged = drain();
+    by[arm.name] = { ...read, pre: arm.pre ? true : false, console: logged.errors };
+    results.push({
+      path: `${route} ${arm.name}`,
+      value: { state: read.state, focused: read.focused, sendEnabled: read.sendEnabled, href: read.href?.slice(0, 160), rows: read.rows, sent: read.request ? { method: read.request.method, url: read.request.url, json: read.request.json } : null, thrown: read.thrown },
+      errors: logged.errors,
+      warnings: logged.warnings,
+    });
+    // Five invariants that belong to every exit the handler has, checked here so no future arm can quietly
+    // leave the guest staring at a dead button or an uncaught error.
+    if (!read.changed) failures.push(`${route} ${arm.name}: the live region still reads "${read.state}" — the submit produced no sentence at all`);
+    if (read.thrown.length) failures.push(`${route} ${arm.name}: the handler threw (${read.thrown.join("; ")}) instead of saying something`);
+    if (logged.errors.length) failures.push(`${route} ${arm.name}: the arm put ${logged.errors.length} console error(s) on the page (${logged.errors.join(" | ")})`);
+    if (arm.noRequest) {
+      if (read.newRequests) failures.push(`${route} ${arm.name}: the page called the book ${read.newRequests} time(s) when it should have refused to send`);
+      // A guard is not a response. The button has to still be sitting disabled: a live Record over an empty
+      // sheet is an invitation to press it again into the same nothing, which is the bug this arm exists to
+      // keep from coming back.
+      if (read.sendEnabled) failures.push(`${route} ${arm.name}: the page refused to send and left the button enabled — the guest can press it again into an empty sheet`);
+    } else {
+      if (!read.sendEnabled) failures.push(`${route} ${arm.name}: the send button is still disabled — the guest cannot retry without reloading`);
+      if (!read.request) {
+        failures.push(`${route} ${arm.name}: fetch was never called — nothing went to the book`);
+      } else {
+        if (read.request.method !== "POST") failures.push(`${route} ${arm.name}: the request is ${read.request.method}, not POST`);
+        if (!/\/v1\/requests$/.test(read.request.url)) failures.push(`${route} ${arm.name}: the request went to ${read.request.url}, not the /v1/requests route`);
+      }
+    }
+    if (!arm.noRequest && read.waited !== plan.length - index)
+      failures.push(`${route} ${arm.name}: ${read.waited} arms still queued after this one, expected ${plan.length - index} — the page sent more than one request`);
+    for (const phrase of arm.expect ?? []) if (!read.state.includes(phrase)) failures.push(`${route} ${arm.name}: the live region reads “${read.state}” and not “…${phrase}…”`);
+    for (const phrase of arm.reject ?? []) if (read.state.includes(phrase)) failures.push(`${route} ${arm.name}: the live region says “${phrase}” when it should not`);
+  }
+  return { by, setup, seeded };
+
+}
+
+const visitArms = [
+  {
+    name: "recorded",
+    status: 201,
+    body: { ok: true, reference: "HH-ARMVIS1", kind: "reservation", totalKes: 0, priceDrift: null },
+    expect: ["Recorded as HH-ARMVIS1", "is still who decides"],
+  },
+  {
+    name: "invalid",
+    status: 422,
+    body: {
+      code: "invalid",
+      message: "Some of that needs fixing.",
+      errors: [
+        { field: "party", code: "bad_party", message: "A party is a whole number from 1 to 30." },
+        { field: "contact.phone", code: "bad_number", message: "Use a Kenyan mobile number, like 0712 345 678 or +254 712 345 678." },
+      ],
+    },
+    expect: ["A party is a whole number from 1 to 30", "Use a Kenyan mobile number"],
+  },
+  // The field name the deployed Worker was measured answering with (A15). Interpolating it into a CSS
+  // selector was the bug; this arm is the regression, executed rather than described.
+  {
+    name: "indexed-field",
+    status: 422,
+    body: { code: "invalid", errors: [{ field: "lines[0]", code: "shape", message: "Each line needs an item id and a quantity." }] },
+    expect: ["Each line needs an item id and a quantity."],
+  },
+  {
+    name: "busy",
+    status: 429,
+    body: { code: "slow_down", message: "Too many at once.", retry_after_seconds: 20 },
+    expect: ["Try again in 20 seconds"],
+  },
+  { name: "unreachable", network: true, expect: ["could not be reached", "carries everything you typed"] },
+  {
+    name: "server-failure",
+    status: 500,
+    body: { code: "not_recorded", message: "Nothing was saved. Try again, or send it on WhatsApp." },
+    expect: ["could not be reached from here"],
+    reject: ["Recorded"],
+  },
+];
+
+const tableArms = [
+  {
+    name: "recorded-with-drift",
+    status: 201,
+    body: { ok: true, reference: "HH-ARMTAB1", totalKes: 3100, priceDrift: { claimedKes: 2800, serverKes: 3100, deltaKes: 300 } },
+    expect: ["Recorded as HH-ARMTAB1", "KSh 3,100", "KSh 300 more than this sheet said", "gap is on the record with you"],
+  },
+  {
+    name: "recorded-matching",
+    status: 201,
+    body: { ok: true, reference: "HH-ARMTAB2", totalKes: 3100, priceDrift: { claimedKes: 3100, serverKes: 3100, deltaKes: 0 } },
+    expect: ["Recorded as HH-ARMTAB2 — KSh 3,100, the same figure this sheet shows"],
+    reject: ["more than this sheet said", "less than this sheet said"],
+  },
+  {
+    name: "recorded-no-comparison",
+    status: 201,
+    body: { ok: true, reference: "HH-ARMTAB3", totalKes: 3100, priceDrift: null },
+    expect: ["Recorded as HH-ARMTAB3"],
+    reject: ["the same figure", "price list makes it"],
+  },
+  {
+    name: "indexed-field",
+    status: 422,
+    body: {
+      code: "invalid",
+      errors: [
+        { field: "lines[0].qty", code: "bad_qty", message: "Quantity has to be a whole number from 1 to 99." },
+        { field: "contact.name", code: "too_short", message: "At least 2 characters." },
+      ],
+    },
+    expect: ["Quantity has to be a whole number from 1 to 99", "At least 2 characters"],
+  },
+  {
+    name: "busy",
+    status: 429,
+    body: { code: "slow_down", message: "You just sent one of these.", retry_after_seconds: 20 },
+    expect: ["Give it 20 seconds and press Record again", "the sheet is still here"],
+  },
+  { name: "unreachable", network: true, expect: ["nothing was recorded and no reference was issued"] },
+  {
+    name: "empty-sheet",
+    pre: `
+      const clear = document.querySelector("[data-clear]");
+      if (clear) clear.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return document.querySelectorAll("[data-inc]").length;
+    `,
+    noRequest: true,
+    expect: ["There is nothing on the sheet to record"],
+  },
+];
+
+const seedSheet = `
+  const all = (s) => [...document.querySelectorAll(s)];
+  for (const button of all("[data-add]").slice(0, 2)) { button.click(); await new Promise((resolve) => setTimeout(resolve, 180)); }
+  return { rows: all("[data-inc]").length, total: document.querySelector("[data-total]")?.textContent.trim() ?? null, storage: localStorage.getItem("habibi-haven:table:v1") };
+`;
+
+const visitBook = await armRows("/visit", "[data-request-form]", visitArms, { values: { ...GUEST } });
+const tableBook = await armRows("/table", "[data-record-form]", tableArms, { values: { name: GUEST.name, phone: GUEST.phone }, seed: seedSheet });
+
+// What the arms above cannot tell from their own sentences: whether the body that left the page is the body
+// the Worker's validate.mjs says it needs. These are the shape rules lib/request-client.mjs claims to have
+// inherited, checked against the bytes a real browser actually serialised.
+const visitSent = visitArms.filter((arm) => !arm.noRequest).map((arm) => visitBook.by[arm.name].request.json);
+if (visitSent.some((json) => json?.kind !== "reservation")) failures.push(`/visit sent kind ${JSON.stringify(visitSent[0]?.kind)}, not "reservation" — the Worker 422s on kind before anything else`);
+if (visitSent.some((json) => typeof json?.contact?.name !== "string" || typeof json?.contact?.phone !== "string"))
+  failures.push(`/visit sent a flat contact instead of the nested pair (${JSON.stringify(visitSent[0]?.contact)}) — flattening it is two required errors and a guest with no way to fix them`);
+if (visitSent.some((json) => !/^\d{4}-\d{2}-\d{2}$/.test(json?.visitDate ?? "") || !/^\d{2}:\d{2}$/.test(json?.visitTime ?? "")))
+  failures.push(`/visit sent visitDate/visitTime that are not the machine-checked pair (${visitSent[0]?.visitDate} ${visitSent[0]?.visitTime})`);
+if (visitSent.some((json) => !Number.isInteger(json?.party))) failures.push(`/visit sent party as ${JSON.stringify(visitSent[0]?.party)} — the schema wants a number, not the string FormData hands back`);
+// The pair the Worker reads is the one the guest picked, and `when` is the free-text label it stores
+// unpolicied — a time in `when` and nothing in the pair is how a booking loses its hour.
+if (visitSent.some((json) => json?.when)) failures.push(`/visit put a label in when (${JSON.stringify(visitSent[0]?.when)}) while the machine pair should be carrying the hour`);
+// `source` is measured as the path it names, not as https: this harness serves the site over http, and the
+// schema's https rule belongs to the deployment (Pages only ever answers https), so what is testable here is
+// that the page sends the page it is on.
+if (visitSent.some((json) => !/\/visit$/.test(json?.source ?? ""))) failures.push(`/visit sent source ${JSON.stringify(visitSent[0]?.source)} — the record should say where it came from`);
+if (visitBook.by.recorded.href?.includes("text=")) failures.push("/visit recorded arm left the handoff carrying a message — the guest has a reference now, and a second copy of the request would be a duplicate booking");
+if (!visitBook.by.recorded.state.includes(`+${visitBook.setup.wa}`))
+  failures.push(`/visit recorded without naming the number that decides: “${visitBook.by.recorded.state}” (data-wa is ${visitBook.setup.wa})`);
+if (visitBook.by.invalid.focused !== "party") failures.push(`/visit 422 put the cursor on ${visitBook.by.invalid.focused}, not on the party field the Worker named first`);
+if (visitBook.by["indexed-field"].focused === "lines[0]") failures.push("/visit tried to focus a field that has no control — the A15 defect is back");
+if (visitBook.by.busy.state.includes("could not be reached")) failures.push("/visit read a 429 as an unreachable book — the request is queued, not lost");
+if (visitBook.by.unreachable.href?.includes("text=") !== true)
+  failures.push("/visit could not be reached and still the WhatsApp button carries no message — the typed request vanished with the network");
+else if (!decodeURIComponent(visitBook.by.unreachable.href).includes(GUEST.phone))
+  failures.push("/visit armed the handoff with a message that does not contain the guest's number — the restaurant could not call back");
+// The guest's words must survive a failure that is not their fault.
+const visitKept = await evaluate(`
+  const form = document.querySelector("[data-request-form]");
+  return { name: form.elements.name.value, phone: form.elements.phone.value, notes: form.elements.notes.value };
+`);
+if (visitKept.name !== GUEST.name || visitKept.phone !== GUEST.phone || visitKept.notes !== GUEST.notes)
+  failures.push(`/visit did not leave the typed request in the fields (${JSON.stringify(visitKept)}) — a guest on bad Wi-Fi would retype their name, number and note`);
+
+const sheetSent = tableArms.filter((arm) => !arm.noRequest).map((arm) => tableBook.by[arm.name].request.json);
+if (sheetSent.some((json) => json?.kind !== "table")) failures.push(`/table sent a kind that is not "table" (${JSON.stringify(sheetSent[0]?.kind)})`);
+if (sheetSent.some((json) => !Array.isArray(json?.lines) || json.lines.length === 0)) failures.push("/table sent no lines — the sheet on screen did not travel with the request");
+// The whole point of the server repricing: the page may state a claim, never an amount.
+const lineKeys = sheetSent.flatMap((json) => json?.lines ?? []).map((line) => Object.keys(line).sort().join(","));
+if (lineKeys.some((keys) => keys !== "id,qty" && keys !== "id,option,qty")) failures.push(`/table sent line fields beyond id/option/qty (${[...new Set(lineKeys)].join(" | ")}) — a price written by the page is a bill the kitchen never agreed to`);
+if (sheetSent.some((json) => !Number.isInteger(json?.claimedSubtotal) || json.claimedSubtotal <= 0))
+  failures.push(`/table claimed a subtotal that is not a whole number (${JSON.stringify(sheetSent[0]?.claimedSubtotal)}) — the drift check compares the guest's own figure, so it has to be theirs exactly`);
+if (!/\/table$/.test(sheetSent[0]?.source ?? "")) failures.push(`/table sent source ${JSON.stringify(sheetSent[0]?.source)}`);
+if (tableBook.by["recorded-with-drift"].state.includes("KSh 2,800")) failures.push("/table quoted the guest's own figure back at them as the price — the server's number is the one on the record");
+if (tableBook.by["indexed-field"].focused !== "name") failures.push(`/table 422 put the cursor on ${tableBook.by["indexed-field"].focused} — it should skip the line complaint that has no control and land on the name the Worker also named`);
+if (tableBook.by["recorded-with-drift"].rows[1] === 0) failures.push("/table wiped the sheet after recording it — the guest loses the thing they just sent");
+if (tableBook.by["unreachable"].href?.includes("text=") !== true) failures.push("/table handoff carries no message even though the sheet is on screen — the dishes never reached the link");
+else if (tableBook.by["unreachable"].hrefChanged) failures.push("/table rebuilt the handoff only on a failed submit — the render pass keeps it current, so the link should already have been right");
+if (tableBook.by["empty-sheet"].rows[1] !== 0) failures.push("/table did not clear the sheet before the refusal arm — that arm tested the guard with dishes still on it");
+if (tableBook.by["empty-sheet"].state.includes("could not be reached")) failures.push("/table called a blank sheet a network failure — nothing was wrong with the connection");
+
+
+// Leave the browser's storage as it was found: a test booking in localStorage is how a later battery starts
+// with a sheet nobody built.
+await evaluate(`
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith("habibi-haven:"));
+  for (const key of keys) localStorage.removeItem(key);
+  return keys;
+`);
+
 // ---------------------------------------------------------------- report
 const pad = (s, n) => String(s).padEnd(n);
 console.log(`verify-runtime  browser ${browser.split("/").pop()}  ${base}\n`);
