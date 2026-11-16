@@ -716,9 +716,29 @@ honest `kind:"table"` POST returned **201** with `totalKes 4000`, `itemCount 3`,
 /v1/requests/:reference` returned **200** with the line items; `POST …/payments` returned **503** naming the
 five Daraja secrets still absent; and a second POST from the same phone two seconds later returned **429
 slow_down**, which is the throttle working in production rather than in a test. The two automated rows were
-deleted after reading them back; three earlier verification rows remain, and nobody at Habibi Haven is
-notified when a record lands — that is still OPEN-QUESTIONS territory, and money stays dark until they are
-contacted.
+deleted after reading them back; four verification rows remain — three from earlier probes and one,
+`HH-6ZAS89`, written today at 12:28 by the slot-list check that needed a real 201 to prove a 12:00 table is
+accepted — and none of them is a guest. Clearing them is a decision for the person who owns the demo, not an
+act of tidying. Nobody at Habibi Haven is notified when a record lands — that is still OPEN-QUESTIONS territory,
+and money stays dark until they are contacted.
+
+Two things the rows do NOT prove, read from `pragma_table_info(requests)` rather than assumed. Every row has
+`claimed_subtotal_kes = null`, because no production request has ever been sent with the browser's figure — the
+columns exist, the repricing runs, and the drift path is executed against real SQLite in `tests/api.mjs` and
+against stubbed answers in the browser, but no live row carries a gap yet. Proving that on production costs one
+more synthetic row, which is a call for the owner of the demo, not for an automated check. And all four rows are
+`payment_state = none`, which is the dark-by-construction state, not a payment that failed.
+
+**Independent review, measured rather than excused.** Four attempts were made to have these gates read by a
+separate agent — a broad brief and a deliberately narrowed one (one section of one file, six files maximum, no
+test suites to run), each launched on two agent types — and they failed in two distinct ways. The plugin-namespaced
+reviewer type could not start at all: its agent ID contains `:` (`feature-dev:code-reviewer`), which Windows
+rejects in a filename, so the runtime died writing the agent's own metadata and nothing in the repo was touched.
+The filesystem-legal type started both times and hit the subagent turn cap before reporting — 150 turns, 155 tool
+calls, 18M tokens on the narrowed brief, and more again on the broad one — returning "completed" with no findings
+attached. So the accurate statement is not that review was unavailable but that it was attempted four times, on
+two briefs and two agent types, and never produced a report; every gate in this file has been read once, by the
+author, and executed by the runner.
 
 ### Amendment A14 — the receipt endpoint was the one door with nothing on it, and the lock I fitted turns out to be a speed bump
 
