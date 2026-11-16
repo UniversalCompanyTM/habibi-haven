@@ -279,37 +279,57 @@ export function parseRequest(payload, ctx) {
     else value.source = payload.source;
   }
 
+  /* One visit checker, two callers.
+     These branches used to be separate prose, and they drifted: the reservation asked whether the guest had
+     picked a time that had already gone by or more than `horizonDays` out, and the table asked neither. So
+     `kind:"table"` accepted a request for yesterday, or for 2031, wrote it into the book, and handed back a
+     reference that promised the kitchen had the request. The date is the same field with the same meaning on
+     both routes — when the guest intends to arrive — which makes one rule, not two.
+     The remaining difference is real and kept: a reservation without a date is a broken reservation, while a
+     table's `When` is optional (the sheet is the point), so the table branch only calls this when something was
+     sent. */
+  function checkVisit(visit, errors) {
+    if (!isOpenAt(visit.minutes, ctx.hours)) {
+      errors.push({
+        field: "visitTime",
+        code: "outside_hours",
+        message: `We show the room open ${ctx.hours.open}–${ctx.hours.close}. Pick a time inside that.`,
+        hours: { open: ctx.hours.open, close: ctx.hours.close },
+      });
+      return null;
+    }
+    const dayMs = 86_400_000;
+    if (visit.instant < ctx.now.getTime()) {
+      errors.push({ field: "visitDate", code: "in_the_past", message: "That time has already gone by." });
+      return null;
+    }
+    if (visit.instant > ctx.now.getTime() + LIMITS.horizonDays * dayMs) {
+      errors.push({
+        field: "visitDate",
+        code: "too_far_ahead",
+        message: `We can hold a request for ${LIMITS.horizonDays} days. For later, call us.`,
+      });
+      return null;
+    }
+    return visit.iso;
+  }
+
   if (kind === "reservation") {
     const visit = toNairobiInstant(payload.visitDate, payload.visitTime);
     if (!visit) {
       errors.push({ field: "visitDate", code: "bad_visit", message: "Pick a date and a time, like 2026-11-22 and 19:00." });
     } else {
-      if (!isOpenAt(visit.minutes, ctx.hours)) {
-        errors.push({
-          field: "visitTime",
-          code: "outside_hours",
-          message: `We show the room open ${ctx.hours.open}–${ctx.hours.close}. Pick a time inside that.`,
-          hours: { open: ctx.hours.open, close: ctx.hours.close },
-        });
-      }
-      const dayMs = 86_400_000;
-      if (visit.instant < ctx.now.getTime())
-        errors.push({ field: "visitDate", code: "in_the_past", message: "That time has already gone by." });
-      else if (visit.instant > ctx.now.getTime() + LIMITS.horizonDays * dayMs)
-        errors.push({ field: "visitDate", code: "too_far_ahead", message: `We can hold a request for ${LIMITS.horizonDays} days. For later, call us.` });
-      else value.visitAt = visit.iso;
+      const at = checkVisit(visit, errors);
+      if (at) value.visitAt = at;
     }
   } else if (kind === "table") {
     if (payload.visitDate || payload.visitTime) {
       const visit = toNairobiInstant(payload.visitDate, payload.visitTime);
       if (!visit) errors.push({ field: "visitDate", code: "bad_visit", message: "Pick a date and a time, like 2026-11-22 and 19:00." });
-      else if (!isOpenAt(visit.minutes, ctx.hours))
-        errors.push({
-          field: "visitTime",
-          code: "outside_hours",
-          message: `We show the room open ${ctx.hours.open}–${ctx.hours.close}. Pick a time inside that.`,
-        });
-      else value.visitAt = visit.iso;
+      else {
+        const at = checkVisit(visit, errors);
+        if (at) value.visitAt = at;
+      }
     }
   }
 

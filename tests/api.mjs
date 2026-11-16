@@ -732,6 +732,42 @@ await check("31 February has never been a Sunday", async () => {
   return eq(body.errors.some((e) => e.code === "bad_visit"), true, "bad_visit", body.errors);
 });
 
+/* The two rules above lived only in the `kind:"reservation"` branch, so a table carrying the same date field
+   could be written for yesterday, or for 2126, and the book answered with a reference as though it held a table
+   in the future. These are the twins of the checks above on the other kind. They exist because two branches of
+   prose drift silently — each one read as correct on its own — and because nothing here had ever posted a
+   far-dated table. The optional-When case is still covered by the boundary checks below, which post a table with
+   no date at all and expect 201. */
+await check("a table for yesterday is refused the way a reservation for yesterday is", async () => {
+  const { status, body } = await post(live.db, {
+    kind: "table",
+    party: 2,
+    visitDate: nairobiDateOffset(-1),
+    visitTime: "19:00",
+    contact: { name: "Late Table", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  return (
+    eq(status, 422, "status", status) &&
+    eq(body.errors.some((e) => e.code === "in_the_past"), true, "in_the_past", body.errors)
+  );
+});
+
+await check("a table two hundred years out is refused too", async () => {
+  const { status, body } = await post(live.db, {
+    kind: "table",
+    party: 2,
+    visitDate: nairobiDateOffset(365 * 200),
+    visitTime: "19:00",
+    contact: { name: "Patient Table", phone: nextPhone() },
+    lines: [{ id: FIRST_ITEM.id, qty: 1 }],
+  });
+  return (
+    eq(status, 422, "status", status) &&
+    eq(body.errors.some((e) => e.code === "too_far_ahead"), true, "too_far_ahead", body.errors)
+  );
+});
+
 await check("a reservation with dinner pre-agreed is priced like a table", async () => {
   const { status, body } = await post(live.db, {
     kind: "reservation",
@@ -774,6 +810,25 @@ await check("the ceilings the site prints are the ceilings this Worker refuses a
   if (site.PARTY_MIN !== validate.LIMITS.partyMin) problems.push(`partyMin: site ${site.PARTY_MIN} vs worker ${validate.LIMITS.partyMin}`);
   if (site.PARTY_MAX !== validate.LIMITS.partyMax) problems.push(`partyMax: site ${site.PARTY_MAX} vs worker ${validate.LIMITS.partyMax}`);
   if (site.LINES_MAX !== validate.LIMITS.linesMax) problems.push(`linesMax: site ${site.LINES_MAX} vs worker ${validate.LIMITS.linesMax}`);
+  // The horizon is now a third shared number, because the pickers enforce it client-side. `hours.mjs` owns it
+  // (it is a statement about when the room is open, not about what is on the sheet).
+  const hours = await lib("site/src/lib/hours.mjs");
+  if (hours.HORIZON_DAYS !== validate.LIMITS.horizonDays)
+    problems.push(`horizonDays: site ${hours.HORIZON_DAYS} vs worker ${validate.LIMITS.horizonDays}`);
+  // Executed, not compared: the last day the picker offers must survive the book at the room's latest sitting,
+  // on both kinds. This is the pair that makes the client bound safe rather than merely optimistic.
+  for (const kind of ["reservation", "table"]) {
+    const edge = await post(sending.db, {
+      kind,
+      party: 2,
+      visitDate: hours.lastBookableDay(new Date()),
+      visitTime: hours.LAST_SITTING_LABEL,
+      contact: { name: `Edge ${kind}`, phone: nextPhone() },
+      lines: kind === "table" ? [{ id: FIRST_ITEM.id, qty: 1 }] : [],
+    });
+    if (edge.status !== 201)
+      problems.push(`the picker's last day (${hours.lastBookableDay(new Date())}) at ${hours.LAST_SITTING_LABEL} was refused for ${kind} with ${edge.status}: ${JSON.stringify(edge.body?.errors ?? edge.body)}`);
+  }
   // The boundary, executed rather than compared: the last allowed party goes in, the next one does not.
   const at = await post(sending.db, {
     kind: "table",

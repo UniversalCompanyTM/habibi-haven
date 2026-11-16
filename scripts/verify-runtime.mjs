@@ -2163,7 +2163,9 @@ const armSetup = (formSel, plan) =>
       if (arm.network) throw new TypeError("Failed to fetch");
       return new Response(JSON.stringify(arm.body), { status: arm.status, headers: { "content-type": "application/json" } });
     };
-    const form = document.querySelector(${JSON.stringify(formSel)});
+    const sel = ${JSON.stringify(formSel)};
+    const form = document.querySelector(sel);
+    if (!form) throw new Error("arm battery: no " + sel + " in the document at " + location.pathname + location.search + " — this battery is reading the wrong page");
     // A form the CSS has hidden cannot be focused into, and the html.js class is what makes these forms exist
     // at all, so the precondition is stated here rather than assumed: measured, and reported if the page is
     // not the JavaScript page. (No backticks are allowed inside one of these bodies — they end the template.)
@@ -2172,7 +2174,9 @@ const armSetup = (formSel, plan) =>
 
 const armFill = (formSel, values) =>
   evaluate(`
-    const form = document.querySelector(${JSON.stringify(formSel)});
+    const sel = ${JSON.stringify(formSel)};
+    const form = document.querySelector(sel);
+    if (!form) throw new Error("arm battery: no " + sel + " in the document at " + location.pathname + location.search + " — this battery is reading the wrong page");
     for (const [name, value] of Object.entries(${JSON.stringify(values)})) {
       const el = form.elements[name];
       if (!el) continue;
@@ -2193,7 +2197,9 @@ const armFill = (formSel, values) =>
 // 8-second deadline and then report a working page as broken.
 const armSubmit = (formSel, { wait = true } = {}) =>
   evaluate(`
-    const form = document.querySelector(${JSON.stringify(formSel)});
+    const sel = ${JSON.stringify(formSel)};
+    const form = document.querySelector(sel);
+    if (!form) throw new Error("arm battery: no " + sel + " in the document at " + location.pathname + location.search + " — this battery is reading the wrong page");
     const live = form.querySelector("[data-outcome], [data-record-state]");
     const send = form.querySelector("[data-send], [data-record-send]");
     const handoff = form.querySelector("[data-handoff]");
@@ -2563,6 +2569,12 @@ const overSeed = await evaluate(`
 if (overSeed.lines < LINES_MAX + 1)
   failures.push(`/menu: could not build an over-cap sheet (${overSeed.lines} lines from ${overSeed.clicks} presses of ${overSeed.offers} controls) — the cap arm below would be measuring a normal table`);
 
+// Back to the page that owns the record form. The first run of this section omitted the navigation and failed
+// with `Cannot read properties of null (reading 'elements')` — the same class A17 had finished describing
+// minutes earlier: a read aimed at the document that is not on screen. The helpers now name the selector they
+// could not find and the path they were looking at, so the mistake reports itself as a wrong page rather than a
+// null.
+await goto("/table");
 const capSetup = await armSetup("[data-record-form]", []);
 const capFill = await armFill("[data-record-form]", { name: GUEST.name, phone: GUEST.phone });
 if (capFill.length) failures.push(`/table over-cap: the typed form is not valid before the refusal (${capFill.join("; ")}) — the guard never runs and the arm measures nothing`);

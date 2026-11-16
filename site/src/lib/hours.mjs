@@ -42,6 +42,44 @@ export function isOpen(input = new Date()) {
 
 export const pad = (n) => String(n).padStart(2, "0");
 
+/**
+ * The latest sitting the room will take, and the step between the ones it offers.
+ *
+ * `isOpenAt` is half-open — `minutes < closeMinutes` — so 23:00 is *closed*, not "the last minute". An input
+ * whose `max` is the closing label therefore offers exactly one value the book refuses, and it refuses it as
+ * `visitTime`, which is not the name of the control (A15), so the guest gets a sentence and no pointer. These
+ * two constants exist so the picker and the Worker cannot drift: the step is what the browser enforces, and the
+ * last sitting is what comes out of it.
+ */
+export const SITTING_STEP_MINUTES = 15;
+export const LAST_SITTING_LABEL = minutesToLabel(CLOSE_MINUTES - SITTING_STEP_MINUTES);
+
+/**
+ * How many days ahead the book will hold a request.
+ *
+ * This is `LIMITS.horizonDays` in `backend/src/validate.mjs`, and the same argument as `PARTY_MAX` in
+ * `lib/table.mjs` applies: it is a rule the Worker enforces, restated here so the pickers can stop a guest
+ * before the refusal rather than after it. `tests/api.mjs` compares the two and executes the boundary on both
+ * kinds, which is what keeps a fifth copy from quietly disagreeing with the one that actually refuses.
+ */
+export const HORIZON_DAYS = 90;
+
+/**
+ * The last date a When picker should offer, written as YYYY-MM-DD in Nairobi.
+ *
+ * The Worker's rule is about an instant: it refuses a visit more than `HORIZON_DAYS` after now. A date input
+ * carries no clock, so the honest bound is the last day whose *latest* sitting — the closing minute — is still
+ * inside the horizon. Subtracting the closing minutes rather than a whole day is what makes that precise: the
+ * day is lost only for guests who would have picked the very edge, and no guest ever gets a date the browser
+ * accepted and the book rejected with a field name the form has no control for (A15's `visitDate`).
+ */
+export function lastBookableDay(input = new Date(), { horizonDays = HORIZON_DAYS, closeMinutes = CLOSE_MINUTES } = {}) {
+  const dayMs = 86_400_000;
+  const limitMs = input.getTime() + horizonDays * dayMs - closeMinutes * 60_000;
+  const nairobi = new Date(limitMs + UTC_OFFSET_MINUTES * 60_000);
+  return `${nairobi.getUTCFullYear()}-${pad(nairobi.getUTCMonth() + 1)}-${pad(nairobi.getUTCDate())}`;
+}
+
 export function minutesToLabel(minutes) {
   const total = Math.round(((minutes % 1440) + 1440) % 1440);
   return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;

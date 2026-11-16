@@ -220,7 +220,7 @@ const change = nextChange();
   } from "../lib/table-client.mjs";
   import { LINES_MAX, clampParty, findItem, money, partyAdvice, totals, whatsappText, whatsappUrl } from "../lib/table.mjs";
   import { firstBadControl, requestMessage, submitRequest, tablePayload, whatsAppHref } from "../lib/request-client.mjs";
-  import { UTC_OFFSET_MINUTES, hourToLabel, nairobiHour } from "../lib/hours.mjs";
+  import { UTC_OFFSET_MINUTES, hourToLabel, lastBookableDay, nairobiHour } from "../lib/hours.mjs";
   import { component } from "../lib/page.mjs";
 
   // The builder redraws itself from the table on every change, so its one global subscription is the thing
@@ -265,6 +265,13 @@ const change = nextChange();
       dayEl.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
       dayEl.min = dayEl.value;
     }
+    /* The ceiling on the other end, set outside the `if` so it applies to a value that came back from storage
+       too. The Worker's `too_far_ahead` refusal names `visitDate`, and this control is `data-when-day` — no
+       name to match, so `firstBadControl` finds nothing and the caret stays wherever it was (A15). A guest who
+       could scroll a date picker three years forward would then read a sentence about a field they could not
+       find. The slot list is already clamped to the opening hours, so the closing minute is the true worst case
+       for this bound. */
+    dayEl.max = lastBookableDay();
     // Land on the next half-hour they are open, so the default is something a guest could actually use.
     const pickDefaultSlot = () => {
       const now = nairobiHour();

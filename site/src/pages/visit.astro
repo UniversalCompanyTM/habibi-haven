@@ -9,7 +9,7 @@ import Base from "../layouts/Base.astro";
 import menu from "../data/menu.json";
 import press from "../data/press.json";
 import voice from "../data/voice.json";
-import { OPEN_LABEL, CLOSE_LABEL, isOpen, nextChange } from "../lib/hours.mjs";
+import { CLOSE_LABEL, LAST_SITTING_LABEL, OPEN_LABEL, SITTING_STEP_MINUTES, isOpen, nextChange } from "../lib/hours.mjs";
 import { PARTY_MAX, PARTY_MIN } from "../lib/table.mjs";
 import SocialLinks from "../components/SocialLinks.astro";
 import HoursClock from "../components/HoursClock.astro";
@@ -248,7 +248,7 @@ const frames = [
         </div>
         <div class="field">
           <label for="rq-time">Time</label>
-          <input id="rq-time" name="time" type="time" required min={OPEN_LABEL} max={CLOSE_LABEL} step="900" value="19:00" />
+          <input id="rq-time" name="time" type="time" required min={OPEN_LABEL} max={LAST_SITTING_LABEL} step={String(SITTING_STEP_MINUTES * 60)} value="19:00" />
         </div>
         <div class="field">
           <label for="rq-party">How many</label>
@@ -285,7 +285,7 @@ const frames = [
 
   <script>
     import { component } from "../lib/page.mjs";
-    import { UTC_OFFSET_MINUTES, pad } from "../lib/hours.mjs";
+    import { UTC_OFFSET_MINUTES, lastBookableDay, pad } from "../lib/hours.mjs";
     import { firstBadControl, requestMessage, reservationPayload, submitRequest, whatsAppHref } from "../lib/request-client.mjs";
 
     /* Bound through the lifecycle primitive rather than at module scope: the router does not re-execute this
@@ -303,6 +303,12 @@ const frames = [
         const nairobi = new Date(Date.now() + UTC_OFFSET_MINUTES * 60_000);
         const today = `${nairobi.getUTCFullYear()}-${pad(nairobi.getUTCMonth() + 1)}-${pad(nairobi.getUTCDate())}`;
         date.min = today;
+        // The upper bound matters as much as the lower one, and for a worse reason: the book refuses a visit
+        // more than HORIZON_DAYS out with a complaint about `visitDate`, and the input that carries that value is
+        // named `date` — A15 recorded that the cursor cannot be moved on a server field with no control to land
+        // on. So the guest who picks a date two years out gets a sentence and a blinking caret in whatever field
+        // they were in. A `max` the browser enforces turns that dead end into a picker that simply stops.
+        date.max = lastBookableDay();
         if (!date.value) date.value = today;
 
         form.addEventListener("submit", async (event) => {

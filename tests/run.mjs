@@ -1386,6 +1386,69 @@ check("a 422 points the guest at a control without ever turning the server's wor
 
 
 /* ----------------------------------------------------------------- summary */
+describe("the When pair and the horizon the book holds");
+check("the horizon the pickers stop at is the horizon the book accepts, on the day and on the time", () => {
+  const problems = [];
+  const dayMs = 86_400_000;
+  // The book's rule is an instant comparison, so the test has to compare instants too — 23:00 in Nairobi is
+  // 20:00 UTC, and a helper that only got the *date* right would still send a guest to a refusal.
+  const eat = (isoDate, label) => Date.parse(`${isoDate}T${label}:00+03:00`);
+  const moments = [
+    Date.UTC(2026, 10, 16, 0, 5), // just past midnight in Nairobi
+    Date.UTC(2026, 10, 16, 7, 0), // mid-morning there, midday elsewhere
+    Date.UTC(2026, 10, 16, 20, 55), // minutes before the room closes
+    Date.UTC(2027, 1, 29, 12, 0), // a leap February, so the rollover is exercised
+    Date.UTC(2026, 10, 16, 15, 30), // where the edge is most likely to be rounded wrong
+  ];
+  for (const utc of moments) {
+    const now = new Date(utc);
+    const cutoff = now.getTime() + hours.HORIZON_DAYS * dayMs;
+    const last = hours.lastBookableDay(now);
+    // Sound: no sitting the picker offers can be refused for being too far ahead, at the latest time on the
+    // shelves. This is the half that protects the guest from a 422 the cursor cannot explain (A15).
+    if (eat(last, hours.CLOSE_LABEL) > cutoff)
+      problems.push(`${last} at ${hours.CLOSE_LABEL} is past the horizon for now=${now.toISOString()}`);
+    // Exact, not merely cautious: the very next day must already be too far at that same latest time, or the
+    // helper is throwing days away that the book would have taken.
+    const after = new Date(`${last}T00:00:00Z`);
+    after.setUTCDate(after.getUTCDate() + 1);
+    const afterIso = after.toISOString().slice(0, 10);
+    if (eat(afterIso, hours.CLOSE_LABEL) <= cutoff)
+      problems.push(`${afterIso} at ${hours.CLOSE_LABEL} would be accepted, so the picker stopped short for now=${now.toISOString()}`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(last)) problems.push(`lastBookableDay returned "${last}", not a date`);
+  }
+  /* What the bound costs, stated instead of assumed. A date input carries no clock, so the last day offered is
+     the last day whose *latest* sitting fits. That is exact when the horizon falls at or after closing, and
+     costs the early sittings of one day when it falls mid-afternoon. The cost is bounded — the day after the
+     next is unreachable even at opening — and it is real, so both halves are asserted rather than reasoned
+     about in a comment. The direction is deliberate: a day a guest cannot reach through the form beats a
+     request the book records against `visitDate`, a field the form has no control named (A15). */
+  const at = (iso, label) => Date.parse(`${iso}T${label}:00+03:00`);
+  const plusDays = (iso, n) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  for (const utc of moments) {
+    const now = new Date(utc);
+    const cutoff = now.getTime() + hours.HORIZON_DAYS * dayMs;
+    const last = hours.lastBookableDay(now);
+    if (at(plusDays(last, 2), hours.OPEN_LABEL) <= cutoff)
+      problems.push(`${plusDays(last, 2)} is reachable at opening, so the picker is giving up more than one day (now=${now.toISOString()})`);
+  }
+  // One instant where the cost is actually paid: the horizon lands at 12:00 in Nairobi, so the next day's
+  // half-six sitting would have been accepted by the book and the form will not offer it.
+  const middayNow = new Date(Date.UTC(2026, 10, 16, 9, 0));
+  const middayCut = middayNow.getTime() + hours.HORIZON_DAYS * dayMs;
+  const middayLast = hours.lastBookableDay(middayNow);
+  if (at(plusDays(middayLast, 1), hours.OPEN_LABEL) > middayCut)
+    problems.push("expected this instant to show the one-day cost of the bound; it did not, so the claim above is untested");
+  if (at(plusDays(middayLast, 1), hours.CLOSE_LABEL) <= middayCut)
+    problems.push(`${plusDays(middayLast, 1)} at closing still fits — lastBookableDay is stopping a day too early`);
+  return problems.length ? problems.join("; ") : true;
+});
+
+/* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {
   console.log(`${failures.length} FAILED · ${passed} passed`);
