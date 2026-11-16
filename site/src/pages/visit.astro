@@ -264,7 +264,8 @@ const frames = [
           <textarea id="rq-notes" name="notes" rows="3" maxlength="280" placeholder="High chairs, a quiet corner, a birthday"></textarea>
         </div>
         <p class="meta dim" data-outcome role="status" aria-live="polite">
-          The room shows {OPEN_LABEL}–{CLOSE_LABEL}. Anything outside that, the form will not let you send.
+          The room is open {OPEN_LABEL}–{CLOSE_LABEL}, and the latest sitting we can ask for is {LAST_SITTING_LABEL}.
+          Outside those, this form will not let you send.
         </p>
         <div class="row-wrap">
           <button class="btn" type="submit" data-send>Send the request</button>
