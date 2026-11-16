@@ -652,6 +652,74 @@ milestone.
 6. **M5 — the clock**: hour variable driving palette and scene, live open/closed.
 7. **M6 — hardening**: a11y, perf budgets, drift check wired, preview deploy, OPEN-QUESTIONS.
 
+### Amendment A13 — the sheet can now be written into the book, and the audit had to learn how a built page is actually shaped
+
+A12 gave the site a server-side half and left the guest's side of it untouched: only `/visit` could write.
+That made the promise on `/table` — "this writes the sheet above into the kitchen's order book" — a sentence
+about a page that had no such control. So `TableBuilder.astro` gained one: a **Record this table** form
+(name, phone, notes) that posts `kind:"table"` with the priced lines and the guest's own claimed subtotal to
+the same `POST /v1/requests` `/visit` uses, through the same `lib/request-client.mjs`. The board needed no
+new edge — one label, `POST /v1/requests → D1 record`, already covered both writers, because it is one
+endpoint with two pages pointing at it.
+
+Three rules the control had to obey, each of which produced a defect when it was not followed:
+
+1. **The `wa.me` anchor stays the base element, not a decoration.** A guest whose fetch fails still has a
+   message that carries the table. When the fallback first mutated the `href` that `render()` owns, the next
+   edit to the sheet silently dropped the contact block from the link. The fix is a dedicated
+   `data-handoff` anchor that `syncHandoff()` rewrites on every render *and* on every keystroke in the form —
+   the link is a derived value, so exactly one function derives it.
+2. **Nothing the script rewrites may contain markup the page promised.** `data-record-hint` originally held
+   the `tel:` sentence inside the paragraph `render()` replaces with `textContent`; the first re-phrase
+   deleted the phone link. The permanent claim — "a reference is not a confirmation, this number is" — is now
+   its own paragraph the script never touches.
+3. **The page must say less than it cannot prove.** The site does not cap the sheet, so the cap the Worker
+   enforces (`linesMax 40`) became a silent 422 the guest could not act on. `LINES_MAX` is now exported from
+   `lib/table.mjs`, the button disables itself above it and says so, and `tests/api.mjs` compares it against
+   `LIMITS.linesMax` in the Worker. The same sweep found the default party written three times as a bare `2`,
+   and `sanitize()` able to return `0` from a stored `0.4` (pass the `> 0` test, round down, reach the book
+   with no party) — both folded into `PARTY_DEFAULT` and one `clampParty()` that rounds before it clamps.
+
+The four `verify-dist` failures that followed were not defects in the site; they were the audit assuming a
+built page looks like its source. Read off the runner's own artefact:
+
+- The no-JS hide rule is emitted **inside the page HTML**, not in `_astro/*.css`, and Astro inserts the
+  component's scope marker in the middle of the selector:
+  `html:not(.js) [data-astro-cid-5z3mfmnb][data-record-form]{display:none}`. Matching the source text
+  `html:not(.js) [data-record-form]` fails on a rule that is working. The check now reads a rule as a set of
+  conditions — a declaration that sets `display:none` whose selector tests both `html:not(.js)` and the hook
+  attribute — and searches the page plus the global sheet.
+- `"/v1/requests"` lives in exactly one chunk, `_astro/request-client.tSDpAVVk.js`, which **no page HTML
+  names**. With two pages importing it, Vite hoists it and the page chunks reach it relatively
+  (`from"./request-client.tSDpAVVk.js"`). Scanning only the chunks listed in the HTML therefore reported "the
+  form cannot reach the book" for a form that can. The check now walks the import graph, bounded by the set of
+  chunks already read.
+
+That ordering matters for trust: the fix was first run against the *previous* commit's downloaded artefact,
+where `/visit`'s four assertions turned green while `/table`'s still failed for the control that build
+predated. A checker that only passes on the build it was written against proves nothing.
+
+Proof, in the order it was obtained: `tests/run.mjs` **102 passed**; `tests/api.mjs` **89 passed**, including
+the new section that posts a payload built by `tablePayload()` itself and reads `source_url`,
+`claimed_subtotal_kes` and `price_delta_kes` back out of the same SQLite file, plus the boundary pair
+(`PARTY_MAX` accepted, `PARTY_MAX + 1` refused) against the Worker's own code. CI run 43820392603 then finished
+green on the runner: `verify-dist: ok — 5 pages, 305 references, 5 routes, contracts + a11y + weight all
+clean`, `check-drift: clean — 3 checks passed`, `verify-runtime: ok — no console errors on any route`. The
+artefact from that run is what went to Cloudflare Pages: deployment `2ddc60d0`, live at
+`https://habibihavenpreview.pages.dev`, serving `/`, `/menu`, `/table`, `/visit` and `/404` as 200s, with the
+page's own `data-api` reading `https://habibi-haven-api.adanjemeshack.workers.dev`.
+
+Finally the deployed pair, probed from the built page's own origin with the site's own payload builder: an
+honest `kind:"table"` POST returned **201** with `totalKes 4000`, `itemCount 3`, `lineCount 2` and
+`priceDrift.deltaKes 0`; a deliberately wrong claim returned **201** with `claimedKes 1`, `serverKes 4600` and
+`deltaKes 4599` — the server's number, not the browser's, which is the whole point of A12; `GET
+/v1/requests/:reference` returned **200** with the line items; `POST …/payments` returned **503** naming the
+five Daraja secrets still absent; and a second POST from the same phone two seconds later returned **429
+slow_down**, which is the throttle working in production rather than in a test. The two automated rows were
+deleted after reading them back; three earlier verification rows remain, and nobody at Habibi Haven is
+notified when a record lands — that is still OPEN-QUESTIONS territory, and money stays dark until they are
+contacted.
+
 ## Risks / must-not-say
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
