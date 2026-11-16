@@ -787,6 +787,63 @@ takes this over, which is why it is recorded here and in the code comment rather
 Nothing about the guest-facing behaviour changed: a receipt link that works today works after this deploy,
 and the only caller who notices anything is the one sending forty lookups a minute through a single socket.
 
+### Amendment A15 — the error path was built out of strings the server owns, and one of them is not a selector
+
+A14 came out of measuring production instead of trusting the suite. The same habit, applied to the response
+arms the live probes had never reached, produced four good results and one defect.
+
+Driven from the built page's own origin through the site's own `submitRequest`/`outcome` mapping: a
+deliberately wrong reservation (party `999`, phone `0712`) returned **422** and mapped to
+`{kind:"invalid", messages:[…], fields:["party","contact.phone"]}`; **415** →
+`failed` with "Send application/json."; **413** → `failed` with the size sentence; **404** on a well-shaped
+missing reference → `failed` with "We have no request with that reference."; **405** on `GET /v1/requests` →
+`failed` with the "never as a list" explanation. None of those POSTs wrote a row — a `422` records nothing —
+so the book still holds the same three verification rows and no cleanup was needed.
+
+The defect is in what the pages then *do* with `fields`. Both forms did this:
+
+```js
+result.fields.map((field) => form.querySelector(`[name=${field.split(".").pop()}]`))
+```
+
+`split(".").pop()` is right for `contact.phone` → `phone`, which is why the /visit arm works today. It is also
+what turns a field name into CSS: an unquoted attribute value has to be a CSS identifier. `validate.mjs` emits
+`lines[${i}]` **bare** for a line that is not an object at all, and the deployed Worker was probed to confirm
+it: `{"lines":["x"]}` → `{"field":"lines[0]","code":"shape"}`. So that expression constructs
+`[name=lines[0]]`, brackets and all — a string the browser's selector engine refuses. The throw would land in
+the failure handler, after the guest's sentence had been printed: right message, no cursor, one uncaught
+exception, on the one path that exists to explain a mistake.
+
+Stated precisely: I did not run a browser to watch it throw — the case is removed rather than argued, and the
+hypothesis is not a measurement. What *is* measured is that the server sends that field name, that both pages
+interpolated it into a selector, and that nothing in the suite or the runtime rig exercises a `422` against a
+live book, which is why it survived every gate so far.
+
+`request-client.mjs` now exports one pure function both pages call: `firstBadControl(fields, controls)` walks
+the server's list, takes the last dotted segment, and compares it against the form's own `name`s. No selector
+is built, so no string the server can invent — today or after a future `validate.mjs` change — reaches a CSS
+parser. Two behaviours it pins that the old line left to chance:
+
+- a complaint with no matching control is skipped, so the cursor lands on the first thing the guest can act on
+  rather than on nothing;
+- a leaf that comes out empty (`""`, `"."`, `[]`) is not a name and cannot match, which matters because every
+  real `form.elements` contains controls whose `name` is `""` — the buttons — and matching that would focus
+  the submit button and present it as guidance.
+
+`tests/run.mjs` is now **103 passed**, including a check that feeds the exact field names the Worker answers —
+`lines[0]`, `lines[0].qty`, `lines[3].option`, `_body`, `kind`, `source`, `claimedSubtotal` — plus nine
+malformed `fields` shapes, and asserts the indexed name is matched when a control really is named that way
+(the regression: found by comparison, not by interpolation). `check-ssr-safety`, `check-astro-parse` and
+`check-css` are clean, and because the bundle changed this needs a Pages rebuild and redeploy, not only the
+Worker.
+
+One limitation is left on purpose rather than fixed quietly: `/visit` names its inputs `date` and `time`,
+while the book's complaint is called `visitDate` / `visitTime`, so a past-or-far-ahead time shows its sentence
+and does not move the cursor. Aligning them means renaming the inputs and re-pointing the tested payload
+builder, which would put the server's vocabulary into the form markup — a bigger edit than the comfort it
+buys, on a form whose `min`/`max` already stop most of those mistakes client-side. It is recorded here so
+whoever takes this over finds it as a decision, not as a surprise.
+
 ## Risks / must-not-say
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record

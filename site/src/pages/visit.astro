@@ -286,7 +286,7 @@ const frames = [
   <script>
     import { component } from "../lib/page.mjs";
     import { UTC_OFFSET_MINUTES, pad } from "../lib/hours.mjs";
-    import { requestMessage, reservationPayload, submitRequest, whatsAppHref } from "../lib/request-client.mjs";
+    import { firstBadControl, requestMessage, reservationPayload, submitRequest, whatsAppHref } from "../lib/request-client.mjs";
 
     /* Bound through the lifecycle primitive rather than at module scope: the router does not re-execute this
        module after a swap (lib/page.mjs), so a listener attached here would belong to the first /visit and
@@ -324,8 +324,9 @@ const frames = [
           }
           if (result.kind === "invalid") {
             out.textContent = result.messages.join(" ");
-            const first = result.fields.map((field) => form.querySelector(`[name=${field.split(".").pop()}]`)).find(Boolean);
-            first?.focus();
+            // `lib/request-client.mjs` explains why the control is found by comparing names rather than by
+            // interpolating the server's field path into a selector — one of those paths is `lines[0]`.
+            firstBadControl(result.fields, form.elements)?.focus();
             return;
           }
           if (result.kind === "busy") {

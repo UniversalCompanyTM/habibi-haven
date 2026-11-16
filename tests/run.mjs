@@ -1332,6 +1332,58 @@ check("the party window is one number the browser, the link and the book all rea
   return problems.length ? problems.join("; ") : true;
 });
 
+check("a 422 points the guest at a control without ever turning the server's words into a selector", () => {
+  const problems = [];
+  // What the two forms actually contain. A real `form.elements` also holds the buttons, whose `name` is "",
+  // so they are in here on purpose: a blank leaf must not land on one.
+  const controls = [
+    { name: "name" },
+    { name: "phone" },
+    { name: "party" },
+    { name: "date" },
+    { name: "time" },
+    { name: "notes" },
+    { name: "" },
+  ];
+  const leaf = (field) => rc.firstBadControl([field], controls)?.name ?? null;
+  for (const [field, want] of [
+    ["contact.phone", "phone"],
+    ["contact.name", "name"],
+    ["party", "party"],
+    ["visitDate", null],
+    ["notes", "notes"],
+  ]) {
+    if (leaf(field) !== want) problems.push(`${field} landed on ${leaf(field)}, expected ${want}`);
+  }
+  // The names the deployed book was measured answering on 2026-11-16. The old code interpolated the leaf into
+  // `[name=…]`; `lines[0]` is not a CSS identifier, so that string throws in the browser instead of answering.
+  for (const field of ["lines[0]", "lines[0].qty", "lines[3].option", "_body", "kind", "source", "claimedSubtotal", "lines"]) {
+    let got;
+    try {
+      got = leaf(field);
+    } catch (error) {
+      problems.push(`${field} threw ${error.message}`);
+      continue;
+    }
+    if (got !== null) problems.push(`${field} invented the control "${got}"`);
+  }
+  // Matched by name, not by selector syntax: if a page ever does name a control this way, it is found.
+  if (rc.firstBadControl(["lines[0]"], [{ name: "lines[0]" }])?.name !== "lines[0]")
+    problems.push("a control whose name needs escaping was not matched — that is the regression this check is for");
+  // The first complaint the page can act on wins, no matter how many it cannot.
+  if (rc.firstBadControl(["lines[0]", "lines[1].qty", "contact.phone", "party"], controls)?.name !== "phone")
+    problems.push("the search stopped at an unactionable complaint instead of moving to the next");
+  // A response can be any shape at all — the handler that reads it still has to return, not throw.
+  for (const fields of [undefined, null, [], [null], [""], ["."], [[]], [{}], ["a.b.c"], 0, "party"]) {
+    try {
+      rc.firstBadControl(fields, controls);
+    } catch (error) {
+      problems.push(`firstBadControl(${JSON.stringify(fields)}) threw ${error.message}`); }
+  }
+  if (rc.firstBadControl(["phone"], undefined) !== null) problems.push("a missing form collection should answer null");
+  return problems.length ? problems.join("; ") : true;
+});
+
 
 /* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);

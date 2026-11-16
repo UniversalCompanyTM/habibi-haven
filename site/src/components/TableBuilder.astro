@@ -219,7 +219,7 @@ const change = nextChange();
     tableLink,
   } from "../lib/table-client.mjs";
   import { LINES_MAX, clampParty, findItem, money, partyAdvice, totals, whatsappText, whatsappUrl } from "../lib/table.mjs";
-  import { requestMessage, submitRequest, tablePayload, whatsAppHref } from "../lib/request-client.mjs";
+  import { firstBadControl, requestMessage, submitRequest, tablePayload, whatsAppHref } from "../lib/request-client.mjs";
   import { UTC_OFFSET_MINUTES, hourToLabel, nairobiHour } from "../lib/hours.mjs";
   import { component } from "../lib/page.mjs";
 
@@ -564,10 +564,10 @@ const change = nextChange();
       }
       if (result.kind === "invalid") {
         recordState.textContent = result.messages.join(" ");
-        const first = result.fields
-          .map((field) => recordForm.querySelector(`[name=${field.split(".").pop()}]`))
-          .find(Boolean);
-        first?.focus();
+        // The sheet's own line controls are not named by index, so a `lines[0].qty` complaint has no field to
+        // land on — `firstBadControl` (lib/request-client.mjs) skips what it cannot match instead of building a
+        // selector out of a string the server owns.
+        firstBadControl(result.fields, recordForm.elements)?.focus();
         return;
       }
       if (result.kind === "busy") {

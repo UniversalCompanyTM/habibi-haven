@@ -118,6 +118,37 @@ const errorMessages = (body) =>
 const errorFields = (body) =>
   Array.isArray(body?.errors) ? body.errors.map((e) => e.field).filter((f) => typeof f === "string") : [];
 
+/**
+ * Which control a 422 is pointing at, so the cursor lands where the fix belongs.
+ *
+ * `fields` is the server's list (`contact.phone`, `lines[0].qty`, and sometimes a bare `lines[0]`);
+ * `controls` is the form's own element collection — anything iterable whose items have a `name`. Matching is
+ * on the last dotted segment, because that is the only part a form names: there is no input called
+ * `contact.phone`, there is `phone`. Fields with no matching control are skipped, so the guest is pointed at
+ * the first complaint this page can actually act on.
+ *
+ * It deliberately does not build a selector. The line this replaced interpolated the leaf name into
+ * `[name=…]`, and on 2026-11-16 the deployed Worker was measured answering a `lines: ["x"]` body with the
+ * field name `lines[0]` — so the string it constructed was `[name=lines[0]]`. An unquoted attribute value has to be a CSS identifier, and brackets are not one, which
+ * means the error path itself could throw: the guest would have read the sentence about their mistake, got no
+ * cursor, and left an uncaught exception in the console. Comparing `name`s accepts any string the server can
+ * send, including ones invented later.
+ */
+export function firstBadControl(fields, controls) {
+  if (!Array.isArray(fields) || !controls) return null;
+  const list = [...controls];
+  for (const field of fields) {
+    const leaf = String(field ?? "").split(".").pop();
+    // An empty leaf is not a control's name, it is a field the server described badly — and plenty of real
+    // form elements have `name === ""` (the buttons among them), so matching on it would focus the submit
+    // button and call that guidance.
+    if (!leaf) continue;
+    const hit = list.find((control) => control?.name === leaf);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export function requestMessage(payload) {
   // A table payload's dishes, party, when and estimate already live in the sheet message the page builds with
   // `whatsappText` (lib/table.mjs), because that is the one place the names and prices are known. Repeating
