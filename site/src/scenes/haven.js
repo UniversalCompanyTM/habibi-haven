@@ -603,9 +603,17 @@ export function buildHaven(THREE, options = {}) {
     const setByte = (color, rgb) => color.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
     const mixByte = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
+    // The base the day is painted from and the base the night is painted from, in one line each.
+    // `headroom` is how far the plaster still carries daylight toward the limestone swatch; `intoNight`
+    // pushes the same wall the other way, into the courtyard colour behind it. They move opposite each
+    // other with the same number, and together they are what a guest reads as "the sun moved" rather than
+    // "somebody switched the lamps on". The daytime side of both stays where the ACES fix left it — see
+    // rigValues, where the noon ceiling is documented — so this costs nothing at 14:00 and only deepens
+    // the evening.
     const headroom = 0.5 * (1 - values.night);
-    setByte(stoneMat.color, mixByte(mixByte(palette.ivory, palette.bg2, 0.55), LIMESTONE, headroom));
-    setByte(plasterMat.color, mixByte(mixByte(palette.ivory, palette.bg1, 0.7), PLASTER_MID, headroom));
+    const intoNight = values.night;
+    setByte(stoneMat.color, mixByte(mixByte(palette.ivory, palette.bg2, 0.55 + 0.2 * intoNight), LIMESTONE, headroom));
+    setByte(plasterMat.color, mixByte(mixByte(palette.ivory, palette.bg1, 0.7 + 0.18 * intoNight), PLASTER_MID, headroom));
     // The courtyard runs seven bays deep and the openings are narrow, so past the second arch no lantern is
     // within reach — and a directional light cannot be blocked by a wall, which is exactly why the recess
     // read as a silhouette cut out of the façade instead of a space beyond it. This low warm emissive stands
@@ -627,11 +635,16 @@ export function buildHaven(THREE, options = {}) {
     setByte(glassMat.color, palette.lampGlow);
     setByte(glowMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
     setByte(haloMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
-    setByte(fog.color, palette.bg1);
-    fog.density = 0.016 + values.night * 0.014;
+    setByte(fog.color, mixByte(palette.bg1, palette.bg0, 0.45 * values.night));
+    fog.density = 0.016 + values.night * 0.02;
 
     setByte(ambient.color, mixByte(palette.bg3, palette.ivory, 0.35));
-    ambient.intensity = 0.14 + 0.3 * (1 - values.night);
+    // The one light the lite tier still has. On a phone the directional trio above is not created, so
+    // without this term the whole day/night difference arrives as a colour change with no change in level —
+    // which is exactly what the runtime harness measured (a 20:00 frame barely separable from a 14:00 one).
+    // The daytime number is held at the ACES ceiling and the night floor is what moves down, so the evening
+    // is a room lit by lamps rather than a room with the ceiling light left on.
+    ambient.intensity = 0.085 + 0.355 * (1 - values.night);
 
     for (let i = 0; i < lanternLights.length; i++) {
       setByte(lanternLights[i].color, palette.lampGlow);

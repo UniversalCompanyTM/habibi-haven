@@ -249,48 +249,65 @@ await inPage("Page.enable");
 
 // ---------------------------------------------------------------- frame probe
 // "The site is lightweight" is a claim about frames, and nothing in the markup or the build output can
-// answer it. Wrapping requestAnimationFrame before any page script runs gives the harness a counter of
-// callbacks and a timestamp per vsync, so a render loop that is running, a loop that stopped when the
-// door scrolled out of sight, and a page that never started one are three different measurable answers.
-// The wrapper is installed in the page, never in the source: the shipped code carries no test hook, and
-// the callback it returns is the native one, so cancelAnimationFrame still works.
+// answer it. Wrapping requestAnimationFrame before any page script runs gives the harness a record of every
+// frame the page armed, so a render loop that is running, a loop that stopped when the door scrolled out of
+// sight, and a page that never started one are three different measurable answers.
+//
+// Each registration is attributed to the component that made it, and the attribution is read off the stack
+// at the moment `requestAnimationFrame` is CALLED — which is the caller's own frame, not the callback's.
+// Vite emits one chunk per Astro `<script>` block and keeps the component name in the filename
+// (`DoorScene.astro_astro_type_script_index_0_lang.<hash>.js`), so the chunk in the stack names the loop
+// without the shipped code carrying a test hook. That matters more than it looks: the page now has FOUR
+// legitimate loops (the door, the cursor trail, the dial's playback and the sky layer), and a gate that can
+// only count callbacks per frame has to guess which ones are allowed. Guessing means the ceiling gets raised
+// until the assertion stops meaning anything. Naming them means the ceiling can be exact, and a loop nobody
+// wrote arrives as `unknown` — which is the one thing every window below refuses to tolerate.
 const FRAME_PROBE = `(() => {
   const native = window.requestAnimationFrame.bind(window);
-  const f = { on: false, stamps: [] };
+  const f = { on: false, events: [] };
   window.__hhFrames = f;
-  window.requestAnimationFrame = (cb) => native((now) => {
-    if (f.on) f.stamps.push(now);
-    return cb(now);
-  });
+  const LOOPS = [["door", /DoorScene/], ["cursor", /Cursor/], ["ambient", /Atmosphere/], ["dial", /HoursClock/], ["preloader", /Preloader/]];
+  window.requestAnimationFrame = (cb) => {
+    let name = "unknown";
+    let stack = "";
+    try { stack = new Error().stack || ""; } catch (e) { stack = ""; }
+    for (const [label, re] of LOOPS) { if (re.test(stack)) { name = label; break; } }
+    return native((now) => {
+      if (f.on) f.events.push([name, now]);
+      return cb(now);
+    });
+  };
 })()`;
 await inPage("Page.addScriptToEvaluateOnNewDocument", { source: FRAME_PROBE });
 
 async function startFrames() {
-  await evaluate("window.__hhFrames.stamps.length = 0; window.__hhFrames.on = true; return true;");
+  await evaluate("window.__hhFrames.events.length = 0; window.__hhFrames.on = true; return true;");
 }
 
-// Read the window back as frame statistics. Distinct timestamps are frames; callbacks per frame says how
-// many loops were alive at once, which is how a page that quietly runs a leaked rAF loop gets caught. The
-// honest ceiling on the home page is two, not one: three components register a repeating callback — the door
-// (DoorScene `step`), the cursor trail (Cursor `draw`, which only re-arms on pointermove) and the preloader
-// countdown (Preloader `tick`, which ends when the overlay does) — so a window that overlaps the preloader
-// leaving can legitimately show 1.x. What would be a bug is a sustained third.
+// Read the window back as frame statistics. Distinct timestamps are frames; the per-loop counts say which of
+// them each component armed, which is how a leaked loop gets caught by name instead of by an arithmetic
+// guess about how many loops a page is expected to have. The old version of this comment allowed "two, not
+// one" on the home page and defended the number by listing the components — a list that is now four long and
+// one short of the truth, because the sky layer arrived after the sentence was written.
 async function stopFrames() {
   return evaluate(`
     window.__hhFrames.on = false;
-    const s = window.__hhFrames.stamps.slice();
-    window.__hhFrames.stamps.length = 0;
-    const uniq = [...new Set(s)].sort((a, b) => a - b);
+    const ev = window.__hhFrames.events.slice();
+    window.__hhFrames.events.length = 0;
+    const times = ev.map((e) => e[1]);
+    const uniq = [...new Set(times)].sort((a, b) => a - b);
     const perFrame = new Map();
-    for (const t of s) perFrame.set(t, (perFrame.get(t) || 0) + 1);
+    for (const t of times) perFrame.set(t, (perFrame.get(t) || 0) + 1);
+    const by = {};
+    for (const [name] of ev) by[name] = (by[name] || 0) + 1;
     const d = [];
     for (let i = 1; i < uniq.length; i += 1) d.push(Math.round((uniq[i] - uniq[i - 1]) * 100) / 100);
     d.sort((a, b) => a - b);
     const pct = (p) => (d.length ? d[Math.min(d.length - 1, Math.floor(d.length * p))] : null);
     return {
-      callbacks: s.length,
+      callbacks: ev.length,
       frames: uniq.length,
-      loops: uniq.length > 1 ? Math.round((s.length / (uniq.length - 1)) * 100) / 100 : null,
+      by,
       maxPerFrame: perFrame.size ? Math.max(...perFrame.values()) : null,
       p50: pct(0.5),
       p95: pct(0.95),
@@ -299,6 +316,25 @@ async function stopFrames() {
     };
   `);
 }
+
+/** Frames per second that one named loop managed in a measurement window. */
+const loopRate = (stat, name) => {
+  const n = stat?.by?.[name] ?? 0;
+  if (!stat?.span) return null;
+  return Math.round((n / (stat.span / 1000)) * 10) / 10;
+};
+
+/**
+ * The assertion every window shares: nothing that is not one of the five named loops held the page.
+ * `unknown` is what an unattributed registration looks like, and a leak from a component that was renamed
+ * or a loop written in a file the list above does not know about is exactly as expensive as the leak the
+ * gate was built to catch — it just used to be invisible behind a raised ceiling.
+ */
+function unknownLoop(where, stat) {
+  const n = stat?.by?.unknown ?? 0;
+  if (n > 0) failures.push(`${where}: ${n} rAF frame(s) armed by a loop this gate cannot name — add it to the list or stop it`);
+}
+
 
 // ---------------------------------------------------------------- key probe
 // A synthetic KeyboardEvent does not move focus, does not fire a button's default action and does not
@@ -542,6 +578,42 @@ function meanStep(frames) {
   return steps.length ? Math.round((steps.reduce((s, v) => s + v, 0) / steps.length) * 100) / 100 : null;
 }
 
+/**
+ * How far one hour's frames scatter around that hour's OWN mean.
+ *
+ * `meanStep` above is the wrong denominator for the question "did the room relight", and the reason is
+ * arithmetic rather than taste: the step between two consecutive frames is roughly √2 times the scatter of
+ * a frame around the mean, so a scene with a lot of motion reports a large "noise floor" even when the
+ * average of twenty frames is perfectly stable. What decides whether a guest can see the hour change is the
+ * uncertainty in the two averaged states, not the size of a single frame-to-frame move — and averaging is
+ * exactly what `avgSig` does. This is that quantity: the standard deviation of a frame about its hour, from
+ * which the standard error of the hour's mean follows by dividing by the frame count.
+ */
+function sigScatter(frames) {
+  const mean = avgSig(frames);
+  if (!mean) return null;
+  const usable = frames.filter((f) => f?.sig);
+  if (!usable.length) return null;
+  let total = 0;
+  let n = 0;
+  for (const f of usable) {
+    for (let b = 0; b < f.sig.length; b += 1) {
+      if (f.sig[b] < 0 || mean.sig[b] < 0) continue;
+      total += (f.sig[b] - mean.sig[b]) ** 2;
+      n += 1;
+    }
+  }
+  return n ? Math.round(Math.sqrt(total / n) * 100) / 100 : null;
+}
+
+/** Mean of the blocks in an averaged signature — the room's overall brightness, ignoring masked blocks. */
+function sigLuma(sig) {
+  if (!sig) return null;
+  const vals = sig.filter((v) => v >= 0);
+  return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100 : null;
+}
+
+
 // ---------------------------------------------------------------- batteries
 const results = [];
 const failures = [];
@@ -696,7 +768,7 @@ const door = (async () => {
       await new Promise((r) => setTimeout(r, 650));
     }
     const missed = nodes.filter((el) => !el.classList.contains("is-in"));
-    return { total: nodes.length, missed: missed.length, which: missed.slice(0, 6).map((el) => el.tagName.toLowerCase() + "." + String(el.className).replace(/\\s+/g, ".").slice(0, 40)) };
+    return { total: nodes.length, missed: missed.length, which: missed.slice(0, 6).map((el) => { const r = el.getBoundingClientRect(); return el.tagName.toLowerCase() + "." + String(el.className).replace(/\\s+/g, ".").slice(0, 40) + " \\"" + String(el.textContent).replace(/\\s+/g, " ").trim().slice(0, 34) + "\\" at " + Math.round(r.top) + ".." + Math.round(r.bottom); }) };
   `);
   const { errors, warnings } = drain();
   const contributed = withCanvas.uniq !== withoutCanvas.uniq || withCanvas.mean.join() !== withoutCanvas.mean.join();
@@ -1119,8 +1191,9 @@ drain();
 // the whole frame on its own. So: hide the photograph, put the camera on the door region only, read the
 // exposure the component wrote when it set renderer.toneMappingExposure, and compare a burst of frames at
 // one hour against a burst at another. Breathing lamps and drifting dust make same-hour frames differ, so
-// each hour is averaged over the burst and the noise floor is the mean step inside a burst; the claim is
-// only true if the gap between the two averaged hours clears that floor by a visible margin.
+// each hour is averaged over the burst and the question is whether the gap between the two averaged states
+// clears the uncertainty of that gap (see `sigScatter`), and whether it goes the right way: evening darker
+// than afternoon.
 await goto("/");
 const dialTo = async (value) =>
   evaluate(`
@@ -1152,7 +1225,7 @@ const stillVisible = () =>
   `);
 const burstAt = async (value) => {
   const frames = [];
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     if (i) await evaluate(`await new Promise((r) => setTimeout(r, 240)); return true;`);
     const frame = await shotRegion("[data-scene]", `hour-${value}-frame-${i + 1}`);
     if (frame) frames.push(frame);
@@ -1180,13 +1253,22 @@ const hourFrames = {
   framesNoon: noon.frames.length,
   withinDusk: meanStep(dusk.frames),
   withinNoon: meanStep(noon.frames),
+  scatterDusk: sigScatter(dusk.frames),
+  scatterNoon: sigScatter(noon.frames),
   cross: sigDistance(avgSig(dusk.frames), avgSig(noon.frames)),
+  lumaDusk: sigLuma(avgSig(dusk.frames)?.sig),
+  lumaNoon: sigLuma(avgSig(noon.frames)?.sig),
 };
 // The margin matters as much as the ordering. With the sprites sampling their texture the soft glow and the
 // drifting motes cover real area, so two frames of the SAME hour now sit tens of luminance units apart on
-// their own — a single pair is mostly motion. Averaging each burst leaves the hour, and the floor is the
-// mean step inside a burst. Anything under 1.5x is not a difference a guest could call, so it fails below
-// that instead of squeaking past, and the ratio is printed rather than buried.
+// their own — a single pair is mostly motion. Averaging each burst leaves the hour, and what the hour gap
+// has to clear is the uncertainty of those two averages, not the size of one frame's step: see `sigScatter`.
+hourFrames.sem =
+  hourFrames.scatterDusk !== null && hourFrames.scatterNoon !== null && dusk.frames.length && noon.frames.length
+    ? Math.round(Math.sqrt(hourFrames.scatterDusk ** 2 / dusk.frames.length + hourFrames.scatterNoon ** 2 / noon.frames.length) * 100) / 100
+    : null;
+hourFrames.snr =
+  hourFrames.cross !== null && hourFrames.sem ? Math.round((hourFrames.cross / hourFrames.sem) * 100) / 100 : null;
 hourFrames.margin =
   hourFrames.cross !== null && Math.max(hourFrames.withinDusk, hourFrames.withinNoon) > 0
     ? Math.round((hourFrames.cross / Math.max(hourFrames.withinDusk, hourFrames.withinNoon)) * 100) / 100
@@ -1246,9 +1328,25 @@ else {
   }
   if (hourFrames.cross === null) failures.push("/ the door region could not be screenshotted, so the hour pixels were never measured");
   else {
-    const within = Math.max(hourFrames.withinDusk, hourFrames.withinNoon);
-    if (hourFrames.cross <= within * 1.5) {
-      failures.push(`/ the door at 20:00 vs 14:00 differs by ${hourFrames.cross}, only ${hourFrames.margin}x more than the frame-to-frame step inside one hour (${within}) — the room is not relighting, the lamps are just breathing`);
+    // The old claim here was `cross > 1.5 × meanStep`, and it was the wrong statistic rather than the wrong
+    // threshold: the step between two frames is ~√2 × the scatter about the mean, so a scene with drifting
+    // dust and breathing lamps reports a huge "floor" for an average that is in fact stable. What a guest
+    // sees is the averaged state of the room, so what the hour gap has to clear is the standard error of the
+    // difference between the two averaged states. Three standard errors is the point at which a difference is
+    // not a coincidence of which frames the burst happened to catch.
+    if (hourFrames.snr === null) {
+      failures.push(`/ the two hour bursts gave ${hourFrames.framesDusk} and ${hourFrames.framesNoon} usable frame(s) — the hour gap of ${hourFrames.cross} has no noise estimate, so the relighting claim is unmeasured rather than true`);
+    } else if (hourFrames.snr < 3) {
+      failures.push(`/ the door at 20:00 vs 14:00 differs by ${hourFrames.cross} luminance units, ${hourFrames.snr}× the standard error of that gap (${hourFrames.sem}) — under 3× the change is inside the motion, and the room is not visibly relighting`);
+    }
+    // And it has to be the right change. Two palettes can be far apart while the evening reads brighter than
+    // the afternoon, which is a scene that answers the dial with a different colour rather than with less
+    // light — rigValues walks the daylight down to a fifth of its noon strength, and the ambient term that
+    // the lite tier is left with drops further still, for exactly this reason.
+    if (hourFrames.lumaDusk === null || hourFrames.lumaNoon === null) {
+      failures.push("/ the door frames carried no luminance grid, so the room's brightness at the two hours is unmeasured");
+    } else if (hourFrames.lumaDusk >= hourFrames.lumaNoon) {
+      failures.push(`/ the door averages ${hourFrames.lumaDusk} luminance at 20:00 against ${hourFrames.lumaNoon} at 14:00 — the evening is not darker than the afternoon, so the dial changed the palette and not the light`);
     }
   }
 }
@@ -1589,14 +1687,34 @@ await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced
 await goto("/");
 const posterFrames = await measure(1100);
 await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
-results.push({ path: "frames", value: { glInfo, inView, outOfView, awayGeometry, menuFrames, posterFrames }, errors: [], warnings: [] });
+// …and one window where the sky is the only thing on the page: /menu has no door, so the ambient layer is
+// the entire expected loop set there. Measured separately from menuFrames because that window is taken with
+// the media query at its default, and the claim being tested is "the layer that replaces the door's job is
+// the one that stays".
+await goto("/menu");
+const menuAmbient = await measure(1100);
+results.push({ path: "frames", value: { glInfo, inView, outOfView, awayGeometry, menuFrames, menuAmbient, posterFrames }, errors: [], warnings: [] });
 if (glInfo.contextLost) failures.push("/ the WebGL context is lost on the page under test — every frame count below is meaningless");
-if (inView.frames < 1) failures.push(`/ the door produced ${inView.frames} frames in ${inView.span}ms while on screen (hidden=${glInfo.hidden}) — the render loop is not running`);
-if (inView.frames >= 20 && inView.maxPerFrame > 3) failures.push(`/ ${inView.maxPerFrame} rAF callbacks shared a frame on the home page: the door, the preloader countdown and the cursor trail account for three, and a fourth is a loop nobody wrote (see the cursor block, which measures the steady state after the preloader is gone)`);
+// Each window now names its loops, so every sentence below is about the component it mentions rather than
+// about an arithmetic average of everything on the page. That is the difference between a gate that catches
+// "the door never stopped" and one that catches "something on the home page is busy", which is what the old
+// `frames > 3` assertions actually measured once a background layer existed.
+if ((inView.by.door ?? 0) < 1) failures.push(`/ the door armed ${inView.by?.door ?? 0} frames in ${inView.span}ms while on screen (hidden=${glInfo.hidden}) — the render loop is not running`);
+if ((inView.by.ambient ?? 0) < 1) failures.push(`/ the sky layer armed ${inView.by?.ambient ?? 0} frames while on screen — the atmosphere is mounted but not painting, so the room is a still image`);
 if (awayGeometry.bottom > 0 && awayGeometry.top < awayGeometry.vh) failures.push(`/ the door was still on screen after the scroll (${JSON.stringify(awayGeometry)}) — the off-screen measurement proved nothing`);
-if (outOfView.frames > 3) failures.push(`/ the door kept painting ${outOfView.frames} frames after it left the viewport (${JSON.stringify(awayGeometry)})`);
-if (menuFrames.frames > 3) failures.push(`/menu ran ${menuFrames.frames} rAF frames with no door on the page — a page without a scene should not hold a loop`);
-if (posterFrames.frames > 3) failures.push(`/ under reduced motion the page ran ${posterFrames.frames} rAF frames — the poster tier draws one frame and stops`);
+// One frame of slack: the callback that was already scheduled when the door left the view still runs.
+if ((outOfView.by.door ?? 0) > 1) failures.push(`/ the door kept painting ${outOfView.by?.door ?? 0} frames after it left the viewport (${JSON.stringify(awayGeometry)})`);
+if ((menuFrames.by.door ?? 0) > 0) failures.push(`/menu ran ${menuFrames.by?.door ?? 0} door frames with no door on the page`);
+if ((menuAmbient.by.ambient ?? 0) < 1) failures.push(`/menu ran ${menuAmbient.by?.ambient ?? 0} sky frames — the page has no scene, and the layer that carries its light stopped`);
+if ((posterFrames.by.door ?? 0) > 1) failures.push(`/ under reduced motion the door armed ${posterFrames.by?.door ?? 0} frames — the poster tier draws one frame and stops`);
+if ((posterFrames.by.ambient ?? 0) > 0) failures.push(`/ under reduced motion the sky layer armed ${posterFrames.by?.ambient ?? 0} frames — the atmosphere is animation, and it is supposed to read the same preference the door does`);
+for (const [where, stat] of [["/ in view", inView], ["/ away", outOfView], ["/menu", menuFrames], ["/menu sky", menuAmbient], ["/ reduced motion", posterFrames]]) unknownLoop(where, stat);
+// The sky's own budget. It is capped at 24 fps in the component; the gate cannot measure a rate on a
+// software rasteriser that paints slower than that, so the assertion is one-directional and the number is
+// the point where "capped" has plainly failed.
+const ambientRate = loopRate(menuAmbient, "ambient");
+if (ambientRate !== null && ambientRate > 32) failures.push(`/menu: the sky layer ran ${ambientRate} fps against a 24 fps cap — the frame limiter is not holding`);
+
 
 // The 30-frame probe counts frames, not seconds. On this machine a frame costs ~300 ms of software
 // rasterisation, so the probe needs ~13 s of page life before it can conclude anything — longer than any of
@@ -1720,12 +1838,24 @@ if (pointerClass || patched) {
   results.push({ path: "cursor", value: { pointerNative: pointerClass, overrideActive, curtainWait, idle, chasing, moved, converged, settled, blurred, rearmed }, errors: [], warnings: [] });
   if (patched && overrideActive !== true) failures.push("/ the (pointer: fine) override did not reach the page scripts, so nothing below this line tested the cursor");
   if (moved.on !== true) failures.push(`/ (pointer: fine) is true but two real mouse moves never put cursor-on on the body — the pointer this design promises does not appear`);
-  if (chasing.maxPerFrame !== 2) failures.push(`/ while the ring was chasing a moving pointer, ${chasing.maxPerFrame} rAF callbacks shared a frame — the door is one and the cursor should be the second, so one of them never started (${JSON.stringify(chasing)})`);
-  if (idle.frames >= 1 && idle.maxPerFrame > 1) failures.push(`/ before the pointer ever moved, ${idle.maxPerFrame} rAF callbacks shared each of ${idle.frames} frames with the preloader gone — something is arming the cursor without a mouse`);
+  // The cursor is judged by its own counter now, not by how many callbacks shared a vsync. The old test
+  // could only ask "is the total 2?", and a page that carries a sky layer paints three loops in steady
+  // state — so the number that used to prove the cursor had stopped would, after A19, merely prove that
+  // somebody had added a component. Named loops keep the same guarantee and stop colliding with design.
+  if (!(chasing.by?.cursor > 0)) failures.push(`/ while the ring was chasing a moving pointer the cursor loop armed ${chasing.by?.cursor ?? 0} frames — the pointer moved and nothing followed (${JSON.stringify(chasing.by)})`);
+  if (!(chasing.by?.door > 0)) failures.push(`/ while chasing, the door armed ${chasing.by?.door ?? 0} frames — the scene stopped painting during the cursor test, so the window measured one loop and called it two`);
+  if (idle.by?.cursor > 0) failures.push(`/ before the pointer ever moved, the cursor loop armed ${idle.by.cursor} of the ${idle.frames} frames with the preloader gone — something is arming the cursor without a mouse`);
   if (!moved.dot || !moved.ring) failures.push(`/ after moving, the inline transforms were ${JSON.stringify([moved.dot, moved.ring])} — the dot and the ring are both supposed to be positioned by the loop`);
   if (!converged) failures.push(`/ 30 s after a pointer move the ring was still writing a new transform every sample (${chase.samples.length} samples, all "≠") — an exponential chase that never stops is a permanent second loop on every page with the cursor enabled`);
-  else if (settled.frames < 1) failures.push(`/ the door produced ${settled.frames} frames in the window after the ring settled (${JSON.stringify(settled)}) — there is nothing to judge about the second loop`);
-  else if (settled.maxPerFrame > 1) failures.push(`/ the ring stopped writing after ${converged.afterMs} ms, yet ${settled.maxPerFrame} rAF callbacks still shared each of the ${settled.frames} frames that followed — the loop is running to repaint two numbers that are not changing`);
+  else if (!(settled.by?.door > 0)) failures.push(`/ the door armed ${settled.by?.door ?? 0} frames in the window after the ring settled (${JSON.stringify(settled.by)}) — there is nothing to judge about the second loop`);
+  else if (settled.by?.cursor > 0) failures.push(`/ the ring stopped writing after ${converged.afterMs} ms, yet the cursor loop armed ${settled.by.cursor} of the ${settled.frames} frames that followed — it is running to repaint two numbers that are not changing`);
+  // The dial's playback loop belongs to HoursClock and only to the seconds it is asked to run. Nothing in
+  // this window presses play, so a dial frame here is a loop that outlived its own button.
+  for (const [where, stat] of [["/ cursor idle", idle], ["/ cursor chasing", chasing], ["/ cursor settled", settled]]) {
+    if (stat.by?.dial > 0) failures.push(`${where}: the dial loop armed ${stat.by.dial} frames while nothing was playing it`);
+    unknownLoop(where, stat);
+  }
+
   if (blurred.on !== false) failures.push(`/ window blur left cursor-on on the body — switch tabs and come back to a dot that belongs to nobody`);
   if (rearmed.on !== true) failures.push(`/ after a blur the cursor never returned when the mouse moved again (${JSON.stringify(rearmed)}) — cancelling a rAF leaves its id set, so the re-arm guard stays false and the cursor is dead until the page reloads`);
 } else {
@@ -2041,6 +2171,122 @@ if (reduceSwap.clicked && !reduceSwap.jsOn)
 await evaluate(`localStorage.removeItem("habibi-haven:table:v1"); return true;`);
 await stillVisible();
 drain();
+
+// --------------------------------------------------------- filter bar geometry
+/* ---- M-bis: the filter bar is geometry, and geometry is measurable
+
+   Four of the fifteen complaints against this page are about the same rectangle: it blocked content (15),
+   the menu overlapped (13), the spacing on desktop was too large (6), and the search and sort did not feel
+   like they belonged (14). Every one of those is a number, and a number can be pinned, so the pitch does
+   not have to rest on whether anyone agrees the bar looks better today:
+     · how tall it is, as a share of the viewport and in pixels;
+     · what it paints itself with — an 84% wash over a scrolling menu is how dish copy ended up reading up
+       through the search placeholder, which is what "overlapping" meant;
+     · whether the sort control is still the operating system's grey box;
+     · how much text is clipped by its own box (the duplicated dish names on the pending cards);
+     · how much air a section spends on a desktop.
+*/
+await goto("/menu");
+const barGeo = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const cs = (el) => getComputedStyle(el);
+    const bar = q("[data-bar]");
+    if (!bar) return { missing: true };
+    const r = bar.getBoundingClientRect();
+    const bg = cs(bar).backgroundColor;
+    const alpha = (() => {
+      const m = /rgba?\\(([^)]*)\\)/.exec(bg);
+      if (!m) return null;
+      const parts = m[1].split(",").map((s) => parseFloat(s));
+      return parts.length > 3 ? parts[3] : 1;
+    })();
+    // Anything whose own box is smaller than its content is clipped text. Two exclusions, both deliberate:
+    // .card__desc is clamped to three lines (that overflow is the design, and a long scraped description
+    // would trip it on dozens of cards), and .explorer__count is allowed to ellipsis on a narrow screen.
+    const clipped = [];
+    for (const el of document.querySelectorAll(".card__name, .card__price, .frame--type em, .frame__mark, .chips button, .section-head h2, .section-head h3")) {
+      if (el.offsetParent === null) continue;
+      if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+        clipped.push(el.className + ":" + (el.textContent || "").trim().slice(0, 22));
+      }
+    }
+    const stage = q(".stage") || q("main > *");
+    return {
+      missing: false,
+      viewport: [innerWidth, innerHeight],
+      bar: { h: Math.round(r.height), w: Math.round(r.width), top: Math.round(r.top) },
+      share: Math.round((r.height / innerHeight) * 1000) / 1000,
+      navH: cs(document.documentElement).getPropertyValue("--nav-h").trim(),
+      barH: cs(document.documentElement).getPropertyValue("--bar-h").trim() || cs(bar.parentElement).getPropertyValue("--bar-h").trim(),
+      bg,
+      alpha,
+      blur: cs(bar).backdropFilter || cs(bar).webkitBackdropFilter,
+      sticky: cs(bar).position,
+      selectAppearance: cs(q("[data-sort]")).appearance,
+      selectCursor: cs(q("[data-sort]")).cursor,
+      foldedAtLoad: q("#explorer-filters") ? q("#explorer-filters").hidden : null,
+      toggleHidden: q("[data-filters]") ? q("[data-filters]").hidden : null,
+      clipped: clipped.length,
+      clippedExample: clipped.slice(0, 4),
+      stagePaddingTop: stage ? Math.round(parseFloat(cs(stage).paddingTop) || 0) : null,
+    };
+  `);
+const geoLogged = drain();
+results.push({ path: "/menu (bar geometry)", value: barGeo, errors: geoLogged.errors, warnings: geoLogged.warnings });
+if (barGeo.missing) failures.push("/menu has no [data-bar] — the filter bar the guest scrolls under is gone");
+else {
+  if (barGeo.sticky !== "sticky") failures.push(`/menu the filter bar is position:${barGeo.sticky}, so it does not stay with the guest through 243 dishes`);
+  if (barGeo.bar.top < 0) failures.push(`/menu the filter bar sits at top ${barGeo.bar.top} — above the viewport, so the header covers it`);
+  if (barGeo.alpha !== 1) failures.push(`/menu the sticky bar paints itself with ${barGeo.bg} (alpha ${barGeo.alpha}) over a scrolling menu — dish copy reads through the search box again`);
+  if (barGeo.blur !== "none") failures.push(`/menu the bar still runs a backdrop-filter (${barGeo.blur}) on a plate that is meant to be opaque — it costs a compositor layer for a effect nobody can see`);
+  if (barGeo.bar.h > 180 || barGeo.share > 0.18) failures.push(`/menu the filter bar is ${barGeo.bar.h}px tall on a ${barGeo.viewport[1]}px viewport (${Math.round(barGeo.share * 100)}%) — it is still taking the screen instead of the menu`);
+  if (barGeo.selectAppearance !== "none") failures.push(`/menu the sort control computes appearance:${barGeo.selectAppearance} — the guest is being offered the operating system's grey box`);
+  if (barGeo.clipped > 0) failures.push(`/menu ${barGeo.clipped} element(s) have text clipped by their own box (${barGeo.clippedExample.join(" | ")}) — this is the overlap the menu was criticised for`);
+  if (barGeo.stagePaddingTop !== null && barGeo.stagePaddingTop > 116) failures.push(`/menu a section spends ${barGeo.stagePaddingTop}px of top padding on a ${barGeo.viewport[0]}px desktop — more air than restaurant`);
+}
+
+/* The fold half of the same complaint. At 390px the two chip rows sit behind a button, and that button has
+   to be real rather than decorative: aria-expanded has to flip, the panel has to appear, the bar has to
+   grow by roughly the panel, and folding again has to put it back. Measured here rather than in the phone
+   battery below because this is about the bar, not the dock. */
+await inPage("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+await goto("/menu");
+const fold = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const bar = q("[data-bar]");
+    const panel = q("#explorer-filters");
+    const toggle = q("[data-filters]");
+    const before = {
+      barH: Math.round(bar.getBoundingClientRect().height),
+      panelHidden: panel.hidden,
+      toggleHidden: toggle.hidden,
+      expanded: toggle.getAttribute("aria-expanded"),
+      chipsReachable: Array.from(panel.querySelectorAll("button")).some((b) => b.offsetParent !== null),
+    };
+    toggle.click();
+    await new Promise((r) => setTimeout(r, 120));
+    const after = {
+      panelHidden: panel.hidden,
+      expanded: toggle.getAttribute("aria-expanded"),
+      chipsReachable: Array.from(panel.querySelectorAll("button")).some((b) => b.offsetParent !== null),
+      barH: Math.round(bar.getBoundingClientRect().height),
+      badgeHidden: q("[data-filters-n]").hidden,
+    };
+    toggle.click();
+    await new Promise((r) => setTimeout(r, 120));
+    return { before, after, refolded: panel.hidden };
+  `);
+const foldLogged = drain();
+results.push({ path: "/menu (bar folds on a phone)", value: fold, errors: foldLogged.errors, warnings: foldLogged.warnings });
+if (fold.before.toggleHidden) failures.push("/menu at 390px hides the Filters button — the chips are stacked over the menu with nothing to fold them");
+if (!fold.before.panelHidden) failures.push("/menu at 390px ships with both chip rows open, which is the sticky bar that was criticised for blocking content");
+if (fold.before.barH > 150) failures.push(`/menu's folded bar is still ${fold.before.barH}px on an 844px phone (${Math.round((fold.before.barH / 844) * 100)}%)`);
+if (fold.before.chipsReachable) failures.push("/menu at 390px: the folded chip panel still leaves its buttons focusable — a keyboard guest is tabbing into controls they cannot see");
+if (fold.after.panelHidden || fold.after.expanded !== "true" || !fold.after.chipsReachable) failures.push("/menu: tapping Filters did not open the panel (aria-expanded went to " + fold.after.expanded + ")");
+if (fold.after.barH <= fold.before.barH) failures.push(`/menu: opening the filters left the bar no taller (${fold.before.barH} → ${fold.after.barH}px) — the panel is not the thing that grows the bar`);
+if (!fold.refolded) failures.push("/menu: tapping Filters a second time did not fold the panel back");
+await inPage("Emulation.clearDeviceMetricsOverride", {});
+await goto("/menu");
 
 // ---------------------------------------------------------------- phone width
 /*

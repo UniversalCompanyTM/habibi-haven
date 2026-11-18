@@ -238,10 +238,13 @@ export function rigValues(night, open) {
     // Daylight is the part of the curve that used to break the render: at 14:00 the street key, the sky
     // fill and the bounce summed past the plaster's albedo and ACES had nothing left to compress, so the
     // façade became a flat white field and the arch lost its edges. These three are the daytime ceiling —
-    // still brightest in the morning, still a clear step down into the evening, but under the clip.
-    streetIntensity: 0.78 * (1 - 0.86 * n),
-    skyIntensity: 0.34 * (1 - 0.5 * n),
-    bounceIntensity: 0.5 * (1 - 0.4 * n) * openFactor,
+    // unchanged from that fix, because the noon problem was too much light, not too little contrast. What
+    // A19b changed is the other end of each curve: the evening now walks the daylight down to almost
+    // nothing instead of leaving it at two thirds, because a room whose 20:00 is 90% of its 14:00 does not
+    // read as a room that changed shift. The lamps carry the night, and they are below.
+    streetIntensity: 0.78 * (1 - 0.94 * n),
+    skyIntensity: 0.34 * (1 - 0.72 * n),
+    bounceIntensity: 0.5 * (1 - 0.62 * n) * openFactor,
     // The three lantern lights hang near the door, and a directional light knows nothing about occlusion,
     // so past the second arch the courtyard had nothing to light it and read as a silhouette against the
     // façade. This is the warm fill that lives inside the run: never off, brighter once the lamps strike up,

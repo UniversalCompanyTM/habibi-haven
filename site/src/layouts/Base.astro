@@ -318,9 +318,19 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
   component(".nav", {
     mount(nav) {
       const onScroll = () => nav.toggleAttribute("data-stuck", window.scrollY > 24);
+      // The sticky filter bar on /menu hangs off this number rather than a copied constant, because the
+      // header's height is content — it grows a line when the status text wraps on a narrow phone, and a
+      // hard-coded `top: 3.9rem` then puts the bar half over the logo.
+      const measure = () =>
+        document.documentElement.style.setProperty("--nav-h", `${Math.round(nav.getBoundingClientRect().height)}px`);
       onScroll();
+      measure();
       addEventListener("scroll", onScroll, { passive: true });
-      return () => removeEventListener("scroll", onScroll);
+      addEventListener("resize", measure, { passive: true });
+      return () => {
+        removeEventListener("scroll", onScroll);
+        removeEventListener("resize", measure);
+      };
     },
     unmount: (stop) => stop?.(),
   });

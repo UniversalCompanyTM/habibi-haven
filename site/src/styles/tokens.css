@@ -143,6 +143,12 @@
      A19: the desktop rhythm was an 11rem stage padding on a 1500px shell, which read as a page with
      more air than restaurant in it. The ceiling comes down and the floor stays where a thumb needs it. */
   --gutter: clamp(1.1rem, 0.6rem + 2.4vw, 3.4rem);
+  /* The two bands a sticky thing has to clear: the fixed header, and the menu's own filter bar. Both are
+     rewritten from the live layout as soon as the page mounts — Base.astro measures `.nav`, MenuExplorer
+     measures `.explorer__bar` — and both carry a number here because the server HTML has to be correct
+     before any script has run. A hard-coded `top: 3.9rem` is what let the bar sit half over the header. */
+  --nav-h: 3.9rem;
+  --bar-h: 7.6rem;
   --measure: 68ch;
   --radius: 18px;
   --radius-sm: 10px;

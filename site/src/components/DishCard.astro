@@ -4,7 +4,8 @@
 // Three rules this file exists to keep:
 //   * A placeholder photograph upstream is never shown as if it were the dish. Those rows carry the text
 //     "Image to be updated soon"; rendering that as a photo would be the site lying about food. It
-//     renders as a type card instead — the name set in display type, and a line saying so.
+//     renders as a type card instead — the dish's initial in a plate ring, and a line saying the
+//     photograph is pending.
 //   * An illustration is labelled as one. `photo.illustration` is set by scripts/ingest-illustrations.mjs
 //     and only ever on a row the kitchen has no photograph for, and the badge here is the visible half of
 //     that. The alt text carries the same sentence, so a screen reader and a sighted guest are told the
@@ -45,7 +46,12 @@ const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.lo
     {
       isPlaceholder ? (
         <>
-          <b>{item.name}</b>
+          {/* The name is not repeated in here. An earlier version set the whole dish name in display type
+              inside the frame, and on a 4:3 card that is two lines wide it clipped through the plate on 102
+              of the 243 rows — the single largest source of "overlapping characters" on /menu. The name is
+              already the headline of the card, four lines below it. What this frame has to say is that the
+              photograph is missing, so it says that, with the dish's own initial as the only letterform. */}
+          <span class="frame__mark" aria-hidden="true">{(item.name.trim().charAt(0) || "·").toUpperCase()}</span>
           <em>Photograph pending</em>
         </>
       ) : (

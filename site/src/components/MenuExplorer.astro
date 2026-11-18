@@ -32,10 +32,16 @@ const priceBands = [
 ---
 
 <div class="explorer" data-explorer>
-  <div class="explorer__bar">
+  <div class="explorer__bar" data-bar>
     <div class="explorer__tools">
-      <label class="field">
-        <span class="dim" aria-hidden="true">Search</span>
+      <label class="field field--search">
+        {/* The word "Search" goes, the magnifier stays: the placeholder already says what goes in here, the
+            input carries its own accessible name, and on a phone every character of a label inside the pill
+            is a character less of menu the guest can read. */}
+        <svg class="field__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M10.7 10.7 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
         <input
           type="search"
           data-q
@@ -44,7 +50,7 @@ const priceBands = [
           aria-label={`Search all ${menu.meta.items} dishes and drinks`}
         />
       </label>
-      <label class="field">
+      <label class="field field--select">
         <span class="dim" aria-hidden="true">Sort</span>
         <select data-sort aria-label="Sort dishes within each section">
           <option value="menu">As the menu lists</option>
@@ -53,45 +59,62 @@ const priceBands = [
           <option value="az">A–Z</option>
         </select>
       </label>
+      {/* The chips are the part of this bar a guest uses twice per visit and looks at once. On a phone the
+          two rows below are taller than the search box they belong to and they eat the menu, so under the
+          narrow breakpoint the bar ships collapsed and this button is what opens it — with the count of
+          filters already applied on its face, so collapsing can never hide a filter that is running. */}
+      <button
+        type="button"
+        class="filters-toggle"
+        data-filters
+        aria-expanded="true"
+        aria-controls="explorer-filters"
+        hidden
+      >
+        Filters
+        <span class="filters-toggle__n" data-filters-n hidden>0</span>
+      </button>
+
+      <p class="meta explorer__count" aria-live="polite" data-count>
+        {menu.meta.items} of {menu.meta.items} items · {menu.meta.realPhotos} photographed, {menu.meta.illustratedPhotos}{" "}
+        illustrated, {menu.meta.placeholderPhotos} pending upstream
+      </p>
     </div>
 
-    <div class="chips" role="group" aria-label="Filter by price">
-      {
-        // min/max travel as attributes, so the threshold the label states is the threshold the filter
-        // applies. A hard-coded number in the script would be a second source of truth, and the
-        // second source is where the goat price went wrong.
-        priceBands.map((band) => (
-          <button
-            type="button"
-            data-band={band.id}
-            data-min={band.min}
-            data-max={band.max ?? ""}
-            aria-pressed="false"
-          >
-            {band.label}
-          </button>
-        ))
-      }
-    </div>
-
-    <div class="chips" role="group" aria-label="Filter by tag">
-      <button type="button" data-tag="signature" aria-pressed="false" class="chip--teal">Signature only</button>
-      {
-        tags
-          .filter((tag) => tag !== "signature")
-          .map((tag) => (
-            <button type="button" data-tag={tag} aria-pressed="false">
-              {tagLabel(tag)}
+    <div class="explorer__filters" id="explorer-filters">
+      <div class="chips" role="group" aria-label="Filter by price">
+        {
+          // min/max travel as attributes, so the threshold the label states is the threshold the filter
+          // applies. A hard-coded number in the script would be a second source of truth, and the
+          // second source is where the goat price went wrong.
+          priceBands.map((band) => (
+            <button
+              type="button"
+              data-band={band.id}
+              data-min={band.min}
+              data-max={band.max ?? ""}
+              aria-pressed="false"
+            >
+              {band.label}
             </button>
           ))
-      }
-      <button type="button" data-reset style="margin-left:auto">Clear filters</button>
-    </div>
+        }
+      </div>
 
-    <p class="meta" aria-live="polite" data-count>
-      Showing all {menu.meta.items} items across {menu.meta.sections} sections — {menu.meta.realPhotos} with a
-      photograph, {menu.meta.illustratedPhotos} illustrated, {menu.meta.placeholderPhotos} still pending one upstream.
-    </p>
+      <div class="chips" role="group" aria-label="Filter by tag">
+        <button type="button" data-tag="signature" aria-pressed="false" class="chip--teal">Signature only</button>
+        {
+          tags
+            .filter((tag) => tag !== "signature")
+            .map((tag) => (
+              <button type="button" data-tag={tag} aria-pressed="false">
+                {tagLabel(tag)}
+              </button>
+            ))
+        }
+        <button type="button" class="chips__reset" data-reset>Clear filters</button>
+      </div>
+    </div>
   </div>
 
   <div data-groups>
@@ -161,6 +184,10 @@ const priceBands = [
     const empty = root.querySelector<HTMLElement>("[data-empty]")!;
     const tagButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-tag]"));
     const bandButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-band]"));
+    const bar = root.querySelector<HTMLElement>("[data-bar]");
+    const panel = root.querySelector<HTMLElement>("#explorer-filters");
+    const fold = root.querySelector<HTMLButtonElement>("[data-filters]");
+    const foldCount = root.querySelector<HTMLElement>("[data-filters-n]");
 
     const state = {
       q: "",
@@ -261,14 +288,52 @@ const priceBands = [
         .map((b) => (b.textContent ?? "").trim().replace(" only", "").toLowerCase());
       live.textContent =
         visibleCount === cards.length
-          ? `Showing all ${cards.length} items across ${menu.meta.sections} sections — ${menu.meta.realPhotos} with a photograph, ${menu.meta.illustratedPhotos} illustrated, ${menu.meta.placeholderPhotos} still pending one upstream.`
-          : `Showing ${visibleCount} of ${cards.length} items${state.q ? ` matching “${state.q}”` : ""}${
+          ? `${cards.length} of ${cards.length} items · ${menu.meta.realPhotos} photographed, ${menu.meta.illustratedPhotos} illustrated, ${menu.meta.placeholderPhotos} pending upstream`
+          : `${visibleCount} of ${cards.length}${state.q ? ` matching “${state.q}”` : ""}${
               tagWords.length ? ` · ${tagWords.join(" + ")}` : ""
             }${state.band ? ` · ${bandButtons.find((b) => b.dataset.band === state.band)?.textContent ?? ""}` : ""}.`;
+      paintBadge();
       syncControls();
       writeUrl();
       document.dispatchEvent(new CustomEvent("hh:prep"));
     };
+
+    /* ---------------- the bar, folded on a phone ----------------
+       Two rows of chips under a search box read as a toolbar on a desktop and as half a viewport on a
+       390 px phone, and a sticky half-viewport toolbar is the thing that "blocks the other content". So
+       below the wide breakpoint the chips fold behind a button. What keeps that honest is the count on the
+       button's face: a filter that is running can never be folded away out of sight, and the live line
+       beside it keeps naming the same filter. */
+    const narrow = matchMedia("(max-width: 62rem)");
+    let chipsOpen = false;
+
+    const activeCount = () => state.tags.size + (state.band ? 1 : 0);
+
+    const paintBadge = () => {
+      if (!foldCount) return;
+      const n = activeCount();
+      foldCount.hidden = n === 0;
+      foldCount.textContent = String(n);
+    };
+
+    const paintFold = () => {
+      if (!fold || !panel) return;
+      const wide = !narrow.matches;
+      fold.hidden = wide;
+      panel.hidden = wide ? false : !chipsOpen;
+      fold.setAttribute("aria-expanded", String(wide || chipsOpen));
+      // The bar is sticky and the room headings anchor underneath it, so the number the anchors have to
+      // clear is this element's height — which is exactly what folding changes.
+      if (bar) root.style.setProperty("--bar-h", `${Math.round(bar.getBoundingClientRect().height)}px`);
+      paintBadge();
+    };
+
+    fold?.addEventListener("click", () => {
+      chipsOpen = !chipsOpen;
+      paintFold();
+    });
+    if (narrow.addEventListener) narrow.addEventListener("change", paintFold);
+    addEventListener("resize", paintFold, { passive: true });
 
     // One-time: a query that arrived in the address goes into the box, so the screen and the URL agree.
     search.value = state.q;
@@ -371,6 +436,7 @@ const priceBands = [
 
     // Always run once: a query, tag or band can arrive in the address, and the page has to agree with
     // the URL it was opened with even when nobody touched a control.
+    paintFold();
     apply();
 
     if (state.room) {
@@ -388,6 +454,8 @@ const priceBands = [
     // either would mean `/` focusing a search box on a page that has left it behind.
     return () => {
       removeEventListener("keydown", onKey);
+      removeEventListener("resize", paintFold);
+      if (narrow.removeEventListener) narrow.removeEventListener("change", paintFold);
       document.removeEventListener(EVENT, paintOnTable);
     };
   }
