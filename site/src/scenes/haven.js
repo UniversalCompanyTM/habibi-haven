@@ -612,8 +612,8 @@ export function buildHaven(THREE, options = {}) {
     // the evening.
     const headroom = 0.5 * (1 - values.night);
     const intoNight = values.night;
-    setByte(stoneMat.color, mixByte(mixByte(palette.ivory, palette.bg2, 0.55 + 0.2 * intoNight), LIMESTONE, headroom));
-    setByte(plasterMat.color, mixByte(mixByte(palette.ivory, palette.bg1, 0.7 + 0.18 * intoNight), PLASTER_MID, headroom));
+    setByte(stoneMat.color, mixByte(mixByte(palette.ivory, palette.bg2, 0.55 + 0.32 * intoNight), LIMESTONE, headroom));
+    setByte(plasterMat.color, mixByte(mixByte(palette.ivory, palette.bg1, 0.7 + 0.26 * intoNight), PLASTER_MID, headroom));
     // The courtyard runs seven bays deep and the openings are narrow, so past the second arch no lantern is
     // within reach — and a directional light cannot be blocked by a wall, which is exactly why the recess
     // read as a silhouette cut out of the façade instead of a space beyond it. This low warm emissive stands
@@ -631,20 +631,22 @@ export function buildHaven(THREE, options = {}) {
     // that, and it is the difference between a rail you can read at 22:00 and a dark line.
     setByte(brassMat.emissive, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
     brassMat.emissiveIntensity = 0.02 + 0.11 * values.lamp;
-    setByte(floorMat.color, mixByte(palette.tealDeep, palette.bg1, values.night * 0.6));
+    setByte(floorMat.color, mixByte(palette.tealDeep, palette.bg1, values.night * 0.75));
     setByte(glassMat.color, palette.lampGlow);
     setByte(glowMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
     setByte(haloMat.color, mixByte(palette.brassSoft, palette.lampGlow, values.lamp));
-    setByte(fog.color, mixByte(palette.bg1, palette.bg0, 0.45 * values.night));
-    fog.density = 0.016 + values.night * 0.02;
+    setByte(fog.color, mixByte(palette.bg1, palette.bg0, 0.62 * values.night));
+    fog.density = 0.016 + values.night * 0.026;
 
     setByte(ambient.color, mixByte(palette.bg3, palette.ivory, 0.35));
     // The one light the lite tier still has. On a phone the directional trio above is not created, so
     // without this term the whole day/night difference arrives as a colour change with no change in level —
-    // which is exactly what the runtime harness measured (a 20:00 frame barely separable from a 14:00 one).
-    // The daytime number is held at the ACES ceiling and the night floor is what moves down, so the evening
-    // is a room lit by lamps rather than a room with the ceiling light left on.
-    ambient.intensity = 0.085 + 0.355 * (1 - values.night);
+    // which is what the runtime harness measured (a 20:00 frame barely separable from a 14:00 one).
+    // The daytime end is held at the value the ACES fix established (0.06 of night, the 14:00 sample, lands
+    // at 0.415 either way), and the evening floor is what moves down, from 0.085 to a level that leaves the
+    // lanterns, the plaster's own bounce and the brass to do the lighting. A room at 20:00 that is only 20%
+    // dimmer than a room at 14:00 is a room with the ceiling light left on, which is what this measured.
+    ambient.intensity = 0.025 + 0.415 * (1 - values.night);
 
     for (let i = 0; i < lanternLights.length; i++) {
       setByte(lanternLights[i].color, palette.lampGlow);

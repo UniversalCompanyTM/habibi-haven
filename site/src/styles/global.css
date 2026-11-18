@@ -1098,24 +1098,37 @@ html.js [data-reveal]:focus-within {
   display: none;
 }
 
-.explorer__count {
-  flex: 1 1 100%;
+/* Both trailing lines sit on the SAME row as the sort and the Filters button, with a zero flex basis, so a
+   390px phone gets two rows out of the bar instead of three. They are the only text on the page allowed to
+   ellipsis — which is why the runtime clip audit excludes them and includes everything else. */
+.explorer__count,
+.explorer__src {
+  flex: 1 1 0%;
+  min-width: 0;
   margin: 0;
   font-size: var(--step--1);
   color: var(--mist-3);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Wide, the count belongs on the same line as the controls it describes. Narrow, it is a sentence and it
-   gets its own — nowrap on a phone would ellipsis the one number that tells a guest a filter is running. */
+.explorer__count {
+  margin-left: auto;
+}
+
+/* Narrow, the provenance sentence is the row that used to eat the menu, and the footer already says it in
+   full beside the explanation of why those rows are empty upstream. */
+@media (max-width: 62rem) {
+  .explorer__src {
+    display: none;
+  }
+}
+
 @media (min-width: 62rem) {
-  .explorer__count {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin-left: auto;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .explorer__src {
+    margin-left: 1rem;
   }
 }
 
@@ -1215,6 +1228,9 @@ html.js [data-reveal]:focus-within {
 
 .filters-toggle {
   display: inline-flex;
+  /* Never squeezed to make the count line fit: a control whose label truncates is worse than a control
+     that pushes the live number into its ellipsis. */
+  flex: 0 0 auto;
   align-items: center;
   gap: 0.45rem;
   padding: 0.5rem 0.9rem;

@@ -317,13 +317,6 @@ async function stopFrames() {
   `);
 }
 
-/** Frames per second that one named loop managed in a measurement window. */
-const loopRate = (stat, name) => {
-  const n = stat?.by?.[name] ?? 0;
-  if (!stat?.span) return null;
-  return Math.round((n / (stat.span / 1000)) * 10) / 10;
-};
-
 /**
  * The assertion every window shares: nothing that is not one of the five named loops held the page.
  * `unknown` is what an unattributed registration looks like, and a leak from a component that was renamed
@@ -1225,7 +1218,11 @@ const stillVisible = () =>
   `);
 const burstAt = async (value) => {
   const frames = [];
-  for (let i = 0; i < 6; i += 1) {
+  // Ten frames per hour, not six. The statistic below is a ratio of the hour gap to the standard error of
+  // the two averages, and the error falls with the square root of the sample: at six frames an honest 3.5%
+  // shift sits at 2.7× and reads as "the room is not relighting", when what is thin is the sample. Four
+  // more screenshots per hour is the cheapest way to make the claim mean what it says.
+  for (let i = 0; i < 10; i += 1) {
     if (i) await evaluate(`await new Promise((r) => setTimeout(r, 240)); return true;`);
     const frame = await shotRegion("[data-scene]", `hour-${value}-frame-${i + 1}`);
     if (frame) frames.push(frame);
@@ -1709,11 +1706,54 @@ if ((menuAmbient.by.ambient ?? 0) < 1) failures.push(`/menu ran ${menuAmbient.by
 if ((posterFrames.by.door ?? 0) > 1) failures.push(`/ under reduced motion the door armed ${posterFrames.by?.door ?? 0} frames — the poster tier draws one frame and stops`);
 if ((posterFrames.by.ambient ?? 0) > 0) failures.push(`/ under reduced motion the sky layer armed ${posterFrames.by?.ambient ?? 0} frames — the atmosphere is animation, and it is supposed to read the same preference the door does`);
 for (const [where, stat] of [["/ in view", inView], ["/ away", outOfView], ["/menu", menuFrames], ["/menu sky", menuAmbient], ["/ reduced motion", posterFrames]]) unknownLoop(where, stat);
-// The sky's own budget. It is capped at 24 fps in the component; the gate cannot measure a rate on a
-// software rasteriser that paints slower than that, so the assertion is one-directional and the number is
-// the point where "capped" has plainly failed.
-const ambientRate = loopRate(menuAmbient, "ambient");
-if (ambientRate !== null && ambientRate > 32) failures.push(`/menu: the sky layer ran ${ambientRate} fps against a 24 fps cap — the frame limiter is not holding`);
+// The sky's own budget, measured as draws rather than as callbacks — because those are not the same number,
+// and the first version of this gate got them confused and reported a working limiter as a broken one. The
+// component keeps one requestAnimationFrame chain alive so event-driven updates stay immediate, and skips the
+// GPU work inside it (Atmosphere.astro, `if (now - lastDraw < 1000 / FPS) return`). Counting rAF wake-ups, as
+// loopRate does, therefore reads the display rate (53.6 here) whatever the cap is; the claim "capped at 24 fps"
+// is about the thing that costs power. So the prototype's draw entry points are wrapped for one window and the
+// draws on the atmosphere canvas are counted, which is the only rate that can falsify the sentence in the file.
+const skyDraws = await evaluate(`
+    const canvas = document.querySelector("[data-atmosphere-canvas]");
+    if (!canvas) return { present: false };
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (!gl) return { present: true, noContext: true };
+    const tally = { sky: 0, other: 0 };
+    const protos = [window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype, window.WebGLRenderingContext && window.WebGLRenderingContext.prototype].filter(Boolean);
+    let patched = 0;
+    for (const proto of protos) {
+      for (const name of ["drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced"]) {
+        const orig = proto[name];
+        if (typeof orig !== "function" || orig.__hhCounted) continue;
+        const wrapped = function () {
+          // this.canvas, not the captured gl: one page can hold two contexts and the sentence is about the sky.
+          tally[this && this.canvas === canvas ? "sky" : "other"] += 1;
+          return orig.apply(this, arguments);
+        };
+        wrapped.__hhCounted = true;
+        proto[name] = wrapped;
+        patched += 1;
+      }
+    }
+    const t0 = performance.now();
+    await new Promise((r) => setTimeout(r, 1100));
+    const span = performance.now() - t0;
+    return {
+      present: true,
+      patched,
+      span: Math.round(span),
+      sky: tally.sky,
+      other: tally.other,
+      drawsPerSecond: Math.round((tally.sky / span) * 10000) / 10,
+    };
+  `);
+results.push({ path: "frames (sky draws)", value: skyDraws, errors: [], warnings: [] });
+if (!skyDraws.present) failures.push("/menu has no [data-atmosphere-canvas] — the layer that carries the sky on a page without a door is not in the document");
+else if (skyDraws.noContext) failures.push("/menu the atmosphere canvas has no WebGL context and no data-css fallback was asserted — the sky is either a gradient or nothing");
+else if (skyDraws.patched === 0) failures.push("/menu: no WebGL draw entry point could be wrapped, so the sky's frame budget is unmeasured rather than met");
+else if (skyDraws.sky === 0) failures.push(`/menu: the sky layer woke ${menuAmbient.by?.ambient ?? 0} times in ${menuAmbient.span}ms and issued 0 draw calls — a loop that paints nothing is still a loop on somebody's main thread`);
+else if (skyDraws.drawsPerSecond > 30)
+  failures.push(`/menu: the sky issued ${skyDraws.sky} draws in ${skyDraws.span}ms = ${skyDraws.drawsPerSecond} fps against a 24 fps cap — the limiter in Atmosphere.astro is not holding`);
 
 
 // The 30-frame probe counts frames, not seconds. On this machine a frame costs ~300 ms of software
@@ -2194,18 +2234,30 @@ const barGeo = await evaluate(`
     if (!bar) return { missing: true };
     const r = bar.getBoundingClientRect();
     const bg = cs(bar).backgroundColor;
+    /* Alpha, read the way Chrome actually serialises a token. A background of var(--bg-0) resolves through
+       color-mix() and comes back as oklab(0.88 -0.001 0.006) or oklab(… / 0.84), not as rgba() — a parser
+       that only knows rgb()/rgba() reads a real opacity as null and reports an opaque plate as a ghost.
+       The rule is the one CSS uses: a slash introduces the alpha, everything else is solid. */
     const alpha = (() => {
-      const m = /rgba?\\(([^)]*)\\)/.exec(bg);
-      if (!m) return null;
-      const parts = m[1].split(",").map((s) => parseFloat(s));
+      const s = String(bg);
+      const slash = s.indexOf("/");
+      if (slash > -1) return parseFloat(s.slice(slash + 1));
+      const m = /rgba?\\(([^)]*)\\)/.exec(s);
+      if (!m) return s.startsWith("rgb") ? null : 1;
+      const parts = m[1].split(/[,/\\s]+/).filter(Boolean).map(parseFloat);
       return parts.length > 3 ? parts[3] : 1;
     })();
-    // Anything whose own box is smaller than its content is clipped text. Two exclusions, both deliberate:
-    // .card__desc is clamped to three lines (that overflow is the design, and a long scraped description
-    // would trip it on dozens of cards), and .explorer__count is allowed to ellipsis on a narrow screen.
+    // Anything whose own box is smaller than its content is clipped text. Three exclusions, each
+    // deliberate: .card__desc is clamped to three lines (that overflow is the design, and a long scraped
+    // description would trip it on dozens of cards); .explorer__count and .explorer__src are the only
+    // lines allowed to ellipsis; and a .kin headline that has not been revealed yet is translated 105%
+    // inside its own mask, so its overflow is the animation waiting to happen, not a clipped word. That
+    // last one cost a run to learn: the audit reported "The kitchen" as overlapping text because the
+    // geometry battery measures the bar at load, before anything below the fold has arrived.
     const clipped = [];
     for (const el of document.querySelectorAll(".card__name, .card__price, .frame--type em, .frame__mark, .chips button, .section-head h2, .section-head h3")) {
       if (el.offsetParent === null) continue;
+      if (el.classList.contains("kin") && !el.classList.contains("is-in")) continue;
       if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
         clipped.push(el.className + ":" + (el.textContent || "").trim().slice(0, 22));
       }

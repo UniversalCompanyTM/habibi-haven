@@ -75,9 +75,17 @@ const priceBands = [
         <span class="filters-toggle__n" data-filters-n hidden>0</span>
       </button>
 
+      {/* Two lines of trailing text, deliberately split: the count is live and belongs beside the control
+          that changed it, the provenance is a standing fact about the dataset and is not part of any filter.
+          On a phone the provenance goes (the footer states it in full, and every card already says what its
+          own picture is) because a sticky bar whose third row is a sentence is the bar that was criticised
+          for covering the menu. */}
       <p class="meta explorer__count" aria-live="polite" data-count>
-        {menu.meta.items} of {menu.meta.items} items · {menu.meta.realPhotos} photographed, {menu.meta.illustratedPhotos}{" "}
-        illustrated, {menu.meta.placeholderPhotos} pending upstream
+        {menu.meta.items} of {menu.meta.items} items
+      </p>
+      <p class="meta explorer__src">
+        {menu.meta.realPhotos} photographed, {menu.meta.illustratedPhotos} illustrated, {menu.meta.placeholderPhotos}{" "}
+        pending upstream
       </p>
     </div>
 
@@ -288,7 +296,8 @@ const priceBands = [
         .map((b) => (b.textContent ?? "").trim().replace(" only", "").toLowerCase());
       live.textContent =
         visibleCount === cards.length
-          ? `${cards.length} of ${cards.length} items · ${menu.meta.realPhotos} photographed, ${menu.meta.illustratedPhotos} illustrated, ${menu.meta.placeholderPhotos} pending upstream`
+          ? // Byte-for-byte what the server rendered, so the line cannot flicker on hydration (item 17).
+            `${cards.length} of ${cards.length} items`
           : `${visibleCount} of ${cards.length}${state.q ? ` matching “${state.q}”` : ""}${
               tagWords.length ? ` · ${tagWords.join(" + ")}` : ""
             }${state.band ? ` · ${bandButtons.find((b) => b.dataset.band === state.band)?.textContent ?? ""}` : ""}.`;
