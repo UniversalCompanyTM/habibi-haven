@@ -1103,7 +1103,74 @@ not addressed by this tranche. The eight uncommitted files above are the whole c
 and the unit tests (`check-css: ok`, `tests: 110 passed`) and nothing heavier — the build, the audit and headless
 Chrome stay on the runners.
 
-## Risks / must-not-say
+### Amendment A20 — the copy was rewritten, and two new moving things have to answer to a hand
+
+A19d came back green (run `44287576318`, `verify` success, `pages` skipped because publishing is a separate
+local upload). The five problems the previous wave had introduced were all in the measurement rather than the
+page, and the run that fixed them reports the numbers this section now quotes:
+
+```
+relighting     10 frames/hour · cross 8.71 · withinDusk 2.82 · withinNoon 0.17
+               scatter 7.24 / 0.12 · sem 2.29 · snr 3.8 (floor 3) · margin 3.09
+               lumaDusk 47.23 vs lumaNoon 50.49 — the evening is the darker of the two
+sky cost       22 draw calls in 1105 ms = 19.9/s · patched 6 · other canvas 0 · floor 30/s
+bar, desktop   7.6rem tall · alpha 1 · backdrop-filter none · appearance none
+               0 elements with text clipped by their own box · first section 64 px of top padding
+bar, 390 px    folded 113 px (floor 150) · opened 299 px · refolded true
+```
+
+**A20 — item 7, the headings that did not survive being read once.** The owner named two: *"The room, at any
+hour you like"* and *"The six the kitchen leads with"*. Both were riddles rather than sentences — the first
+described a colour system, the second asked the reader to work out who the kitchen is and what "leading with"
+means. They are now `Drag the hour and the room changes with it` and `Six dishes their own menu marks as
+signature`, each with the fact that supports it in the paragraph under it. A third had a worse problem than
+style: `Three places to sit` sat above four cards, which is a sentence that is simply not true of the thing
+under it, so it reads `Courtyard, terrace, the room — and the door on Koinange Street`, naming all four in the
+order they appear. `/menu`'s `Table before you come` became `Set a table before you come`, because a heading
+that is a fragment is a label and a label is not an instruction. The remaining headings on the four routes were
+read in full and left alone: they already say one plain thing.
+
+**A20 — item 11, `ReviewSamples.astro`.** "Give users samples of the reviews, and that need to be shifting after
+sometime" is a request for a carousel, and a carousel of reviews is the one place on this site where it would
+have been easy to invent things. There is no review corpus: what exists is three third-party clips quoted
+verbatim with their links, four themes Google publishes with mention counts, and two rating panels at depths of
+541 and 3. So the rotator shows exactly those five — three quotations and two counted lines — and nothing else,
+with each sample's source and its denominator on the same card. The shift is a `setTimeout`, not a loop, so the
+frame gate is untouched; hovering or focusing a sample holds it; the Stop button is real and reports itself
+through `aria-pressed`, `Pause samples`/`Resume samples` and `aria-live` (which is `off` while the timer drives
+and `polite` only when a person does); arrows step, dots jump; reduced motion never starts the timer but keeps
+every sample reachable by hand. Inactive samples carry `inert`, so a hidden quotation is not a tab stop.
+Without JavaScript the first sample stays and the control row is absent rather than dead.
+
+**A20 — item 12, `Ticker.astro`.** The line used to walk ten captions and pause only on hover, which is not a
+control on a touchscreen and not a control for a keyboard. It now walks eighteen items: the six signature dishes
+at the kitchen's own prices, the hours of record with their zone, the price per person as the panel reports it,
+the median of 243 rows, how many rows are described and how many photographed, the plus code, the count of
+third-party clips — interleaved with the captions, which are quoted and marked as theirs. The emoji are our
+markers of what kind of fact follows, not decoration spliced into somebody's sentence. Holding it pauses the
+animation, dragging seeks it (`dx / halfWidth × cycle`, wound backwards, because moving the text right means
+turning the clock back), releasing hands it back, the button stops and starts it, and the arrow keys step it
+from the region itself. All of it acts on the CSS animation the browser was already running, reached through
+`getAnimations()` — no second loop of ours, so `frames (sky draws)` and the frame attribution stay as measured.
+Under reduced motion the stylesheet stops the keyframe, and the component notices (`animationName === "none"`)
+and hides its own button and hint rather than offering controls for a thing that is not moving.
+
+**New claims, asserted here and measured by the harness at `/ (review samples)`, `/ (review samples shift)`,
+`/ (review sample controls)` and `/ (the moving line)`.** One sample on screen, the rest `inert`; a keyboard
+`focus()` on a hidden sample's link is refused by the browser rather than merely not styled; the index changes
+inside 8.6 s untouched; pressing Stop holds the index across the same window; Next is +1 mod 5; the first dot
+lands on 0; one `is-on` after any sequence. For the line: `animation.playState` goes `running → paused` and
+back, `currentTime` does not drift 1 px of time in 1.2 s while stopped, a 120 px drag lands within 2 ms of the
+arithmetic above, the hold flag clears, and the text after release contains a price, an emoji and a quotation.
+These are written before the run. Nothing in this section claims A20 is green.
+
+**Left open, honestly.** Items 4 and 8 (more of the real imagery, in a gallery that earns its place), 5
+(lusion-grade transitions between selections), 9 (the 113-of-243 description ceiling), 16 and 17 (the WhatsApp
+payload and selection/data parity, both already built and tested at the unit level but not yet re-walked by this
+wave's harness) remain. Payments stay dark on instruction. The publish job is skipped by design; production gets
+the dist only when it is uploaded from a green run.
+
+
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
   and log the rest rather than smoothing it over.

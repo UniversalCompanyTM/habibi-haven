@@ -19,6 +19,7 @@ import HoursClock from "../components/HoursClock.astro";
 import SocialLinks from "../components/SocialLinks.astro";
 import DishCard from "../components/DishCard.astro";
 import DoorScene from "../components/DoorScene.astro";
+import ReviewSamples from "../components/ReviewSamples.astro";
 
 const f = menu.meta.facts;
 const signatures = signatureItems(menu);
@@ -100,7 +101,10 @@ const rooms = [
       <header class="section-head">
         <div>
           <p class="eyebrow">Sitting</p>
-          <h2 class="display--h2" data-kin>Three places to sit, and none of them rush you</h2>
+          {/* The old heading said "three places to sit" above four cards. The owner was right that the copy
+              did not make sense, and the reason was not style: the sentence did not match the thing under it.
+              This one names all four, in the order they appear, using the names the cards themselves carry. */}
+          <h2 class="display--h2" data-kin>Courtyard, terrace, the room — and the door on Koinange Street</h2>
         </div>
         <p class="meta dim">
           Photographs from the restaurant's own listings. {menu.meta.illustratedPhotos + menu.meta.placeholderPhotos} of the
@@ -158,7 +162,10 @@ const rooms = [
       <header class="section-head">
         <div>
           <p class="eyebrow">Ordering</p>
-          <h2 class="display--h2" data-kin>The six the kitchen leads with</h2>
+          {/* "The six the kitchen leads with" made a reader work out who the kitchen is and what leading
+              with means. The fact underneath is simpler and stronger than the phrasing: these six are
+              flagged signature in the restaurant's own menu data, in its own order. */}
+          <h2 class="display--h2" data-kin>Six dishes their own menu marks as signature</h2>
         </div>
         <p class="meta dim">
           Marked as signature in their own menu data, in the order they are listed there — not our
@@ -190,12 +197,15 @@ const rooms = [
   <section class="stage" id="the-day">
     <div class="shell grid-2">
       <div class="stack">
-        <p class="eyebrow">The light rig</p>
-        <h2 class="display--h2" data-kin>The room, at any hour you like</h2>
+        <p class="eyebrow">The hour dial</p>
+        {/* The sentence had to survive being read once, by someone who has never seen this page before and
+            is not thinking about colour systems. "The room, at any hour you like" described nothing; the
+            interaction and the fact are both plainer than the riddle was. */}
+        <h2 class="display--h2" data-kin>Drag the hour and the room changes with it</h2>
         <p class="lede">
-          The palette on this site is a clock. It is built from the Nairobi hour at build time, and the
-          dial writes the same two numbers every lit surface reads — so dragging it is not a theme
-          switch, it is the same rig the page arrived on, dialled.
+          This page is lit by a clock. It arrives coloured for the hour you opened it in Nairobi, and the
+          dial writes the same number every surface on the site reads — so 06:30 and 22:00 below are the
+          same room at two hours of one day, not two themes to choose from.
         </p>
         <dl class="facts">
           {
@@ -237,8 +247,13 @@ const rooms = [
           <p class="eyebrow">Staying</p>
           <h2 class="display--h2" data-kin>541 reviews, and the same things keep coming up</h2>
         </div>
-        <p class="meta dim">Two panels, shown side by side, never averaged into one number.</p>
+        <p class="meta dim">
+          The quotation below moves on a timer you can stop. The two panels after it do not move, and are
+          never averaged into one number.
+        </p>
       </header>
+
+      <ReviewSamples />
 
       <div class="grid-2">
         <div class="stack">

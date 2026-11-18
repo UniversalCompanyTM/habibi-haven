@@ -1,0 +1,224 @@
+---
+// ReviewSamples.astro — the reviews that exist, one at a time.
+//
+// Item 11 of the owner's list: "give the users samples of the reviews. And that need to be shifting
+// after sometime." The honest version of that is a problem, because there is no review corpus to sample
+// from. What the restaurant's public footprint actually gives is: three third-party clips quoted verbatim
+// with their links (`press.coverage`), four themes Google Maps publishes with their own mention counts
+// (`press.themes`), and two rating panels at wildly different depths (4.5 from 541, 3.7 from 3). This
+// rotator shows exactly those and nothing invented: no paraphrased five-star prose, no composite persona,
+// no review written to fill a slot. A "sample" here is either a quotation with its source or a count with
+// its panel.
+//
+// The shift is a timer, not an animation loop, so this component adds no rAF cost to the frame gate.
+// Every control is real, because the owner's standing rule is that a control must do something: the
+// arrows step, the dots jump to a sample, the button stops and starts the timer, hovering or tabbing into
+// a sample holds it while the reader is on it, and with reduced motion the timer never starts at all — the
+// arrows still work, so the content is not locked behind motion.
+//
+// Inactive samples carry `inert`, which takes them out of the tab order and the accessibility tree: a
+// keyboard reader cannot land inside a quotation that is not on screen. Without JavaScript the timer
+// cannot run, so the first sample stays and the control row is hidden by CSS rather than left as a row of
+// dead buttons; the full rating panels and the theme list remain on the page underneath, unrotated.
+import press from "../data/press.json";
+
+// The panel the theme counts come from, taken from the same object the rating cards render, so a number
+// cannot disagree with itself between the two places it appears.
+const gmaps = press.ratings.find((r) => r.panel === "Google Maps") ?? press.ratings[0];
+
+const clips = press.coverage.map((c) => ({
+  kind: c.kind === "video" ? "Their clip, linked" : "Visitor clips, aggregated",
+  text: c.quote,
+  quoted: true,
+  by: c.by,
+  url: c.url,
+  link: c.kind === "video" ? "Watch it on the platform" : "Open the aggregate",
+  note: c.how,
+}));
+
+// Only the themes with a count worth quoting on their own. The two dish themes stay in the static list
+// below them, where a row of two mentions reads as the small number it is instead of being dressed up.
+const counts = press.themes
+  .filter((t) => t.mentions >= 5)
+  .map((t) => ({
+    kind: "Named in reviews",
+    text: `“${t.theme}” is named in ${t.mentions} of the ${gmaps.reviews} ${gmaps.panel} reviews.`,
+    quoted: false,
+    by: t.panel,
+    url: gmaps.url,
+    link: `Read them on ${gmaps.panel}`,
+    note: "The phrase and the count are the panel's own labels, captured with the listing. Not a sentence we wrote for them.",
+  }));
+
+const slides = [...clips, ...counts];
+---
+
+<div class="rs" data-rs data-rs-state="idle" data-rs-index="0">
+  <p class="eyebrow eyebrow--amber">Samples, shifting</p>
+  <div
+    class="rs__stage"
+    role="group"
+    aria-roledescription="carousel"
+    aria-label="What people have said about Habibi Haven, one sample at a time"
+    aria-live="off"
+  >
+    {
+      slides.map((s, i) => (
+        <article
+          class:list={["rs__slide", { "is-on": i === 0 }]}
+          data-rs-slide
+          role="group"
+          aria-roledescription="slide"
+          aria-label={`${i + 1} of ${slides.length}: ${s.kind}`}
+          inert={i === 0 ? null : true}
+        >
+          <p class="rs__kind">
+            <span class="chip">{s.kind}</span>
+            <span class="meta dim">{s.by}</span>
+          </p>
+          {
+            s.quoted ? (
+              <blockquote class="rs__text">{s.text}</blockquote>
+            ) : (
+              <p class="rs__text">{s.text}</p>
+            )
+          }
+          <p class="rs__foot">
+            <a class="link-arrow" href={s.url} target="_blank" rel="noopener noreferrer">
+              {s.link}
+            </a>
+          </p>
+          <p class="rs__note meta dim">{s.note}</p>
+        </article>
+      ))
+    }
+  </div>
+
+  <div class="rs__bar">
+    <div class="rs__nav">
+      <button class="rs__btn" type="button" data-rs-prev aria-label="Previous sample">
+        ‹
+      </button>
+      <button class="rs__btn rs__btn--play" type="button" data-rs-play aria-pressed="false">
+        Pause samples
+      </button>
+      <button class="rs__btn" type="button" data-rs-next aria-label="Next sample">
+        ›
+      </button>
+    </div>
+    <div class="rs__dots" role="tablist" aria-label="Jump to a sample">
+      {
+        slides.map((s, i) => (
+          <button
+            class:list={["rs__dot", { "is-on": i === 0 }]}
+            type="button"
+            role="tab"
+            data-rs-dot
+            aria-selected={i === 0 ? "true" : "false"}
+            aria-label={`${s.kind} — sample ${i + 1}`}
+          >
+            <span class="sr-only">{s.kind}</span>
+          </button>
+        ))
+      }
+    </div>
+    <p class="rs__rule meta dim">
+      {clips.length} linked clips and {counts.length} counted themes move here. Everything else in the
+      record — the two rating panels and the two smaller dish themes — sits on this page unmoved, at its
+      real depth.
+    </p>
+  </div>
+</div>
+
+<script>
+  import { component } from "../lib/page.mjs";
+
+  // Seven seconds: long enough to read a two-line quotation at a normal pace, short enough that the
+  // section still moves while somebody is looking at it. Item 3 of the owner's list was about timing,
+  // and the previous rotator-like thing on the site (the ticker) runs a minute per loop — this is the
+  // other end of the same dial, chosen for reading rather than for ambience.
+  const HOLD = 7000;
+
+  component("[data-rs]", {
+    mount(root) {
+      const stage = root.querySelector(".rs__stage");
+      const slides = Array.from(root.querySelectorAll("[data-rs-slide]"));
+      const dots = Array.from(root.querySelectorAll("[data-rs-dot]"));
+      const play = root.querySelector("[data-rs-play]");
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+
+      let index = 0;
+      let timer = 0;
+      let manual = false;
+      let heldByPointer = false;
+      let heldByFocus = false;
+
+      const paint = (i) => {
+        index = (i + slides.length) % slides.length;
+        slides.forEach((s, k) => {
+          const on = k === index;
+          s.classList.toggle("is-on", on);
+          // `inert` is the only switch that removes a slide from both the tab order and the
+          // accessibility tree while leaving it in the grid cell that gives the stage its height.
+          if (on) s.removeAttribute("inert");
+          else s.setAttribute("inert", "");
+        });
+        dots.forEach((d, k) => {
+          d.classList.toggle("is-on", k === index);
+          d.setAttribute("aria-selected", String(k === index));
+        });
+        root.setAttribute("data-rs-index", String(index));
+      };
+
+      const sync = () => {
+        const paused = manual || heldByPointer || heldByFocus || reduced.matches;
+        clearTimeout(timer);
+        timer = 0;
+        if (!paused) timer = setTimeout(() => paintAndGo(index + 1), HOLD);
+        root.setAttribute("data-rs-state", paused ? "paused" : "playing");
+        if (play) {
+          play.setAttribute("aria-pressed", String(manual));
+          play.textContent = manual ? "Resume samples" : "Pause samples";
+          play.classList.toggle("is-manual", manual);
+        }
+        // Announce a change only when a person is driving it. An auto-advance that announces every
+        // seven seconds is a screen reader interrupting its own user on a timer.
+        stage?.setAttribute("aria-live", paused ? "polite" : "off");
+      };
+
+      const paintAndGo = (i) => {
+        paint(i);
+        sync();
+      };
+
+      const on = (node, ev, fn, opts) => {
+        node?.addEventListener(ev, fn, opts);
+        return () => node?.removeEventListener(ev, fn, opts);
+      };
+
+      const offs = [
+        on(root, "pointerenter", () => ((heldByPointer = true), sync())),
+        on(root, "pointerleave", () => ((heldByPointer = false), sync())),
+        on(root, "focusin", () => ((heldByFocus = true), sync())),
+        on(root, "focusout", () => ((heldByFocus = false), sync())),
+        on(root.querySelector("[data-rs-prev]"), "click", () => paintAndGo(index - 1)),
+        on(root.querySelector("[data-rs-next]"), "click", () => paintAndGo(index + 1)),
+        on(play, "click", () => ((manual = !manual), sync())),
+        ...dots.map((d, k) => on(d, "click", () => paintAndGo(k))),
+        (() => {
+          const rerun = () => sync();
+          reduced.addEventListener("change", rerun);
+          return () => reduced.removeEventListener("change", rerun);
+        })(),
+      ];
+
+      sync();
+
+      return () => {
+        clearTimeout(timer);
+        for (const off of offs) off?.();
+      };
+    },
+    unmount: (stop) => stop?.(),
+  });
+</script>

@@ -1,30 +1,252 @@
 ---
-// Ticker.astro — their caption language, moving.
+// Ticker.astro — the moving line, now something you can stop, and worth stopping for.
 //
-// The words are their own Instagram captions (site/src/data/voice.json, transcribed in
-// research/BRAND-FACTS.md §4), which is the cheapest way to sound like the restaurant without
-// writing copy that sounds like a model. The `--ticker-dur` custom property is the speed dial: the
-// track is duplicated, and the keyframe in global.css moves it by exactly -50%, so duration controls
-// the walk without changing the seam. Hover pauses it (global.css) and reduced-motion stops it and
-// wraps the track instead.
+// Item 12 of the owner's list asked for two things: that the line be pausable and draggable left/right
+// by holding it, and that the information on it be interesting rather than dry. Both were fair hits.
+// Before this change the ticker only paused on hover — which is not a control on a touchscreen, and not
+// a control at all for a keyboard — and it walked ten Instagram captions in a loop, which is ambience
+// rather than news.
+//
+// What it walks now is the factual surface of the place: the six dishes the kitchen itself marks as
+// signature with the kitchen's own prices, the hours of record with their zone, the price per person as
+// the panel reports it, the median of all 243 rows, how many are photographed and how many described, the
+// plus code, the count of third-party clips — interleaved with the captions, still verbatim and now
+// visibly quoted. Every string is built from `menu.json`/`press.json`/`voice.json` at build time, so a
+// price change moves the ticker without anybody editing a sentence. The emoji are our markers of what
+// kind of fact follows; the words inside the quotation marks are theirs, unchanged.
+//
+// The interaction is deliberately not a second animation loop. The line is still a CSS keyframe, and the
+// Web Animations API hands that same animation back through `getAnimations()`, so pausing is
+// `animation.pause()`, resuming is `animation.play()`, and dragging is a `currentTime` write — a seek on
+// the animation the browser is already running, not a requestAnimationFrame of our own. The frame gate in
+// scripts/verify-runtime.mjs therefore sees no new loop, and the count stays what it was.
+//
+// `currentTime` is in the animation's own timeline; the loop is one copy wide (the track holds two, and
+// `slide` translates -50%), so a horizontal drag of `dx` pixels maps to
+// `dx / halfWidth * cycleDuration` of time, subtracted because moving the text right means winding the
+// clock back. Wrapping with a positive modulo keeps the seek inside the loop instead of parking the track
+// in the gap where the second copy ends.
+//
+// Reduced motion is the honest special case: global.css turns the keyframe off and lets the line wrap, so
+// there is nothing to pause and nothing to scrub — and in that state the button and the hint stay hidden
+// rather than sitting there as controls that do nothing. Same rule with JavaScript off, where the timer
+// cannot run at all.
 import voice from "../data/voice.json";
+import press from "../data/press.json";
+import menu from "../data/menu.json";
+import { signatureItems, money } from "../lib/table.mjs";
+import { OPEN_LABEL, CLOSE_LABEL } from "../lib/hours.mjs";
 
-const { items = voice.captions, speed = 46 } = Astro.props;
-const track = items.slice(0, 8);
+const f = menu.meta.facts;
+const sigs = Object.fromEntries(signatureItems(menu).map((s) => [s.id, s]));
+// Our markers, chosen per row: what kind of thing the line is about to tell you.
+const glyph = {
+  "full-mandy": "🐐",
+  sinia: "🍖",
+  "lamb-chops": "🔥",
+  "chicken-biryani": "🍛",
+  "karak-chai": "☕",
+  "white-forest-cake-2kg": "🎂",
+};
+
+const dish = (id, note) => ({
+  mark: glyph[id],
+  text: `${sigs[id].name} ${money(sigs[id].price)}${note ? ` · ${note}` : ""}`,
+});
+// Their words, in quotation marks, with a marker that says whose they are.
+const said = (i) => ({ mark: "💬", text: `“${voice.captions[i]}”` });
+
+const items = [
+  said(1),
+  dish("full-mandy", "the goat dish they lead with"),
+  { mark: "☕", text: `Karak chai from ${OPEN_LABEL}, ${money(sigs["karak-chai"].price)} a cup` },
+  said(7),
+  { mark: "⭐", text: `${f.rating} on Google Maps, from ${f.reviews} reviews` },
+  { mark: "🕯", text: `Open ${OPEN_LABEL}–${CLOSE_LABEL}, ${f.hoursOfRecord.days}, ${f.hoursOfRecord.zone}` },
+  said(6),
+  { mark: "📍", text: `${f.address} · plus code ${f.plusCode}` },
+  dish("lamb-chops", "with mint leaves"),
+  { mark: "💰", text: press.ratings[0].price },
+  said(3),
+  {
+    mark: "🍽",
+    text: `${menu.meta.items} rows on their menu · median ${money(menu.meta.median)} · ${menu.meta.described} described · ${menu.meta.realPhotos} photographed`,
+  },
+  said(4),
+  dish("sinia", "goat and grilled chicken together"),
+  { mark: "🌿", text: `${menu.meta.families} rooms, ${menu.meta.sections} sections, one garden courtyard` },
+  { mark: "🎥", text: `${press.coverage.length} clips about the place — linked, never re-hosted` },
+  said(0),
+  dish("chicken-biryani", "spicy, with biryani rice"),
+];
+
+const track = Astro.props.items ?? items;
+const speed = Astro.props.speed ?? 60;
 ---
 
-<div class="ticker" style={`--ticker-dur: ${speed}s`}>
+<div
+  class="ticker"
+  data-ticker-root
+  data-ticker-state="idle"
+  role="region"
+  aria-label="News and facts about Habibi Haven, moving. Hold it or press the button to stop; drag or use the arrow keys to read along."
+  tabindex="0"
+  style={`--ticker-dur: ${speed}s`}
+>
   <div class="ticker__track" data-ticker>
     {
-      // two copies of the same list: the animation translates -50%, so the second copy is the loop
+      // two copies of the same list: the keyframe translates -50%, so the second copy is the loop
       [0, 1].map((copy) =>
         track.map((line, i) => (
           <span class="ticker__item" aria-hidden={copy === 1 ? "true" : null}>
-            {line}
-            {copy === 0 && i === 0 ? <span class="sr-only"> — captions from the restaurant&rsquo;s own Instagram</span> : null}
+            <span class="ticker__mark" aria-hidden="true">
+              {line.mark}
+            </span>
+            {line.text}
+            {copy === 0 && i === 0 ? (
+              <span class="sr-only">
+                {" "}
+                — prices and counts come from the kitchen&rsquo;s own menu data; quoted lines are
+                captions from the restaurant&rsquo;s Instagram.
+              </span>
+            ) : null}
           </span>
         ))
       )
     }
   </div>
+
+  <div class="ticker__ctl">
+    <span class="ticker__hint meta dim" data-ticker-hint>Hold to stop · drag to read</span>
+    {/* Rendered hidden, because without JavaScript or under reduced motion there is no animation to
+        control. The component unhides it only after confirming a live animation exists. */}
+    <button class="ticker__btn" type="button" data-ticker-play aria-pressed="false" hidden>
+      Stop
+    </button>
+  </div>
 </div>
+
+<script>
+  import { component } from "../lib/page.mjs";
+
+  const mod = (n, m) => ((n % m) + m) % m;
+
+  component("[data-ticker-root]", {
+    mount(root) {
+      const track = root.querySelector("[data-ticker]");
+      const btn = root.querySelector("[data-ticker-play]");
+      const hint = root.querySelector("[data-ticker-hint]");
+      const anims = () => (typeof track.getAnimations === "function" ? track.getAnimations() : []);
+
+      // Reduced motion: the stylesheet stopped the keyframe, so there is nothing to pause, scrub or
+      // step. Leave the button hidden and the hint false rather than shipping a dead control.
+      if (getComputedStyle(track).animationName === "none" || anims().length === 0) {
+        if (btn) btn.hidden = true;
+        if (hint) hint.hidden = true;
+        root.setAttribute("data-ticker-state", "static");
+        return;
+      }
+
+      btn.hidden = false;
+
+      let manual = false;
+      let holding = false;
+      let hovering = false;
+      let startX = 0;
+      let startT = 0;
+
+      const cycle = () => {
+        const timing = anims()[0]?.effect?.getComputedTiming?.();
+        return Number(timing?.duration) > 0 ? Number(timing.duration) : 1;
+      };
+      // One loop is one copy of the list wide; the track holds two.
+      const halfWidth = () => Math.max(track.scrollWidth / 2, 1);
+
+      const apply = () => {
+        const stop = manual || holding || hovering;
+        for (const a of anims()) {
+          if (stop) a.pause();
+          else a.play();
+        }
+        root.setAttribute("data-ticker-state", stop ? "paused" : "playing");
+        btn.setAttribute("aria-pressed", String(manual));
+        btn.textContent = manual ? "Run" : "Stop";
+      };
+
+      const seek = (ms) => {
+        const c = cycle();
+        for (const a of anims()) a.currentTime = mod(ms, c);
+        root.setAttribute("data-ticker-time", Math.round(mod(ms, c)).toString());
+      };
+
+      const on = (node, ev, fn, opts) => {
+        node?.addEventListener(ev, fn, opts);
+        return () => node?.removeEventListener(ev, fn, opts);
+      };
+
+      const offs = [
+        on(root, "pointerenter", () => ((hovering = true), apply())),
+        on(root, "pointerleave", () => ((hovering = false), apply())),
+
+        on(root, "pointerdown", (e) => {
+          // The button is inside the moving line; a press on it must not also start a drag.
+          if (e.target.closest("button")) return;
+          holding = true;
+          startX = e.clientX;
+          startT = Number(anims()[0]?.currentTime ?? 0);
+          root.setAttribute("data-ticker-hold", "true");
+          try {
+            root.setPointerCapture(e.pointerId);
+          } catch {
+            /* a capture the browser refuses is not worth losing the drag over */
+          }
+          apply();
+        }),
+
+        on(root, "pointermove", (e) => {
+          if (!holding) return;
+          const dx = e.clientX - startX;
+          root.setAttribute("data-ticker-shift", String(Math.round(dx)));
+          seek(startT - (dx / halfWidth()) * cycle());
+        }),
+
+        on(root, "pointerup", () => {
+          if (!holding) return;
+          holding = false;
+          root.removeAttribute("data-ticker-hold");
+          apply();
+        }),
+        on(root, "pointercancel", () => {
+          if (!holding) return;
+          holding = false;
+          root.removeAttribute("data-ticker-hold");
+          apply();
+        }),
+
+        // Keyboard: the line is a focusable region, and the arrows move it the way a drag does. A step
+        // also stops the line, because a reader who is stepping through text does not want it running on.
+        on(root, "keydown", (e) => {
+          if (e.target !== root) return;
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          manual = true;
+          apply();
+          const step = ((e.key === "ArrowRight" ? -1 : 1) * cycle()) / 24;
+          seek(Number(anims()[0]?.currentTime ?? 0) + step);
+        }),
+
+        on(btn, "click", () => {
+          manual = !manual;
+          apply();
+        }),
+      ];
+
+      apply();
+
+      return () => {
+        for (const off of offs) off?.();
+      };
+    },
+    unmount: (stop) => stop?.(),
+  });
+</script>

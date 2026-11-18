@@ -720,14 +720,84 @@ html.js [data-reveal]:focus-within {
   will-change: transform;
 }
 
-.ticker:hover .ticker__track {
+/* Hover-pause is the fallback for a page whose JavaScript never ran. Once it does, the component owns
+   the state through the Web Animations API instead (Ticker.astro), because a hover rule is not a control
+   on a touchscreen and not a control for a keyboard — and two owners of one play-state is how a line
+   ends up running when the reader pressed Stop. */
+html:not(.js) .ticker:hover .ticker__track {
   animation-play-state: paused;
+}
+
+/* The row is a draggable surface: grab tells you before you press, and the focus ring says the arrow
+   keys work from here. `touch-action` keeps a vertical swipe a vertical swipe. */
+.ticker {
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.ticker[data-ticker-hold="true"] {
+  cursor: grabbing;
+}
+
+.ticker:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
+.ticker__mark {
+  font-size: 1.05em;
+  line-height: 1;
+  /* Their words get a marker, our facts get a marker; neither is allowed to look like the other. */
+  filter: saturate(1.1);
+}
+
+.ticker__ctl {
+  position: absolute;
+  z-index: 2;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  /* The line keeps moving underneath the controls, so the pad needs the surface colour behind it. */
+  padding-left: 0.9rem;
+  background: linear-gradient(to right, transparent, var(--bg-1) 34%);
+}
+
+html:not(.js) .ticker__hint {
+  display: none;
+}
+
+.ticker__btn {
+  font: inherit;
+  font-size: var(--step--1);
+  letter-spacing: 0.02em;
+  color: var(--mist-2);
+  background: color-mix(in oklab, var(--bg-3) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--teal) 22%, transparent);
+  border-radius: 999px;
+  padding: 0.24rem 0.72rem;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+
+.ticker__btn:hover,
+.ticker__btn:focus-visible {
+  color: var(--mist);
+  border-color: var(--teal);
+}
+
+.ticker__btn[aria-pressed="true"] {
+  color: var(--teal);
+  border-color: color-mix(in oklab, var(--teal) 60%, transparent);
 }
 
 .ticker__item {
   display: inline-flex;
   align-items: center;
-  gap: 2.4rem;
+  gap: 0.55rem;
   font-family: var(--display);
   font-size: var(--step-1);
   letter-spacing: -0.01em;
@@ -756,6 +826,185 @@ html.js [data-reveal]:focus-within {
   }
   .pulse {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------- review samples */
+
+/* One quotation at a time, stacked in a single grid cell so the stage never jumps as the samples change:
+   the tallest sample sets the height once, and a swap moves nothing around it. That is the whole reason
+   for `grid-area: 1 / 1` rather than absolute positioning — an absolutely positioned stack would take its
+   height from nothing and need a fixed pixel box, which breaks the first thing a reader does on a phone
+   (rotate it).
+
+   `inert` does the interactive part; opacity does the visual part. Durations come from --dur-2, which
+   prefers-reduced-motion already collapses, so there is no reduce block here (rule 2 at the top of this
+   file). Without JavaScript only the first sample is ever marked `is-on`, and the control row is hidden by
+   the component's own `hidden` attributes rather than left as dead buttons. */
+.rs {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rs__stage {
+  display: grid;
+  min-height: 12rem;
+}
+
+.rs__slide {
+  grid-area: 1 / 1;
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid color-mix(in oklab, var(--teal) 16%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--bg-1) 82%, transparent);
+  box-shadow: var(--lift-1);
+  opacity: 0;
+  transform: translateY(0.5rem);
+  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+
+.rs__slide.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.rs__kind {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.rs__text {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--step-1);
+  line-height: 1.32;
+  color: var(--mist);
+  /* Long quotations are the reason the stage has a min-height: a two-line and a four-line sample should
+     not read as two different objects. Clamping here would cut a quotation short, which is the one thing
+     a quoted line must not do. */
+  text-wrap: pretty;
+}
+
+blockquote.rs__text::before {
+  content: "\201C";
+}
+
+blockquote.rs__text::after {
+  content: "\201D";
+}
+
+.rs__foot,
+.rs__note {
+  margin: 0;
+}
+
+.rs__bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.rs__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rs__btn {
+  font: inherit;
+  font-size: var(--step--1);
+  color: var(--mist-2);
+  background: color-mix(in oklab, var(--bg-3) 60%, transparent);
+  border: 1px solid color-mix(in oklab, var(--teal) 20%, transparent);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  min-height: 34px;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+
+.rs__btn:hover,
+.rs__btn:focus-visible {
+  color: var(--mist);
+  border-color: var(--teal);
+}
+
+.rs__btn--play {
+  min-width: 8.6rem;
+}
+
+.rs__btn--play[aria-pressed="true"] {
+  color: var(--teal);
+  border-color: color-mix(in oklab, var(--teal) 55%, transparent);
+}
+
+.rs__dots {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* The dot is 8 px, and the button around it is 24 px — the target the touch guidelines ask for, without
+   the row reading as a row of large circles. Growing the hit area with an overlapping pseudo-element was
+   the obvious trick and the wrong one: at this gap the boxes would overlap, and a press between two dots
+   would choose one of them silently. */
+.rs__dot {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.rs__dot::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--teal) 45%, transparent);
+  background: transparent;
+  transition: background-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-spring),
+    border-color var(--dur-1) var(--ease-out);
+}
+
+.rs__dot:hover::after,
+.rs__dot:focus-visible::after {
+  border-color: var(--teal);
+}
+
+.rs__dot:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.rs__dot.is-on::after {
+  background: var(--teal);
+  border-color: var(--teal);
+  transform: scale(1.18);
+}
+
+.rs__rule {
+  flex: 1 1 14rem;
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 40rem) {
+  .rs__stage {
+    min-height: 14rem;
+  }
+  .rs__rule {
+    text-align: left;
   }
 }
 

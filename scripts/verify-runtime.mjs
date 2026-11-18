@@ -1359,6 +1359,14 @@ const poster = await evaluate(`
   const q = (s) => document.querySelector(s);
   const all = (s) => [...document.querySelectorAll(s)];
   const door = q("[data-door]");
+  const rs = q("[data-rs]");
+  const tick = q("[data-ticker-root]");
+  const track = q("[data-ticker]");
+  // Two of the moving things on this page are new answers to the owner's list, and both have to behave
+  // when motion is asked for: the review samples must stop advancing but keep every sample reachable by
+  // hand, and the ticker must not offer a Stop button for a line that is not moving.
+  const indexBefore = rs ? Number(rs.getAttribute("data-rs-index")) : null;
+  q("[data-rs-next]")?.click();
   return {
     tier: door ? door.dataset.tier : null,
     reason: door ? door.dataset.tierReason : null,
@@ -1368,6 +1376,13 @@ const poster = await evaluate(`
     heroText: q("h1") ? q("h1").textContent.trim().slice(0, 44) : null,
     cards: all("[data-card]").length,
     stuckAtLoad: all("[data-reveal]").filter((el) => Number(getComputedStyle(el).opacity) < 0.1).length,
+    samples: all("[data-rs-slide]").length,
+    rsState: rs ? rs.getAttribute("data-rs-state") : null,
+    rsStepped: rs ? Number(rs.getAttribute("data-rs-index")) - indexBefore : null,
+    tickerState: tick ? tick.getAttribute("data-ticker-state") : null,
+    tickerAnim: track ? getComputedStyle(track).animationName : null,
+    tickerCtlHidden: q("[data-ticker-play]") ? q("[data-ticker-play]").hidden : null,
+    tickerHintHidden: q("[data-ticker-hint]") ? q("[data-ticker-hint]").hidden : null,
   };
 `);
 drain();
@@ -1376,6 +1391,12 @@ if (poster.tier !== "poster") failures.push(`/ a browser asking for reduced moti
 if (poster.doorCanvas) failures.push("/ under reduced motion the door mounted a canvas anyway — the WebGL branch is supposed to stop at poster");
 if (!poster.stillPainted) failures.push("/ under reduced motion the CSS photograph is not painted, so the fallback has nothing to show");
 if (poster.stuckAtLoad > 0) failures.push(`/ under reduced motion ${poster.stuckAtLoad} reveal element(s) sit at opacity 0 at load — motion was removed and the content with it`);
+if (poster.samples < 5) failures.push(`/ under reduced motion the review rotator has ${poster.samples} samples — the count comes from press.json and motion cannot change it`);
+if (poster.rsState !== "paused") failures.push(`/ the review samples read state ${JSON.stringify(poster.rsState)} under reduced motion, not paused — a timer that moves text is motion, and this one has to obey`);
+if (poster.rsStepped !== 1) failures.push(`/ under reduced motion the rotator's Next button moved ${poster.rsStepped} sample(s) — motion off must not mean content unreachable`);
+if (poster.tickerState !== "static") failures.push(`/ the ticker reports ${JSON.stringify(poster.tickerState)} under reduced motion instead of static — it is claiming to control an animation it does not have`);
+if (poster.tickerAnim !== "none") failures.push(`/ under reduced motion the ticker track still runs animation-name ${JSON.stringify(poster.tickerAnim)} — the stylesheet is the layer that stops it`);
+if (poster.tickerCtlHidden !== true || poster.tickerHintHidden !== true) failures.push("/ under reduced motion the ticker still shows a Stop button or a drag hint for a line that is not moving — a control that does nothing is worse than no control");
 
 await goto("/menu");
 const posterMenu = await evaluate(`
@@ -2339,6 +2360,223 @@ if (fold.after.barH <= fold.before.barH) failures.push(`/menu: opening the filte
 if (!fold.refolded) failures.push("/menu: tapping Filters a second time did not fold the panel back");
 await inPage("Emulation.clearDeviceMetricsOverride", {});
 await goto("/menu");
+
+// ------------------------------------------- review samples and the moving line
+/* ---- M-ter: two new moving things, and both have to answer to a hand
+
+   Item 11 asked for samples of the reviews that shift after a while; item 12 asked for the ticker to be
+   pausable, draggable left and right, and worth reading. Those are opposite failures waiting to happen:
+   a rotator that moves but cannot be stopped is a WCAG 2.2.2 problem and a reading problem, and one that
+   can be stopped but never moves is the complaint the owner actually made. So each claim is measured:
+
+     · the samples exist, one is shown, the rest are `inert`, and a keyboard cannot land inside a hidden
+       quotation — proven by actually calling focus() on its link and checking it was refused;
+     · with nobody touching it, the sample changes on its own inside the declared window;
+     · the Stop button stops it, and it stays stopped over the same window;
+     · Next steps by one, a dot jumps to one, and releasing Stop starts it again;
+     · the ticker's own animation is what the controls act on — Stop pauses it and the clock does not
+       drift, a drag seeks the track by exactly the arithmetic the component documents, and releasing
+       resumes from where the reader put it;
+     · the line carries the facts it now claims to carry: a price, an emoji, a quotation.
+
+   The pointer is parked in the corner first, because both components treat a hover as a hold, and a
+   virtual cursor left over from the cursor battery would read as a reader with a finger on it. */
+await inPage("Input.dispatchMouseEvent", { type: "mouseMoved", x: 4, y: 4, buttons: 0 });
+await goto("/");
+const samples = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const rs = q("[data-rs]");
+    if (!rs) return { missing: true };
+    const slides = [...rs.querySelectorAll("[data-rs-slide]")];
+    const shown = slides.filter((s) => s.classList.contains("is-on"));
+    const off = slides.find((s) => !s.classList.contains("is-on"));
+    // A hidden quotation must not be a tab stop. This is the real test, not a grep for an attribute:
+    // ask the browser to focus a link inside it and see whether it obeys.
+    const link = off ? off.querySelector("a") : null;
+    let focusRefused = null;
+    if (link) {
+      link.focus();
+      focusRefused = document.activeElement !== link;
+    }
+    const quotes = [...rs.querySelectorAll("blockquote")].map((b) => b.textContent.trim());
+    return {
+      missing: false,
+      slides: slides.length,
+      shown: shown.length,
+      inertOff: slides.filter((s) => !s.classList.contains("is-on")).every((s) => s.hasAttribute("inert")),
+      focusRefused,
+      state: rs.getAttribute("data-rs-state"),
+      index: Number(rs.getAttribute("data-rs-index")),
+      live: rs.querySelector(".rs__stage").getAttribute("aria-live"),
+      dots: rs.querySelectorAll("[data-rs-dot]").length,
+      selected: rs.querySelectorAll('[data-rs-dot][aria-selected="true"]').length,
+      links: rs.querySelectorAll("[data-rs-slide] a[target=_blank]").length,
+      quoted: quotes.length,
+      quoteSample: quotes[0] ? quotes[0].slice(0, 60) : null,
+      hasCounts: /of the 541 Google Maps reviews/.test(rs.textContent),
+      rel: [...rs.querySelectorAll("a")].every((a) => a.rel.includes("noopener")),
+    };
+  `);
+const samplesLogged = drain();
+results.push({ path: "/ (review samples)", value: samples, errors: samplesLogged.errors, warnings: samplesLogged.warnings });
+if (samples.missing) {
+  failures.push("/ has no review rotator — item 11 of the owner's list is unanswered");
+} else {
+  if (samples.slides < 5) failures.push(`/ the rotator shows ${samples.slides} samples; press.json holds 3 linked clips and the themes with double-digit counts, so a missing one is a build bug, not a design choice`);
+  if (samples.shown !== 1) failures.push(`/ ${samples.shown} review samples are on screen at once — they are stacked in one cell, so this is the transition not landing`);
+  if (!samples.inertOff) failures.push("/ a review sample that is not on screen is still interactive — the reader would be tabbing into a quotation they cannot see");
+  if (samples.focusRefused !== true) failures.push("/ a keyboard can focus a link inside a hidden review sample, despite the inert attribute — the sample is invisible, not unreachable");
+  if (samples.state !== "playing") failures.push(`/ the rotator loaded in state ${JSON.stringify(samples.state)} — with nobody touching it and motion allowed, it must be moving (item 11) but not before the guest has seen the first one`);
+  if (samples.live !== "off") failures.push(`/ the rotator's live region is "${samples.live}" while it auto-advances — a timer that announces itself every seven seconds interrupts the reader`);
+  if (samples.dots !== samples.slides || samples.selected !== 1) failures.push(`/ the rotator has ${samples.dots} dots for ${samples.slides} samples and ${samples.selected} selected — the dot row is the map of what exists`);
+  if (samples.links !== samples.slides || !samples.rel) failures.push(`/ ${samples.links} of ${samples.slides} samples link out to their source, and cross-origin safety reads ${samples.rel} — a quoted review without a way to read it is an accusation`);
+  if (samples.quoted < 3) failures.push(`/ the rotator quotes ${samples.quoted} block(s) — the third-party clips are verbatim and must not arrive rewritten as prose`);
+  if (!samples.hasCounts) failures.push("/ the counted themes are not stating their panel and depth (\"of the 541 Google Maps reviews\") — a theme with no denominator is a mood, not a finding");
+}
+
+// Does it actually shift on its own? The owner's words were "shifting after sometime", so the claim is
+// timed against the component's own window rather than eyeballed.
+const shift = await evaluate(`
+    const rs = document.querySelector("[data-rs]");
+    const before = Number(rs.getAttribute("data-rs-index"));
+    await new Promise((r) => setTimeout(r, 8600));
+    const after = Number(rs.getAttribute("data-rs-index"));
+    return { before, after, state: rs.getAttribute("data-rs-state") };
+  `);
+const shiftLogged = drain();
+results.push({ path: "/ (review samples shift)", value: shift, errors: shiftLogged.errors, warnings: shiftLogged.warnings });
+if (!samples.missing && shift.after === shift.before) {
+  failures.push(`/ the review sample was still index ${shift.before} after 8.6 seconds — the owner asked for the samples to move by themselves, and the timer is the answer to that`);
+}
+
+// Every control, pressed.
+const controls = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const rs = q("[data-rs]");
+    const play = q("[data-rs-play]");
+    const slides = rs.querySelectorAll("[data-rs-slide]").length;
+    const at = Number(rs.getAttribute("data-rs-index"));
+    play.click();
+    const pausedAt = Number(rs.getAttribute("data-rs-index"));
+    const state = rs.getAttribute("data-rs-state");
+    const pressed = play.getAttribute("aria-pressed");
+    const live = rs.querySelector(".rs__stage").getAttribute("aria-live");
+    const label = play.textContent.trim();
+    await new Promise((r) => setTimeout(r, 8600));
+    const heldAt = Number(rs.getAttribute("data-rs-index"));
+    q("[data-rs-next]").click();
+    const stepped = Number(rs.getAttribute("data-rs-index"));
+    q("[data-rs-dot]").click();
+    const jumped = Number(rs.getAttribute("data-rs-index"));
+    const onCount = rs.querySelectorAll(".rs__slide.is-on").length;
+    const inertNow = [...rs.querySelectorAll("[data-rs-slide]")].filter((s) => !s.classList.contains("is-on") && !s.hasAttribute("inert")).length;
+    play.click();
+    return {
+      at, pausedAt, state, pressed, live, label, heldAt, stepped, jumped, onCount, inertNow,
+      resumed: rs.getAttribute("data-rs-state"),
+      pressedAfter: play.getAttribute("aria-pressed"),
+      slides,
+    };
+  `);
+const controlsLogged = drain();
+results.push({ path: "/ (review sample controls)", value: controls, errors: controlsLogged.errors, warnings: controlsLogged.warnings });
+if (!samples.missing) {
+  if (controls.state !== "paused" || controls.pressed !== "true") failures.push(`/ pressing Stop left the rotator ${JSON.stringify(controls.state)} with aria-pressed ${JSON.stringify(controls.pressed)} — the button is not reporting what it did`);
+  if (!/Resume/.test(controls.label)) failures.push(`/ the Stop button reads "${controls.label}" while paused — a reader cannot tell what pressing it again does`);
+  if (controls.live !== "polite") failures.push(`/ a paused rotator has aria-live "${controls.live}" — when a person is driving the samples, their screen reader has to follow`);
+  if (controls.heldAt !== controls.pausedAt) failures.push(`/ the samples kept advancing while stopped (${controls.pausedAt} → ${controls.heldAt}) — "pause" is a decoration, which is the standing rule this site is built to`);
+  if (controls.stepped !== (controls.pausedAt + 1) % controls.slides) failures.push(`/ Next went ${controls.pausedAt} → ${controls.stepped}, not +1 mod ${controls.slides}`);
+  if (controls.jumped !== 0) failures.push(`/ the first dot jumped to sample ${controls.jumped} — the dots are a map, and a wrong map is worse than none`);
+  if (controls.onCount !== 1) failures.push(`${controls.onCount} samples marked as shown after using the controls — the swap is leaving two on screen`);
+  if (controls.inertNow !== 0) failures.push(`${controls.inertNow} sample(s) are hidden but not inert after the controls were used — a keyboard would land in a quotation nobody is reading`);
+  if (controls.resumed !== "playing" || controls.pressedAfter !== "false") failures.push(`/ releasing Stop left the rotator ${JSON.stringify(controls.resumed)} / aria-pressed ${JSON.stringify(controls.pressedAfter)}`);
+}
+
+// The ticker: one CSS animation, and the controls must act on that same animation rather than on a
+// second loop of our own.
+const line = await evaluate(`
+    const q = (s) => document.querySelector(s);
+    const root = q("[data-ticker-root]");
+    if (!root) return { missing: true };
+    const track = q("[data-ticker]");
+    const btn = q("[data-ticker-play]");
+    const anim = () => track.getAnimations()[0];
+    const mod = (n, m) => ((n % m) + m) % m;
+    const out = {};
+    out.buttonHiddenAtLoad = btn.hidden;
+    out.stateAtLoad = root.getAttribute("data-ticker-state");
+    out.playStateAtLoad = anim().playState;
+    const cycle = Number(anim().effect.getComputedTiming().duration);
+    out.cycle = cycle;
+    out.halfWidth = Math.round(track.scrollWidth / 2);
+    out.items = track.querySelectorAll('.ticker__item:not([aria-hidden="true"])').length;
+    out.hasPrice = /KSh /.test(track.textContent);
+    out.hasEmoji = /\\p{Extended_Pictographic}/u.test(track.textContent);
+    out.hasQuote = /\\u201c/.test(track.textContent);
+    out.text = track.textContent.replace(/\\s+/g, " ").trim().slice(0, 96);
+
+    btn.click();
+    out.stopState = root.getAttribute("data-ticker-state");
+    out.stopPressed = btn.getAttribute("aria-pressed");
+    out.stopPlayState = anim().playState;
+    const tStop = Number(anim().currentTime);
+    await new Promise((r) => setTimeout(r, 1200));
+    out.driftWhileStopped = Math.round(Number(anim().currentTime) - tStop);
+    btn.click();
+    out.runPlayState = anim().playState;
+
+    root.focus();
+    out.focusIsRoot = document.activeElement === root;
+    const tKey = Number(anim().currentTime);
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    out.keyMoved = Math.round(Number(anim().currentTime)) !== Math.round(tKey);
+    out.keyPaused = anim().playState;
+    out.keyPressed = btn.getAttribute("aria-pressed");
+    btn.click();
+    await new Promise((r) => setTimeout(r, 150));
+
+    const rect = root.getBoundingClientRect();
+    const y = Math.round(rect.top + rect.height / 2);
+    const x0 = Math.round(rect.left + 240);
+    const send = (type, x) => root.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse", isPrimary: true, clientX: x, clientY: y,
+    }));
+    send("pointerdown", x0);
+    out.holdState = root.getAttribute("data-ticker-state");
+    out.holdPlayState = anim().playState;
+    const t0 = Number(anim().currentTime);
+    send("pointermove", x0 + 120);
+    out.seeked = Number(anim().currentTime);
+    out.seekError = Math.abs(out.seeked - mod(t0 - (120 / out.halfWidth) * cycle, cycle));
+    out.shiftAttr = root.getAttribute("data-ticker-shift");
+    send("pointerup", x0 + 120);
+    out.releaseState = root.getAttribute("data-ticker-state");
+    out.releasePlayState = anim().playState;
+    out.holdAttrCleared = !root.hasAttribute("data-ticker-hold");
+    const tAfter = Number(anim().currentTime);
+    await new Promise((r) => setTimeout(r, 500));
+    out.movedAfterRelease = Number(anim().currentTime) !== tAfter;
+    return out;
+  `);
+const lineLogged = drain();
+results.push({ path: "/ (the moving line)", value: line, errors: lineLogged.errors, warnings: lineLogged.warnings });
+if (line.missing) {
+  failures.push("/ has no [data-ticker-root] — the ticker the owner asked to be able to stop is gone");
+} else {
+  if (line.buttonHiddenAtLoad) failures.push("/ the ticker's Stop button is still hidden with a running animation — the control exists but the reader cannot see it");
+  if (line.stateAtLoad !== "playing" || line.playStateAtLoad !== "running") failures.push(`/ the ticker loaded ${JSON.stringify(line.stateAtLoad)} / ${JSON.stringify(line.playStateAtLoad)} — with motion allowed and nothing touching it, it moves`);
+  if (line.items < 12) failures.push(`/ the ticker walks ${line.items} facts; it used to walk ten captions and the owner called it dry — the factual surface is now most of the line`);
+  if (!line.hasPrice || !line.hasEmoji || !line.hasQuote) failures.push(`/ the line is missing its content claims (price ${line.hasPrice}, emoji ${line.hasEmoji}, quoted caption ${line.hasQuote}): "${line.text}"`);
+  if (line.stopPlayState !== "paused" || line.stopPressed !== "true" || line.stopState !== "paused") failures.push(`/ pressing Stop left the animation ${JSON.stringify(line.stopPlayState)} and the button aria-pressed ${JSON.stringify(line.stopPressed)} — WCAG 2.2.2 wants a real pause on content that moves for more than five seconds`);
+  if (line.driftWhileStopped !== 0) failures.push(`/ the ticker drifted ${line.driftWhileStopped}ms of animation time while stopped — pause has to mean stopped`);
+  if (line.runPlayState !== "running") failures.push(`/ releasing Stop returned the animation to ${JSON.stringify(line.runPlayState)}`);
+  if (!line.focusIsRoot) failures.push("/ the ticker is not focusable as a region — the arrow-key path the hint promises does not exist");
+  if (!line.keyMoved || line.keyPaused !== "paused") failures.push(`/ an arrow key moved the line ${line.keyMoved} and left it ${JSON.stringify(line.keyPaused)} — a reader stepping through text does not want it running underneath`);
+  if (line.holdPlayState !== "paused" || line.holdState !== "paused") failures.push(`/ holding the line left it at ${JSON.stringify(line.holdPlayState)} — "hold it to pause" is item 12 verbatim`);
+  if (line.seekError > 2) failures.push(`/ dragging 120px right seeked the animation ${line.seekError.toFixed(1)}ms off the arithmetic (${line.shiftAttr}px reported) — the text would not track the finger`);
+  if (line.releasePlayState !== "running" || !line.holdAttrCleared) failures.push(`/ letting go left the line ${JSON.stringify(line.releasePlayState)} with the hold flag ${line.holdAttrCleared ? "cleared" : "still set"} — a scrub should hand the line back`);
+  if (!line.movedAfterRelease) failures.push("/ the line did not resume moving after the drag was released — it is parked where the reader left it, which is a stop, not a scrub");
+}
 
 // ---------------------------------------------------------------- phone width
 /*
