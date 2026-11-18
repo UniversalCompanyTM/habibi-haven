@@ -1030,6 +1030,79 @@ retry was scoped to one section — the agent runtime on this machine cannot nam
 filename (their IDs contain `:`), which is the real reason "independent review" has kept failing here. And
 `3569310`'s commit subject still swallowed its first paragraph.
 
+### Amendment A19 — the light runs the whole day, and the room was measured doing it
+
+Three commits, one argument: the owner's list of fifteen things wrong with the frontend included "the colours
+are not really that perfect", "the timings of the content is not quite right", "the time should run from 0000Hrs
+24 hours straight and remove the 30min interval so that it truly shifts like the sun over the sky", and four
+complaints about one rectangle on `/menu`. Half of those are a design change; the other half are numbers, and a
+number can be pinned.
+
+**A19 — the clock, the palette, the plates.** `hours.mjs` publishes the Nairobi day as a float to the second and
+`rig-client.mjs` writes `--hour`/`--night`/`--sun` without snapping, so the detent at half past is gone; an ambient
+writer moves the document to the wall clock every 20 s, `@property --sun` lets the browser interpolate it
+continuously, and a hand on the dial sets `data-manual` so the glide shortens to 120 ms under a finger — the room
+moves like the sun, except when someone is moving it. `--night` is derived from `--sun` by the same `nightCurve`
+the page already used, so one style write a day can move the whole scheme and the media query is what a page with
+no script gets. Eight hues replace the two that were doing all the work, each carrying the light-scheme twin and
+the contrast ratio it was measured at. One new surface reads the same numbers — `Atmosphere.astro`'s low-resolution
+sky layer takes its palette through `scenes/rig.js`, the only reader allowed to translate a custom property into a
+colour, and stands down for reduced motion, save-data, a slow connection or two cores. Photography moved under the
+owner's instruction to spend before generating: the 28 plates made earlier are attached through a hand-curated
+manifest and labelled as illustrations in the row, the alt text and on the picture. Two ordering facts came with
+it — prebuild runs the illustration pass *last*, because `build-content` regenerates `menu.json` from a feed that
+has none of them, and venue frames moved out of `/brand`, which `sync-brand` deletes on every build.
+`check-astro-parse.mjs` had a false positive (a name that is a prefix of an imported identifier, `nairobiHour`
+inside `nairobiHourFloat`) and now matches whole identifiers.
+
+**A19b — what the built-site audit found first.** Run `44270274319` passed build, tests and the API tests, then
+refused to publish on two counts: the sky canvas relied on an inherited `aria-hidden` rather than carrying its own
+(one refactor away from a decoration announcing itself to a screen reader), and the map-embed check compared a
+percent-encoded query with a decimal coordinate pair. Both fixed in the checker and the component, not by removing
+the claim.
+
+**A19c — the relighting, the statistic, and the bar.** The harness then went red with seven problems, and they were
+not seven defects:
+
+- *Five were the harness.* It counted global `requestAnimationFrame` callbacks, so a page with four legitimate
+  loops failed an assertion about a leak that did not exist. Frames are now attributed per loop by call stack
+  (door / cursor / ambient / dial / preloader / unknown) with an `unknownLoop` guard, which is the version of the
+  claim that can actually be true.
+- *One was the statistic, and it was mine.* The M5 claim was asserted as "dusk-to-noon distance must exceed the
+  within-hour step by 1.5×". Measured, that is `cross 10.38` against `withinDusk 8.84` and `withinNoon 0.11` —
+  margin 1.17, red — and the reason is that the dusk step is the dial's *own motion*: the frames were averaged
+  across an hour in which the room was visibly changing. The right claim is a scatter-about-each-hour's-mean with
+  a standard error, an SNR, and a directional statement the old statistic could not make at all: **evening must be
+  dimmer than afternoon**. An averaged frame cannot dodge that one.
+- *One is a real page defect and stays open*: an `h2.display--h2.kin` on `/` that never receives `is-in`. The
+  diagnostic now reports which element it is and why (tag, classes, text, geometry); the cause is not yet found, so
+  the assertion still fails and the fix is still owed.
+- *The design then had to change, not just the measurement.* On the `lite` render tier — the one CI runs — the
+  scene drops its directional lights, so strengthening `rigValues` alone changed almost nothing on screen. The
+  evening end therefore walks down where the lite tier still draws: street and sky intensity, the bounce, the wall
+  and plaster mix, the fog colour and density, and the ambient term (0.44 by day, 0.085 at night). The noon values
+  move under 1%, so the ceiling set by the earlier ACES blow-out fix is untouched.
+
+**The bar, pinned.** Four complaints (6, 13, 14, 15) are the same sticky rectangle, and the failure that produced
+"overlapping content" was measurable: an 84%-alpha wash over a scrolling menu let dish copy read up through the
+search box, and the pending-dish cards drew a second copy of the dish name in a box too small for it. It is now an
+opaque plate at a top offset that `Base.astro` and `MenuExplorer.astro` write from the live layout into `--nav-h`
+and `--bar-h` (with declared fallbacks, because the server HTML must be right before any script runs); the sort
+control is restyled rather than the UA's grey box; the count line sits inline instead of stealing a row; pending
+cards carry the dish's initial in a plate ring; the two chip rows fold behind a counted *Filters* disclosure below
+62rem; and the desktop rhythm came down from 11rem of stage padding to `clamp(3.5rem, 2.2rem + 4.6vw, 7rem)`. The
+harness asserts all of it — height in pixels and as a share of the viewport, computed alpha equal to 1,
+`backdrop-filter: none`, `appearance: none` on the select, zero text clipped by its own box, section padding under
+116 px, and on a 390 px phone that the fold button is real: `aria-expanded` flips, the panel appears, the bar grows,
+folding again puts it back, and a folded panel leaves nothing focusable behind it.
+
+**Left open, honestly.** The CI run for this wave decides whether the new statistics and geometry hold; nothing
+here claims green until it is reported. `141` photos are mirrored, `74` are still pending upstream, and the
+description ceiling stays where the source put it. Items 4, 5, 7, 8, 9, 11, 12, 16 and 17 of the owner's list are
+not addressed by this tranche. The eight uncommitted files above are the whole change; the laptop ran the CSS gate
+and the unit tests (`check-css: ok`, `tests: 110 passed`) and nothing heavier — the build, the audit and headless
+Chrome stay on the runners.
+
 ## Risks / must-not-say
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
