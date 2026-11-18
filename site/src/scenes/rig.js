@@ -21,6 +21,16 @@ const TOKENS = [
   ["brassSoft", "--brass-soft"],
   ["lampGlow", "--lamp-glow"],
   ["ivory", "--ivory"],
+  // A19's extended set. These exist for the atmosphere layer rather than the door — the plaster and the
+  // brass do not change colour because a page grew more hues — but they are read through the same one
+  // reader so a shader can never invent a colour the stylesheet does not have.
+  ["teal", "--teal"],
+  ["leaf", "--leaf"],
+  ["amber", "--amber"],
+  ["ember", "--ember"],
+  ["hibiscus", "--hibiscus"],
+  ["lagoon", "--lagoon"],
+  ["chai", "--chai"],
 ];
 
 // Only used when getComputedStyle hands back nothing usable (SSR, detached node,
@@ -36,6 +46,13 @@ const FALLBACK = {
   brassSoft: [232, 206, 148],
   lampGlow: [255, 196, 110],
   ivory: [246, 238, 223],
+  teal: [34, 227, 190],
+  leaf: [70, 211, 154],
+  amber: [247, 169, 59],
+  ember: [255, 107, 74],
+  hibiscus: [255, 93, 143],
+  lagoon: [86, 207, 225],
+  chai: [232, 195, 158],
 };
 
 const NUMBER_PATTERN = /(-?\d*\.?\d+)/;

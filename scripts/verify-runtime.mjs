@@ -567,6 +567,13 @@ process.on("unhandledRejection", (reason) => {
 // the runner would sit holding a Chrome process until GitHub cancelled it after six hours — a worse
 // outcome than the crash it was meant to report.
 
+// The rig has written `--hour` and `--night` at four decimal places since A19 took the half-hour detent
+// out — a continuous day means 18:25 arrives as "18.4167", not "18.5". Every assertion about "the hour this
+// visitor dialled" therefore compares numbers rather than the literal text on the root, with a tolerance of
+// a tenth of an hour. That is far looser than the rounding a 4-dp write introduces and far tighter than any
+// real disagreement: a lost state lands on the build's wall clock, which is hours away.
+const hourEquals = (actual, wanted) => Number.isFinite(Number(actual)) && Math.abs(Number(actual) - wanted) < 0.1;
+
 // `ignore` carries the complaints a route is supposed to produce. The 404 check asks for a URL that does
 // not exist, so "failed to load resource: 404" is the experiment working — filtering it after page() had
 // already pushed the failure into the report is what made the run look red for a green reason.
@@ -708,12 +715,17 @@ const door = (async () => {
   if (dial.at20.hour === dial.before.hour) failures.push("/ the dial did not write --hour — the light rig is not coupled");
   // 20:00 in Nairobi is inside the hours of record (06:30–23:00): a dial that says "Closed" there is
   // lying about when the restaurant opens, which is the one thing a visitor came to find out.
-  if (dial.at20.hour !== "20" && Number(dial.at20.hour) !== 20) failures.push(`/ dial at 20:00 wrote --hour ${dial.at20.hour}`);
+  if (!hourEquals(dial.at20.hour, 20)) failures.push(`/ dial at 20:00 wrote --hour ${dial.at20.hour}`);
   if (dial.at20.dialText && /closed/i.test(dial.at20.dialText)) failures.push(`/ dial at 20:00 reads “${dial.at20.dialText}” — 20:00 is inside the hours of record`);
   if (dial.at3.dialText && /open now/i.test(dial.at3.dialText)) failures.push(`/ dial at 03:00 reads “${dial.at3.dialText}” — it should say closed`);
   const nowHour = Number(dial.afterBackToNow);
   const eatHour = Number(dial.nairobiNow.slice(0, 2)) + Number(dial.nairobiNow.slice(3, 5)) / 60;
-  if (Number.isFinite(nowHour) && Math.abs(nowHour - eatHour) > 1.1) {
+  // The day is a circle now: the dial runs 00:00 → 24:00 continuously, so a click one side of midnight
+  // must not read as a 23-hour error. Six minutes of slack covers the minute the sample is quantised to
+  // and the round trip that produced it, and nothing more — the old tolerance was wide because the rig
+  // used to snap to a half hour, which is the behaviour A19 removed.
+  const backToNowGap = Number.isFinite(nowHour) ? Math.abs(nowHour - eatHour) : null;
+  if (backToNowGap !== null && Math.min(backToNowGap, 24 - backToNowGap) > 0.1) {
     failures.push(`/ "back to now" set --hour ${nowHour} but the Nairobi clock reads ${dial.nairobiNow}`);
   }
 })();
@@ -1946,9 +1958,9 @@ if (cameForward.canvas !== 1)
   failures.push(`forward back to / left ${cameForward.canvas} canvas(es), expected 1`);
 // The hour the visitor dialled outranks the hour the build ran at, on every page and in both directions.
 if (routerDial.missing) failures.push("the router battery could not dial the room — no dial or door was present to drive");
-if (routerDial.hour !== "3") failures.push(`dialling 03:00 left --hour at ${JSON.stringify(routerDial.hour)} — the state was never written, so the later comparisons mean nothing`);
+if (!hourEquals(routerDial.hour, 3)) failures.push(`dialling 03:00 left --hour at ${JSON.stringify(routerDial.hour)} — the state was never written, so the later comparisons mean nothing`);
 for (const step of [toMenu, toTable, backHome]) {
-  if (step.clicked && step.hour !== "3")
+  if (step.clicked && !hourEquals(step.hour, 3))
     failures.push(`${step.expected}: --hour is ${JSON.stringify(step.hour)} after the swap, not the 3 this visitor dialled — the incoming <html> overwrote it and nothing re-asserted it`);
 }
 if (dialsHome.dials !== 2) failures.push(`/ after a click has ${dialsHome.dials} dial(s); the home hero and the rig section each carry one, so both have to come back`);
@@ -1960,7 +1972,7 @@ if (wentBack.landed !== "/table" || cameForward.landed !== "/")
   failures.push(`history back/forward landed on ${JSON.stringify([wentBack.landed, cameForward.landed])}, expected /table then /`);
 if (wentBack.mark !== "router" || cameForward.mark !== "router")
   failures.push(`back/forward tore the document down (window.__hhMark reads ${JSON.stringify([wentBack.mark, cameForward.mark])}) — the router is not handling popstate in this build`);
-if (wentBack.hour !== "3" || cameForward.hour !== "3")
+if (!hourEquals(wentBack.hour, 3) || !hourEquals(cameForward.hour, 3))
   failures.push(`back/forward reset --hour to ${JSON.stringify([wentBack.hour, cameForward.hour])} — the restored document's own attributes won over the dialled hour`);
 if (!menuLive.mounted) failures.push("/menu after a click has no [data-q] — the explorer arrived as dead markup, which is the exact failure lib/page.mjs exists to prevent");
 if (menuLive.mounted && !menuLive.dock)

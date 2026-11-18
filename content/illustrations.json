@@ -1,0 +1,149 @@
+{
+  "comment": "Generated plates and rooms for Habibi Haven. Every dish entry is attached by hand to the rows whose name and description match what was depicted — there is no fuzzy matching, because a fuzzy match is how a cheesecake ends up on a beef steak. Nothing here is a photograph from the kitchen, and every row it touches carries photo.illustration === true plus an alt text that says so. Venue frames are art direction, not claims about the room: they are used as atmosphere behind copy that never says 'this is what it looks like'.",
+  "meta": {
+    "generatedAt": "2026-11-16",
+    "artDirection": "Warm amber lantern key against cool teal shadow, ivory plaster, dark timber, brass. Photorealistic editorial hospitality photography, no people, no legible text, no logos.",
+    "provenance": "Generated for this preview at the owner's request to close the 102 rows whose upstream photograph is a grey 'Image to be updated soon' card. Replace with the kitchen's own photographs when they are supplied; scripts/ingest-illustrations.mjs never overwrites a row that already has a real photograph.",
+    "bucket": "dishes 800x800 + 400 thumb into site/public/menu, venue 1600w + 800w into site/public/brand"
+  },
+  "assets": [
+    {
+      "kind": "venue",
+      "out": "venue-courtyard-golden",
+      "file": "../vibe_images/venue-courtyard-golden_1794916567134_9dca4d86.png",
+      "alt": "A garden courtyard of white plaster arches and planting at golden hour, timber tables and teal chairs under a green canopy"
+    },
+    {
+      "kind": "venue",
+      "out": "venue-room-teal-night",
+      "file": "../vibe_images/venue-room-teal-night_1794916606747_bf2558ea.png",
+      "alt": "An evening dining room with deep teal banquettes, brass sconces and a warm yellow neon heart on the far wall"
+    },
+    {
+      "kind": "venue",
+      "out": "venue-terrace-lunch",
+      "file": "../vibe_images/venue-terrace-lunch_1794916657196_4202e222.png",
+      "alt": "A street-side terrace at midday under a green canopy, tables laid with a shared platter and iced tea"
+    },
+    {
+      "kind": "venue",
+      "out": "food-goat-mandy-hero",
+      "file": "../vibe_images/food-goat-mandy-hero_1794916696889_b14ca643.png",
+      "alt": "A round enamel platter of gold-tinted basmati rice topped with roasted goat, fried onions, raisins and almonds"
+    },
+    {
+      "kind": "venue",
+      "out": "drink-karak-chai-pour",
+      "file": "../vibe_images/drink-karak-chai-pour_1794916725949_ff2ddac1.png",
+      "alt": "Karak chai pouring from a small steel pan into a clear glass, steam curling up in lantern light"
+    },
+    {
+      "kind": "venue",
+      "out": "food-charcoal-grill",
+      "file": "../vibe_images/food-charcoal-grill_1794916776513_c7cb6d68.png",
+      "alt": "Skewers of marinated chicken and beef over glowing charcoal in an open kitchen, smoke rising"
+    },
+    {
+      "kind": "venue",
+      "out": "food-pastry-counter",
+      "file": "../vibe_images/food-pastry-counter_1794916819794_b48c4330.png",
+      "alt": "A glass cake counter with rows of slices — red velvet, black forest, blueberry cheesecake, lemon loaf and brownie"
+    },
+    {
+      "kind": "dish",
+      "out": "ill-habibi-power-big-combo",
+      "file": "../vibe_images/ill-habibi-power-big-combo_1794916983496_37124adf.png",
+      "items": ["habibi-power-big-combo"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-plain-omelette",
+      "file": "../vibe_images/ill-plain-omelette_1794917018578_4aeb6e97.png",
+      "items": ["plain-omelette"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-buttermilk-pancakes",
+      "file": "../vibe_images/ill-buttermilk-pancakes_1794917056148_c35b61ae.png",
+      "items": ["buttermilk-pancakes", "pancake"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-beef-chicken-bbq-platter",
+      "file": "../vibe_images/ill-beef-chicken-bbq-platter_1794917094323_88b8835e.png",
+      "items": ["beef-chicken-bbq-platter"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-pepper-beef-steak",
+      "file": "../vibe_images/ill-pepper-beef-steak_1794917129261_d0c5194e.png",
+      "items": ["pepper-beef-steak"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-spaghetti-bolognese",
+      "file": "../vibe_images/ill-spaghetti-bolognese_1794917160679_1219df63.png",
+      "items": ["spaghetti-bolognese"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-mini-kiddy-pancakes",
+      "file": "../vibe_images/ill-mini-kiddy-pancakes_1794917191753_dae09285.png",
+      "items": ["mini-kiddy-pancakes"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-brownie-indulgence",
+      "file": "../vibe_images/ill-brownie-indulgence_1794917226878_0f99566e.png",
+      "items": ["brownie-indulgence-with-ice-cream"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-white-forest-cake",
+      "file": "../vibe_images/ill-white-forest-cake_1794917524560_347cce9e.png",
+      "items": ["white-forest-cake-2kg", "white-forest-cake-3kg", "whiteforest-cake-slice"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-black-forest-cake",
+      "file": "../vibe_images/ill-black-forest-cake_1794917552140_92e0feae.png",
+      "items": ["black-forest-cake-2kg", "black-forest-cake-3kg", "black-forest-cake-slice"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-red-velvet-cake",
+      "file": "../vibe_images/ill-red-velvet-cake_1794917578905_cc3510fd.png",
+      "items": ["red-velvet-cake-2kg", "red-velvet-cake-3kg", "red-velvet-cake-slice"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-carrot-cake",
+      "file": "../vibe_images/ill-carrot-cake_1794917609228_3be158f8.png",
+      "items": ["carrot-cake-2kg", "carrot-cake-3kg"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-chocolate-fudge-cake",
+      "file": "../vibe_images/ill-chocolate-fudge-cake_1794917648109_cafc4928.png",
+      "items": ["chocolate-fudge-cake-2kg", "chocolate-fudge-cake-3kg"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-blueberry-cake",
+      "file": "../vibe_images/ill-blueberry-cake_1794917674926_c514993f.png",
+      "items": ["blueberry-cake-2kg", "blueberry-cake-3kg", "blueberry-cake-slice"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-chocolate-mint-cake",
+      "file": "../vibe_images/ill-chocolate-mint-cake_1794917706781_71b0eb05.png",
+      "items": ["chocolate-mint-2kg", "chocolate-mint-3kg"]
+    },
+    {
+      "kind": "dish",
+      "out": "ill-brownie",
+      "file": "../vibe_images/ill-brownie_1794917736285_511158a0.png",
+      "items": ["brownie"]
+    }
+  ]
+}

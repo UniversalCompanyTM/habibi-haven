@@ -24,9 +24,29 @@ export function nairobiMinutes(input = new Date()) {
   return local.getHours() * 60 + local.getMinutes();
 }
 
-/** Decimal hours, 0–24, e.g. 18.75 for a quarter to seven. */
+/** Decimal hours, 0–24, e.g. 18.75 for a quarter to seven. Minute resolution — the booking rules use it. */
 export function nairobiHour(input = new Date()) {
   return nairobiMinutes(input) / 60;
+}
+
+/** Seconds since local midnight in Nairobi. The light rig wants the second hand, not just the minute. */
+export function nairobiSeconds(input = new Date()) {
+  const date = input instanceof Date ? input : new Date(input);
+  const utc = date.getTime() + date.getTimezoneOffset() * 60_000;
+  const local = new Date(utc + UTC_OFFSET_MINUTES * 60_000);
+  return local.getHours() * 3600 + local.getMinutes() * 60 + local.getSeconds();
+}
+
+/**
+ * Decimal hours to the second, 0–24.
+ *
+ * A19: the dial used to detent every half hour, so the room jumped from one lighting stop to the next
+ * and a guest could see the step. The sun does not step. This is the hour the ambient writer uses, and
+ * it is why the palette can move continuously while `nairobiHour` stays the minute-resolution number
+ * the opening-hours arithmetic and its tests were written against.
+ */
+export function nairobiHourFloat(input = new Date()) {
+  return nairobiSeconds(input) / 3600;
 }
 
 /** Open/closed against minutes-since-midnight-in-Nairobi, so a decimal hour can be asked directly. */
@@ -183,9 +203,24 @@ export function rigFor(hour) {
  * numbers, so they cannot.
  */
 export const DIAL_MIN = 0;
-export const DIAL_MAX = 23.5;
+export const DIAL_MAX = 24;
 
-/** Snap an hour to the half-hour the kitchen actually works in. */
+/**
+ * The dial has no detent.
+ *
+ * `step="any"` on the range input, and this constant is the data form of that decision so a test can
+ * assert the control is continuous rather than reading the attribute and hoping. 24 is the same instant
+ * as 00:00 — `hourToLabel(24)` wraps to "00:00" — so the handle can travel the whole day and arrive back
+ * where it started without a value the rig cannot answer for.
+ */
+export const DIAL_STEP = 0;
+
+/** Snap an hour to the half-hour. Kept for the booking pickers; the light rig no longer uses it. */
 export function snapHour(hour) {
   return Math.round(toHour(hour) * 2) / 2;
+}
+
+/** Daylight reaching the room, 0→1 — the complement of `nightAmount`, and what the atmosphere reads. */
+export function sunAmount(hour) {
+  return 1 - nightAmount(hour);
 }

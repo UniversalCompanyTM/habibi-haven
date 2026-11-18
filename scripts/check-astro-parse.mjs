@@ -196,7 +196,21 @@ function missingImports(body, exports) {
   const missing = new Set();
   for (const [name] of exports) {
     if (imported.has(name) || imported.has("*")) continue;
-    if (new RegExp(`(?<![\\w$.])${name.replace(/\\$/g, "\\\\$")}(?![\\w$]*(?:\\s*:|\\s*=))`, "").test(code)) missing.add(name);
+    // Whole identifiers only. The first version of this test asked whether the text `nairobiHour`
+    // appeared anywhere with a `(?![\w$]*(?:\s*:|\s*=))` guard, and that guard was wrong in a way that
+    // only showed up when a block imported `nairobiHourFloat` without importing `nairobiHour`: the
+    // `[\w$]*` ate `Float`, the guard then looked for a `:` or `=` that an import list never has, the
+    // negative lookahead passed, and the checker demanded an import of a function the file never calls
+    // — which a well-meaning fix would have answered by adding a dead symbol to a shipped bundle.
+    // So: match the identifier as a unit, and apply the two exclusions to what actually follows it.
+    const find = new RegExp(`(?<![\\w$.])${name.replace(/[$]/g, "\\$")}(?![\\w$])`, "g");
+    for (const hit of code.matchAll(find)) {
+      const after = code.slice(hit.index + name.length).replace(/^[ \t]+/, "");
+      if (/^:(?!:)/.test(after)) continue; // an object key or a label, not a read
+      if (/^=(?![=>])/.test(after)) continue; // an assignment target, not a read
+      missing.add(name);
+      break;
+    }
   }
   return [...missing];
 }

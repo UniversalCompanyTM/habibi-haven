@@ -2,16 +2,45 @@
  *
  * The room, in numbers.
  *
- * The approved plan carried an espresso-and-gold set from the abandoned project. Amendment A1 put the
- * restaurant's own badge, signage and neon in front of us instead: teal, a green canopy, timber,
- * hanging lanterns and one yellow neon heart. So teal carries the room, amber is kept for the lantern
- * and the neon heart, and gold/espresso survive as the warm dark underneath rather than the accent on
- * top. Espresso #12100E stays as --ink-warm.
+ * Amendment A1 put the restaurant's own badge, signage and neon in front of us: teal, a green canopy,
+ * timber, hanging lanterns and one yellow neon heart. A19 extends that set rather than replacing it —
+ * the kitchen has more than two colours in it, and a page about a grill, a chai pan and a cake counter
+ * should be able to say so. Eight hues, each named after the thing it comes from:
  *
- * Every ratio in the comments below was computed from the two hex values it labels, not asserted.
- * tests/run.mjs pins the facts those numbers are printed from, and M6 adds scripts/verify-dist.mjs to
- * re-run this arithmetic against the built CSS alongside the axe pass in a real page.
+ *   teal     the neon in the badge and the banquettes      — the dominant family, largest fields
+ *   leaf     the green canopy and the coriander            — success, "open", fresh
+ *   amber    the lantern filament and the neon heart       — warning, warmth, the hour of record
+ *   ember    the charcoal bed under the skewers            — danger, heat, grill
+ *   hibiscus the dawa and the strawberry counter           — the one hot accent, used sparingly
+ *   lagoon   the iced-tea glass and the daylight sky       — information, cold drinks
+ *   brass    the rail, the sconces, the cage               — metal, rules, borders
+ *   chai     milk tea in a glass                           — the warm neutral between ink and paper
+ *
+ * Every ratio below was computed from the two hex values it labels (scripts/check-css.mjs re-runs the
+ * arithmetic against the built CSS). Dark-surface ratios are against --bg-1 #071a17 unless stated;
+ * daylight ratios are against --paper #f3f1ec. The deep variants exist because the same hue that is
+ * legible at midnight is not legible at noon, and the clock moves between the two continuously.
  */
+
+/* Registered so the clock can interpolate them. An unregistered custom property is a token: it changes
+   instantly and nothing can transition it. `--sun` is the one the atmosphere layer animates, and it is
+   registered with a syntax so the browser can interpolate it frame by frame between two writes that are
+   twenty seconds apart — the room moves like the sun does, without a style write every frame. */
+@property --sun {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --night {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+@property --hour {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 19;
+}
 
 :root {
   /* ---- surfaces, evening (the default: this restaurant opens at 06:30 and closes at 23:00) ---- */
@@ -20,28 +49,48 @@
   --bg-2: #0b2621; /* raised surface */
   --bg-3: #123129; /* card */
   --ink-warm: #12100e; /* espresso, from the approved set — used under warm gradients only */
+  --scrim: color-mix(in oklab, #04100e 72%, transparent); /* behind a modal or the dock */
+  --overlay: color-mix(in oklab, #0b2621 88%, transparent); /* a sheet over a photograph */
 
   /* ---- ink on those surfaces ---- */
   --mist: #e8f4f0; /* on bg-0 17.16:1, on bg-1 15.93:1 — body */
   --mist-2: #b4ccc5; /* on bg-1 10.59:1 — secondary */
   --mist-3: #7e9a93; /* on bg-1 5.93:1 — meta, still AA */
 
-  /* ---- the two accents ---- */
-  --teal: #22e3be; /* on bg-1 10.95:1 — text-safe, and the neon of the badge */
+  /* ---- the dominant family ---- */
+  --teal: #22e3be; /* on bg-1 10.95:1, on bg-0 11.79:1, on bg-3 8.55:1 — text-safe */
   --teal-soft: #8df3df; /* on bg-1 13.70:1 — display */
-  --teal-deep: #0a6b5b; /* on paper 5.69:1 — the same hue readable on daylight */
+  --teal-deep: #0a6b5b; /* on paper 5.69:1, on paper-2 5.02:1 — the same hue readable in daylight */
+
+  /* ---- the accents, each with a daylight twin ---- */
+  --leaf: #46d39a; /* on bg-1 9.45:1 — canopy, coriander, "open" */
+  --leaf-deep: #1f7a4d; /* on paper 4.71:1 — AA on paper; on paper-2 4.15:1, so display and icons only there */
   --amber: #f7a93b; /* on bg-1 9.15:1 — lantern, the yellow neon heart */
-  --amber-deep: #8a4e0b; /* on paper 5.86:1 */
+  --amber-deep: #8a4e0b; /* on paper 5.86:1, on paper-2 5.16:1 */
+  --ember: #ff6b4a; /* on bg-1 6.38:1, on bg-3 4.98:1 — charcoal, heat, refusal */
+  --ember-deep: #b3301a; /* on paper 5.55:1, on paper-2 4.89:1 */
+  --hibiscus: #ff5d8f; /* on bg-1 6.17:1, on bg-3 4.82:1 — dawa, the strawberry counter */
+  --hibiscus-deep: #b02a55; /* on paper 5.62:1, on paper-2 4.96:1 */
+  --lagoon: #56cfe1; /* on bg-1 9.76:1 — iced glass, daylight sky, information */
+  --lagoon-deep: #1a6f85; /* on paper 5.09:1 — AA on paper; on paper-2 4.48:1, display and icons only there */
+
+  /* ---- semantic tones, so a state never has to invent a colour ---- */
+  --ok: var(--leaf);
+  --warn: var(--amber);
+  --danger: var(--ember);
+  --info: var(--lagoon);
 
   /* ---- the door's materials and its lamps ----
-     These four are read by the WebGL scene through scenes/rig.js, which samples them off the same :root the
-     stylesheet uses, so the room in the canvas and the room in the CSS cannot drift apart. They are deliberately
-     NOT interpolated by --night below: they name a stone, a metal and a flame, and a lamp's colour does not
-     change with the hour — only how much of it reaches you, which is the rig's job, not the palette's. */
+     Read by the WebGL scene through scenes/rig.js, which samples them off the same :root the stylesheet
+     uses, so the room in the canvas and the room in the CSS cannot drift apart. Deliberately NOT
+     interpolated by --night: they name a stone, a metal and a flame, and a lamp's colour does not change
+     with the hour — only how much of it reaches you, which is the rig's job, not the palette's. */
   --ivory: #f6eedf; /* plaster in lamplight */
-  --brass: #c9a24d; /* the rail, the sconces, the cage */
+  --brass: #c9a24d; /* on bg-1 7.49:1 — the rail, the sconces, the cage */
   --brass-soft: #e8ce94; /* brass where it catches the flame */
+  --brass-deep: #7a5c1e; /* on paper 5.51:1, on paper-2 4.86:1 */
   --lamp-glow: #ffc46e; /* the filament itself */
+  --chai: #e8c39e; /* on bg-1 10.89:1 — milk tea, the warm neutral */
 
   /* ---- the daylight end of the clock ---- */
   --paper: #f3f1ec; /* chai and stone in the morning */
@@ -49,15 +98,35 @@
   --ink: #0a1f1b; /* on paper 15.19:1 */
   --grey-paper: #5e6b66; /* on paper 4.93:1 */
 
-  /* ---- forbidden pairs, stated so nobody rediscovers them ----
-     --mist on --teal   1.46:1  never. light text goes on --bg-0 over teal, dark text on teal.
-     --ink  on --paper-2 is fine; --teal on --paper is not (2.6:1) — use --teal-deep.            */
+  /* ---- gradients across genuinely different hues, not tints of one ----
+     Each is used on a surface large enough to read as light rather than as decoration: the atmosphere
+     behind the page, the hero's wash, the grill section, the canopy section. */
+  --grad-dusk: linear-gradient(
+    168deg,
+    color-mix(in oklab, var(--lagoon) 26%, transparent) 0%,
+    color-mix(in oklab, var(--teal) 20%, transparent) 34%,
+    color-mix(in oklab, var(--amber) 16%, transparent) 68%,
+    color-mix(in oklab, var(--ember) 12%, transparent) 100%
+  );
+  --grad-ember: linear-gradient(120deg, var(--ember), var(--amber) 52%, var(--hibiscus));
+  --grad-canopy: linear-gradient(120deg, var(--leaf), var(--teal) 58%, var(--lagoon));
+  --grad-chai: linear-gradient(120deg, var(--chai), var(--amber) 60%, var(--brass));
 
-  /* ---- the rig: one number, shared by CSS and the WebGL door ----
-     --hour is 6.5 → 23 in Africa/Nairobi; --night is the 0→1 curve lib/hours.mjs computes from it.
-     With no JavaScript --night keeps the value the media query chose, so the site still reads. */
+  /* ---- forbidden pairs, stated so nobody rediscovers them ----
+     --mist on --teal   1.46:1  never. Light text goes on --bg-0 over teal; dark ink on a bright accent:
+     ink on teal 11.79:1, on amber 9.85:1, on leaf 10.17:1, on lagoon 10.51:1, on ember 6.87:1,
+     on hibiscus 6.65:1 — every accent in the set can carry dark text, which is why the pressed chip
+     uses --bg-0 rather than --mist.
+     --teal on --paper is 2.6:1 — use --teal-deep. The same applies to every bright accent.        */
+
+  /* ---- the rig: shared by CSS, the atmosphere shader and the WebGL door ----
+     --hour is 0 → 24 in Africa/Nairobi, continuous: the dial has no half-hour detent any more, and the
+     ambient writer moves it by the real clock. --night is the 0→1 curve lib/hours.mjs computes from it;
+     --sun is its complement, the amount of daylight reaching the room. With no JavaScript --night keeps
+     the value the media query chose, so the site still reads. */
   --hour: 19;
   --night: 1;
+  --sun: 0;
 
   /* ---- type ---- */
   --display: "Bricolage Grotesque", "Trebuchet MS", ui-sans-serif, sans-serif;
@@ -67,10 +136,12 @@
   --step-1: clamp(1.15rem, 1.08rem + 0.34vw, 1.4rem);
   --step-2: clamp(1.45rem, 1.28rem + 0.72vw, 2rem);
   --step-3: clamp(1.85rem, 1.5rem + 1.5vw, 3rem);
-  --step-4: clamp(2.4rem, 1.7rem + 3.2vw, 5rem);
-  --step-5: clamp(3.2rem, 1.6rem + 7vw, 9.5rem);
+  --step-4: clamp(2.2rem, 1.6rem + 2.4vw, 4rem);
+  --step-5: clamp(2.9rem, 1.5rem + 5.6vw, 7.4rem);
 
-  /* ---- space, radius, motion ---- */
+  /* ---- space, radius, motion ----
+     A19: the desktop rhythm was an 11rem stage padding on a 1500px shell, which read as a page with
+     more air than restaurant in it. The ceiling comes down and the floor stays where a thumb needs it. */
   --gutter: clamp(1.1rem, 0.6rem + 2.4vw, 3.4rem);
   --measure: 68ch;
   --radius: 18px;
@@ -78,8 +149,10 @@
   --edge: 1px solid color-mix(in oklab, var(--teal) 22%, transparent);
   --dur-1: 180ms;
   --dur-2: 420ms;
+  --dur-3: 760ms;
   --ease-out: cubic-bezier(0.16, 0.84, 0.24, 1);
   --ease-spring: cubic-bezier(0.2, 1.24, 0.32, 1);
+  --ease-glide: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* ---- elevation, built from teal light rather than grey shadow ---- */
   --lift-1: 0 1px 0 color-mix(in oklab, var(--teal) 10%, transparent), 0 18px 40px -28px #000;
@@ -100,8 +173,14 @@
     --mist-3: var(--grey-paper);
     --teal: var(--teal-deep);
     --teal-soft: #06473d;
+    --leaf: var(--leaf-deep);
     --amber: var(--amber-deep);
+    --ember: var(--ember-deep);
+    --hibiscus: var(--hibiscus-deep);
+    --lagoon: var(--lagoon-deep);
+    --brass: var(--brass-deep);
     --night: 0;
+    --sun: 1;
     color-scheme: light;
   }
 }
@@ -115,16 +194,39 @@
     --bg-2: color-mix(in oklab, #ffffff, #0b2621 calc(var(--night) * 100%));
     --bg-3: color-mix(in oklab, #ffffff, #123129 calc(var(--night) * 100%));
     --teal: color-mix(in oklab, var(--teal-deep), #22e3be calc(var(--night) * 100%));
+    --leaf: color-mix(in oklab, var(--leaf-deep), #46d39a calc(var(--night) * 100%));
     --amber: color-mix(in oklab, var(--amber-deep), #f7a93b calc(var(--night) * 100%));
+    --ember: color-mix(in oklab, var(--ember-deep), #ff6b4a calc(var(--night) * 100%));
+    --hibiscus: color-mix(in oklab, var(--hibiscus-deep), #ff5d8f calc(var(--night) * 100%));
+    --lagoon: color-mix(in oklab, var(--lagoon-deep), #56cfe1 calc(var(--night) * 100%));
+    --brass: color-mix(in oklab, var(--brass-deep), #c9a24d calc(var(--night) * 100%));
     --mist: color-mix(in oklab, var(--ink), #e8f4f0 calc(var(--night) * 100%));
     --mist-2: color-mix(in oklab, #26403a, #b4ccc5 calc(var(--night) * 100%));
     --mist-3: color-mix(in oklab, var(--grey-paper), #7e9a93 calc(var(--night) * 100%));
   }
 }
 
+/* The ambient writer moves --sun twenty seconds at a time; this is what makes this twenty seconds a
+   continuous drift rather than a step. Only the atmosphere layer reads --sun, so the interpolation
+   repaints one fixed element instead of every card on /menu. */
+html[data-ambient] {
+  transition: --sun 20s linear;
+}
+
+/* …and a drag turns it off. Twenty seconds of glide is the wall clock being invisible; under a finger it
+   is the atmosphere arriving late to a position the guest already chose. rig-client sets this on manual
+   writes and clears it 600 ms after the last one. */
+html[data-manual] {
+  transition: --sun 120ms linear;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-1: 1ms;
     --dur-2: 1ms;
+    --dur-3: 1ms;
+  }
+  html[data-ambient] {
+    transition: none;
   }
 }

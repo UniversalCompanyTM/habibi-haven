@@ -7,7 +7,7 @@
 // hours.mjs applies the Nairobi offset as arithmetic, so a build machine in any timezone gets the
 // same answer (tests/run.mjs pins it).
 import menu from "../data/menu.json";
-import { nairobiHour, rigFor } from "../lib/hours.mjs";
+import { nairobiHourFloat, rigFor, sunAmount } from "../lib/hours.mjs";
 import { restaurantSchema } from "../lib/schema.mjs";
 import "../styles/tokens.css";
 import "../styles/global.css";
@@ -20,10 +20,13 @@ import Footer from "../components/Footer.astro";
 import Ticker from "../components/Ticker.astro";
 import Cursor from "../components/Cursor.astro";
 import Preloader from "../components/Preloader.astro";
+import Atmosphere from "../components/Atmosphere.astro";
 
 const props = Astro.props;
 const f = menu.meta.facts;
-const rig = rigFor(nairobiHour());
+// To the second, since A19: a page built at 18:42:30 arrives lit for 18:42:30, and the ambient writer
+// keeps it there rather than snapping to the nearest half hour on first paint.
+const rig = rigFor(nairobiHourFloat());
 // The curtain is opt-in, because it is only polite in front of an entrance and only rude in front of
 // a menu. Home sets `loader`; /menu, /table and /visit do not.
 const loader = props.loader === true;
@@ -65,7 +68,10 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 ---
 
 <!doctype html>
-<html lang="en" style={`--hour: ${rig.hour}; --night: ${rig.night.toFixed(3)}`}>
+<html
+  lang="en"
+  style={`--hour: ${rig.hour.toFixed(4)}; --night: ${rig.night.toFixed(4)}; --sun: ${sunAmount(rig.hour).toFixed(4)}`}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -142,6 +148,11 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 
   <body data-hour={rig.hour} data-night={rig.night.toFixed(3)}>
     <a class="skip-link" href="#main">Skip to content</a>
+    {/* The sky, behind everything, on its own layer. It reads --sun off the document through the same
+        rig.js reader the WebGL door uses, so it cannot hold a colour the stylesheet does not have — and
+        if WebGL is unavailable or unwanted (reduced motion, save-data, a phone that says so) the CSS
+        gradient baked into the component paints instead. */}
+    <Atmosphere />
     {loader ? <Preloader /> : null}
     <Nav facts={f} rig={rig} current={path} overHero={path === "/"} />
 
@@ -157,9 +168,14 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
 </html>
 
 <script>
-  import { applyHour, liveHour } from "../lib/rig-client.mjs";
+  import { applyHour, liveHour, startAmbient } from "../lib/rig-client.mjs";
   import { component, onPage } from "../lib/page.mjs";
   import { installTransitionGuard } from "../lib/transition-guard.mjs";
+
+  /* The room on the wall clock. One writer, once per document, for the whole visit: this module is not
+     re-executed after a router swap, and startAmbient's own listener re-asserts the glide attribute that
+     the swap strips off <html>. It steps aside the moment a guest touches the dial — see rig-client. */
+  startAmbient();
 
   /* A second tap while a swap is still painting aborts the first view transition, the router never awaits
      the rejection that produces, and Chrome logs it as an uncaught error. One narrow listener, documented

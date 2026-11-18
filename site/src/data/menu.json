@@ -11,7 +11,7 @@
   "families": 6,
   "sections": 41,
   "described": 113,
-  "placeholderPhotos": 102,
+  "placeholderPhotos": 74,
   "realPhotos": 141,
   "priceRange": {
    "min": 100,
@@ -65,7 +65,8 @@
      "mentions": 11
     }
    ]
-  }
+  },
+  "illustratedPhotos": 28
  },
  "families": [
   {
@@ -136,13 +137,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793689534834-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793689534834-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793689534834-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Habibi Power Big Combo — photograph pending from the restaurant"
+        "local": "/menu/ill-habibi-power-big-combo.jpg",
+        "thumb": "/menu/ill-habibi-power-big-combo.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Habibi Power Big Combo — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -354,13 +356,14 @@
        "tags": [],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793186523931-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793186523931-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793186523931-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Plain Omelette — photograph pending from the restaurant"
+        "local": "/menu/ill-plain-omelette.jpg",
+        "thumb": "/menu/ill-plain-omelette.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Plain Omelette — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -516,13 +519,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793172357397-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793172357397-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793172357397-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Buttermilk Pancakes — photograph pending from the restaurant"
+        "local": "/menu/ill-buttermilk-pancakes.jpg",
+        "thumb": "/menu/ill-buttermilk-pancakes.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Buttermilk Pancakes — an illustration of the dish, not a photograph from the kitchen"
        }
       }
      ]
@@ -625,13 +629,14 @@
        "tags": [],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793173225051-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793173225051-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793173225051-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Pancake — photograph pending from the restaurant"
+        "local": "/menu/ill-buttermilk-pancakes.jpg",
+        "thumb": "/menu/ill-buttermilk-pancakes.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Pancake — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -990,13 +995,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793183567861-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793183567861-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793183567861-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Whiteforest Cake Slice — photograph pending from the restaurant"
+        "local": "/menu/ill-white-forest-cake.jpg",
+        "thumb": "/menu/ill-white-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Whiteforest Cake Slice — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1052,13 +1058,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793183671025-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793183671025-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793183671025-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Blueberry Cake Slice — photograph pending from the restaurant"
+        "local": "/menu/ill-blueberry-cake.jpg",
+        "thumb": "/menu/ill-blueberry-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Blueberry Cake Slice — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1114,13 +1121,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793183775526-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793183775526-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793183775526-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Brownie — photograph pending from the restaurant"
+        "local": "/menu/ill-brownie.jpg",
+        "thumb": "/menu/ill-brownie.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Brownie — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1145,13 +1153,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793284451165-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793284451165-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793284451165-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Red Velvet Cake Slice — photograph pending from the restaurant"
+        "local": "/menu/ill-red-velvet-cake.jpg",
+        "thumb": "/menu/ill-red-velvet-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Red Velvet Cake Slice — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1176,13 +1185,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793183980876-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793183980876-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793183980876-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Black Forest Cake Slice — photograph pending from the restaurant"
+        "local": "/menu/ill-black-forest-cake.jpg",
+        "thumb": "/menu/ill-black-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Black Forest Cake Slice — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1207,13 +1217,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793184008570-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793184008570-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793184008570-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Brownie Indulgence with Ice-cream — photograph pending from the restaurant"
+        "local": "/menu/ill-brownie-indulgence.jpg",
+        "thumb": "/menu/ill-brownie-indulgence.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Brownie Indulgence with Ice-cream — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1615,13 +1626,14 @@
        "signatureOrder": 5,
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793207575822-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793207575822-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793207575822-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "White Forest Cake 2KG — photograph pending from the restaurant"
+        "local": "/menu/ill-white-forest-cake.jpg",
+        "thumb": "/menu/ill-white-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "White Forest Cake 2KG — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1652,13 +1664,14 @@
        },
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793207575822-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793207575822-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793207575822-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "White Forest Cake 3KG — photograph pending from the restaurant"
+        "local": "/menu/ill-white-forest-cake.jpg",
+        "thumb": "/menu/ill-white-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "White Forest Cake 3KG — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1684,13 +1697,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793207842206-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793207842206-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793207842206-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Black Forest Cake 2KG — photograph pending from the restaurant"
+        "local": "/menu/ill-black-forest-cake.jpg",
+        "thumb": "/menu/ill-black-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Black Forest Cake 2KG — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1716,13 +1730,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793207842206-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793207842206-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793207842206-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Black Forest Cake 3KG — photograph pending from the restaurant"
+        "local": "/menu/ill-black-forest-cake.jpg",
+        "thumb": "/menu/ill-black-forest-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Black Forest Cake 3KG — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1748,13 +1763,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Blueberry Cake 2Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-blueberry-cake.jpg",
+        "thumb": "/menu/ill-blueberry-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Blueberry Cake 2Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1780,13 +1796,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Blueberry Cake 3Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-blueberry-cake.jpg",
+        "thumb": "/menu/ill-blueberry-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Blueberry Cake 3Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1812,13 +1829,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Red Velvet Cake 2Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-red-velvet-cake.jpg",
+        "thumb": "/menu/ill-red-velvet-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Red Velvet Cake 2Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1844,13 +1862,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Red Velvet Cake 3Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-red-velvet-cake.jpg",
+        "thumb": "/menu/ill-red-velvet-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Red Velvet Cake 3Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1876,13 +1895,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Carrot Cake 2Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-carrot-cake.jpg",
+        "thumb": "/menu/ill-carrot-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Carrot Cake 2Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1908,13 +1928,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Carrot Cake 3Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-carrot-cake.jpg",
+        "thumb": "/menu/ill-carrot-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Carrot Cake 3Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1940,13 +1961,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Chocolate Fudge Cake 2Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-chocolate-fudge-cake.jpg",
+        "thumb": "/menu/ill-chocolate-fudge-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Chocolate Fudge Cake 2Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -1972,13 +1994,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Chocolate Fudge Cake 3Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-chocolate-fudge-cake.jpg",
+        "thumb": "/menu/ill-chocolate-fudge-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Chocolate Fudge Cake 3Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -2004,13 +2027,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Chocolate Mint 2Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-chocolate-mint-cake.jpg",
+        "thumb": "/menu/ill-chocolate-mint-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Chocolate Mint 2Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -2036,13 +2060,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793208181034-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793208181034-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793208181034-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Chocolate Mint 3Kg — photograph pending from the restaurant"
+        "local": "/menu/ill-chocolate-mint-cake.jpg",
+        "thumb": "/menu/ill-chocolate-mint-cake.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Chocolate Mint 3Kg — an illustration of the dish, not a photograph from the kitchen"
        }
       }
      ]
@@ -3476,13 +3501,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793097154929-image-to-be-updated-soon-jpg-1.jpg",
-        "thumb": "/menu/1793097154929-image-to-be-updated-soon-jpg-1.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793097154929-Image-to-be-updated-soon.jpg-1-.jpeg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Beef & Chicken BBQ Platter — photograph pending from the restaurant"
+        "local": "/menu/ill-beef-chicken-bbq-platter.jpg",
+        "thumb": "/menu/ill-beef-chicken-bbq-platter.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Beef & Chicken BBQ Platter — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -3625,13 +3651,14 @@
        "tags": [],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793097154929-image-to-be-updated-soon-jpg-1.jpg",
-        "thumb": "/menu/1793097154929-image-to-be-updated-soon-jpg-1.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793097154929-Image-to-be-updated-soon.jpg-1-.jpeg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Pepper Beef Steak — photograph pending from the restaurant"
+        "local": "/menu/ill-pepper-beef-steak.jpg",
+        "thumb": "/menu/ill-pepper-beef-steak.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Pepper Beef Steak — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -4990,13 +5017,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793097962870-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793097962870-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793097962870-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Mini Kiddy Pancakes — photograph pending from the restaurant"
+        "local": "/menu/ill-mini-kiddy-pancakes.jpg",
+        "thumb": "/menu/ill-mini-kiddy-pancakes.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Mini Kiddy Pancakes — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {
@@ -5052,13 +5080,14 @@
        ],
        "accompaniments": null,
        "photo": {
-        "local": "/menu/1793097962870-image-to-be-updated-soon-jpg.jpg",
-        "thumb": "/menu/1793097962870-image-to-be-updated-soon-jpg.400.jpg",
-        "remote": "https://glxxyespnkittvoiejtk.supabase.co/storage/v1/object/public/menu-photos/habibi-haven/1793097962870-Image-to-be-updated-soon.jpg.jpg",
-        "width": 700,
-        "height": 672,
-        "placeholder": true,
-        "alt": "Spaghetti Bolognese — photograph pending from the restaurant"
+        "local": "/menu/ill-spaghetti-bolognese.jpg",
+        "thumb": "/menu/ill-spaghetti-bolognese.400.jpg",
+        "remote": null,
+        "width": 800,
+        "height": 800,
+        "placeholder": false,
+        "illustration": true,
+        "alt": "Spaghetti Bolognese — an illustration of the dish, not a photograph from the kitchen"
        }
       },
       {

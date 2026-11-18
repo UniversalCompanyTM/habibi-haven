@@ -1,0 +1,152 @@
+---
+// site/src/components/MapEmbed.astro — the map, on the guest's terms rather than Google's.
+//
+// The brief asks for a Google Maps embed, and an `<iframe>` in the document is the shortest way to satisfy that
+// sentence. It is the wrong shape for a page whose argument is honesty and weight: it would fetch a few hundred
+// kilobytes of cartography and a cookie-bearing document from Google on every page view, including the view
+// where nobody looks at the map, on a site being demoed over a restaurant's own Wi-Fi. So the embed is here, and
+// the person who wants it asks for it. The shipped document contains no third-party frame; pressing the plate
+// fetches one, and the plate says so in the same words the button uses.
+//
+// The control is an `<a>`, not a `<button>`, on purpose. Without JavaScript the anchor does the honest thing —
+// it opens the venue's listing in Maps, where the photos and reviews live — so a guest who never runs a script
+// still gets a map, only not one painted into this page. The script's whole trick is to stop that navigation and
+// put a frame in its place, and it is reversible: hiding the map removes the element and stops it loading, which
+// is the only reason "Hide" is a true word.
+//
+// One claim the plate must not smuggle. `pin` is the centre of the ~14 m cell that the venue's own plus code
+// denotes, decoded in research/tools/pluscode.mjs and already published in the JSON-LD and the directions link.
+// One source, not two, supports it and Habibi Haven has not confirmed it — docs/OPEN-QUESTIONS.md §9 — so the
+// provenance is printed under the map instead of being implied by a red marker that looks authoritative.
+const { name, pin, query, plusCode, street = "Koinange Street" } = Astro.props;
+
+const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(pin)}&z=17&output=embed`;
+const listingUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+---
+
+<div class="map" data-map data-embed={embedUrl} data-name={name} data-street={street}>
+  <div class="map__box" data-map-box>
+    <figure class="map__plate">
+      <img
+        src="/brand/venue-courtyard-arches.jpg"
+        alt=""
+        width="300"
+        height="225"
+        loading="lazy"
+        decoding="async"
+      />
+      <figcaption>The courtyard, from the frames we hold.</figcaption>
+    </figure>
+  </div>
+
+  <p class="meta dim" data-map-state role="status" aria-live="polite"></p>
+
+  <a class="btn btn--ghost" data-map-load href={listingUrl}>Show the map here</a>
+
+  <p class="meta dim">
+    Nothing is fetched from Google until you press “Show the map here”. The pin is the centre of the ~14 m cell
+    that plus code {plusCode} names, decoded from the venue’s own listing — {name} has not confirmed it yet, so
+    the map above is drawn from that number and the listing search still goes by name.
+  </p>
+</div>
+
+<script>
+  import { component } from "../lib/page.mjs";
+
+  // Bound through the lifecycle primitive like every other control on the site: the router does not re-execute
+  // this module after a swap, so a listener attached at module scope would belong to the first /visit and never
+  // to the one on screen — and a second copy of a document-level handler would toggle the frame twice per press.
+  component("[data-map]", {
+    mount(root) {
+      const load = root.querySelector("[data-map-load]");
+      const box = root.querySelector("[data-map-box]");
+      const state = root.querySelector("[data-map-state]");
+      const src = root.dataset.embed ?? "";
+      if (!load || !box || !state || !src) return;
+
+      const frameUp = () => box.querySelector("iframe");
+
+      load.addEventListener("click", (event) => {
+        // The anchor is the no-JS route, so with script running this is the only place the decision is made:
+        // one handler, two states, and the button's label is rewritten from the same condition that decides
+        // them, so the word on the control and the thing it does cannot come apart.
+        event.preventDefault();
+        const open = frameUp();
+        if (open) {
+          // `about:blank` first: removing the element alone leaves a frame that has already started fetching
+          // finishing into a document that no longer contains it.
+          open.src = "about:blank";
+          open.remove();
+          load.textContent = "Show the map here";
+          delete load.dataset.mapLoaded;
+          state.textContent = "The map is closed. The document did not reload to get here.";
+          return;
+        }
+        const frame = document.createElement("iframe");
+        // Named from the attributes the page set, not from whatever heading happens to be nearest: a frame that
+        // opens as "Map of undefined" is announced as nothing to a screen reader, and a title assembled by
+        // looking around the DOM is a guess about layout that outlives the layout.
+        frame.title = `Map of ${root.dataset.name ?? "the venue"} on ${root.dataset.street ?? ""}`.trim();
+        frame.src = src;
+        frame.loading = "lazy";
+        frame.referrerPolicy = "no-referrer-when-downgrade";
+        frame.setAttribute("allowfullscreen", "");
+        box.append(frame);
+        load.textContent = "Hide the map";
+        load.dataset.mapLoaded = "true";
+        state.textContent = "The map is loaded, from Google. Nothing else on this page changed.";
+      });
+    },
+  });
+</script>
+
+<style>
+  .map {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  /* One box, two contents. The plate and the frame share the same slot, and the frame is positioned over the
+     plate rather than replacing it, so showing and hiding cannot push the rest of the page down — a layout
+     shift on the control the guest just pressed is the kind of jolt that reads as a bug in a demo. */
+  .map__box {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    width: 100%;
+    max-width: 42rem;
+    overflow: hidden;
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--bg-1) 88%, transparent);
+  }
+
+  .map__box :global(iframe) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .map__plate {
+    display: grid;
+    gap: 0.4rem;
+    place-content: center;
+    height: 100%;
+    padding: 0.8rem;
+    text-align: center;
+  }
+
+  .map__plate img {
+    width: 100%;
+    height: auto;
+    max-height: 60%;
+    object-fit: cover;
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  .map__plate figcaption {
+    font-size: var(--step--1);
+    color: var(--ink-3);
+  }
+</style>

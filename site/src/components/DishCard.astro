@@ -2,9 +2,13 @@
 // DishCard.astro — one dish, as the data knows it.
 //
 // Three rules this file exists to keep:
-//   * A placeholder photograph upstream is never shown as if it were the dish. Those 102 rows carry
-//     the text "Image to be updated soon"; rendering that as a photo would be the site lying about
-//     food. It renders as a type card instead — the name set in display type, and a line saying so.
+//   * A placeholder photograph upstream is never shown as if it were the dish. Those rows carry the text
+//     "Image to be updated soon"; rendering that as a photo would be the site lying about food. It
+//     renders as a type card instead — the name set in display type, and a line saying so.
+//   * An illustration is labelled as one. `photo.illustration` is set by scripts/ingest-illustrations.mjs
+//     and only ever on a row the kitchen has no photograph for, and the badge here is the visible half of
+//     that. The alt text carries the same sentence, so a screen reader and a sighted guest are told the
+//     same thing. See docs/ASSETS.md for why 28 plates are renders and 74 are still empty.
 //   * width/height come from the mirrored files (measured by mirror-images.mjs), so a filtering pass
 //     that reflows 243 cards cannot shove the page around under someone's thumb (CLS).
 //   * The price is printed from the row. There is no "from KSh" and no rounding, because the kitchen
@@ -15,6 +19,7 @@ import { money } from "../lib/table.mjs";
 const { item, priority = false } = Astro.props;
 const photo = item.photo;
 const isPlaceholder = photo.placeholder === true;
+const isIllustration = photo.illustration === true;
 const available = item.availability ? item.availability.open !== false && item.availability.inStock !== false : true;
 const acc = item.accompaniments ?? null;
 const media = photo.thumb ?? photo.local;
@@ -33,6 +38,7 @@ const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.lo
   data-desc={(item.description || "").toLowerCase()}
   data-available={available ? "true" : "false"}
   data-signed={item.signatureRole ? "true" : null}
+  data-illus={isIllustration ? "true" : null}
   data-reveal
 >
   <div class={`frame${isPlaceholder ? " frame--type" : ""}`} style={isPlaceholder ? null : `aspect-ratio: ${photo.width} / ${photo.height}`}>
@@ -55,6 +61,11 @@ const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.lo
           data-critical={priority ? "" : null}
         />
       )
+    }
+    {
+      /* Not a chip in the footrow: the claim is about the picture, so it sits on the picture, where it
+         cannot be mistaken for a dietary tag the kitchen listed. */
+      isIllustration ? <span class="frame__badge">Illustration</span> : null
     }
   </div>
 

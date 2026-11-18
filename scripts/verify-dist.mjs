@@ -213,6 +213,26 @@ const homeSignatures = (home.match(/data-signed=/g) ?? []).length;
 if (homeSignatures < signatures) bad("home content", `home shows ${homeSignatures} of ${signatures} signature dishes`);
 else ok("home content", `${homeSignatures} signature cards (signatureItems() says ${signatures})`);
 
+// The photograph story has three chapters and the built page has to tell all three: the kitchen's own
+// pictures, the plates this project drew where the kitchen has none, and the rows still honestly empty.
+//
+// This belongs here rather than only in tests/run.mjs because of build order. CI runs the unit suite
+// against the committed menu.json and only then runs `prebuild`, which regenerates that file from the
+// upstream feed — a feed that has no illustrations in it. Drop scripts/ingest-illustrations.mjs out of
+// that chain and nothing local complains: the 28 JPEGs ship, unreferenced, and the deployed menu
+// silently drops back to type cards. Comparing the built HTML against the built data is the only place
+// where that mistake is visible.
+const illustrated = flat.filter((i) => i.photo?.illustration === true);
+const pending = flat.filter((i) => i.photo?.placeholder === true);
+if (illustrated.length !== (menu.meta?.illustratedPhotos ?? -1))
+  bad("photo pipeline", `${illustrated.length} rows carry the illustration flag but meta says ${menu.meta?.illustratedPhotos}`);
+const badges = (menuPage.match(/class="frame__badge"/g) ?? []).length;
+if (illustrated.length && badges < illustrated.length)
+  bad("photo pipeline", `/menu renders ${illustrated.length} illustrated dishes with only ${badges} "Illustration" labels — a render is on screen unlabelled`);
+else if (illustrated.length) ok("photo pipeline", `${illustrated.length} illustrated dishes, all ${badges} labelled; ${pending.length} rows still show their pending state`);
+if (pending.length && !menuPage.includes("Photograph pending"))
+  bad("photo pipeline", `${pending.length} dishes have no picture but /menu never says so — the placeholder is being hidden, not admitted`);
+
 for (const [route, src] of all) {
   for (const phrase of ["Habibi Haven", "Koinange"]) {
     if (!src.includes(phrase)) bad("identity", `${route} never mentions ${phrase}`);
@@ -453,6 +473,36 @@ for (const route of BOOK_ROUTES) {
   }
   if (!fails.some((f) => f.includes("book write")))
     ok("book write", `both forms carry an https data-api, required name and phone, a chunk naming /v1/requests, a no-JS hide rule, and a live wa.me + tel: fallback; #rq-party matches PARTY_MIN/PARTY_MAX (${PARTY_MIN}–${PARTY_MAX})`);
+}
+
+// ---------------------------------------------------------------- the map
+//
+// The brief names a Google Maps embed, and `/visit` promises in its own words that the frame is not fetched
+// until a guest presses. Both halves are claims about bytes, so both are read from bytes rather than inferred
+// from the component: no third-party frame in any built page — the moment the document contains the frame, the
+// sentence above it is false — and on `/visit` the control that makes one, the URL it will point at, the
+// coordinate pair inside it, and the line that says where the pin came from. An unexplained marker is a claim,
+// not a fact, and this site does not publish unexplained pins.
+const framed = all.filter(([, html]) => /<iframe\b/i.test(html));
+if (framed.length)
+  bad("map", `${framed.length} page(s) ship an <iframe>: ${framed.map(([r]) => r).join(", ")} — the page that says nothing is fetched until pressed is now fetching it in the document itself`);
+else ok("map", "no iframe in any built page");
+
+const visitHtml = pages["/visit"] ?? "";
+if (!/data-map-load/.test(visitHtml)) bad("map", "/visit ships no [data-map-load] control — the embed the brief names has nothing to press");
+const embedUrl = decodeHtml(visitHtml.match(/data-embed="([^"]*)"/)?.[1] ?? "");
+if (!/output=embed/.test(embedUrl)) bad("map", `/visit's data-embed is ${JSON.stringify(embedUrl)} — that is not a Maps embed URL`);
+const embedQuery = (embedUrl.split("q=")[1] ?? "").split("&")[0];
+if (!/^-?\d+\.\d+,-?\d+\.\d+$/.test(embedQuery))
+  bad("map", `/visit's embed carries no coordinate pair (q=${JSON.stringify(embedQuery)}) — an embed pointed at a search string is a different claim from a pin`);
+if (!/plus code/.test(visitHtml)) bad("map", "/visit no longer prints where the pin came from");
+if (!/Nothing is fetched from Google until/.test(visitHtml.replace(/\s+/g, " ")))
+  bad("map", "/visit no longer says the map loads on the guest's press — the control has to explain itself before it is used");
+
+// Attribute values arrive HTML-escaped, so `&z=17&output=embed` is `&amp;z=17…` in the document. Decoding first
+// keeps this gate about the URL rather than about the serialiser.
+function decodeHtml(text) {
+  return String(text).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 }
 
 // ---------------------------------------------------------------- weight

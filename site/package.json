@@ -6,9 +6,9 @@
   "description": "Habibi Haven Restaurant — concept site, private preview.",
   "scripts": {
     "dev": "astro dev",
-    "content": "node ../scripts/ingest.mjs && node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
-    "data": "node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
-    "prebuild": "node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs",
+    "content": "node ../scripts/ingest.mjs && node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs && node ../scripts/ingest-illustrations.mjs",
+    "data": "node ../scripts/mirror-images.mjs && node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs && node ../scripts/ingest-illustrations.mjs",
+    "prebuild": "node ../scripts/sync-brand.mjs && node ../scripts/build-content.mjs && node ../scripts/ingest-illustrations.mjs",
     "build": "astro build",
     "postbuild": "node ../tests/api.mjs",
     "preview": "astro preview",

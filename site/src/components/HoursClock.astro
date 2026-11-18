@@ -1,16 +1,21 @@
 ---
 // HoursClock.astro — the day, as a dial.
 //
-// This is the light rig turned into a control. Dragging it rewrites `--hour` and `--night` on the
-// document element through lib/rig-client.mjs — the only writer — and everything else follows from
-// there: CSS interpolates the palette, the hero photograph changes how it is lit, and the WebGL door
-// is handed the same two numbers. Nothing in this file computes what 20:30 looks like; it renders
-// whatever `rigFor()` answered, and it repaints from the `hh:hour` event, so the labels and the room
-// can never be showing different times.
+// This is the light rig turned into a control. Dragging it rewrites `--hour`, `--night` and `--sun` on
+// the document element through lib/rig-client.mjs — the only writer — and everything else follows from
+// there: CSS interpolates the palette, the atmosphere layer moves its sun, the hero photograph changes
+// how it is lit, and the WebGL door is handed the same numbers. Nothing in this file computes what
+// 20:30 looks like; it renders whatever `rigFor()` answered and repaints from the `hh:hour` event, so
+// the labels and the room can never be showing different times.
+//
+// A19 took the half-hour detent out. The control runs 00:00 → 24:00 with `step="any"`, because a sun
+// that arrives in twenty-eight jumps is a slideshow, and the owner asked for a room that shifts "like
+// the sun over the sky" — every second, unnoticed. The ruler underneath is positioned by hour rather
+// than spaced by flexbox, so a label at 06:30 sits over the point on the track that *is* 06:30.
 //
 // The dial is not a booking control. It does not touch the table and the copy says so, because there
 // is no availability data upstream to check a reservation against.
-import { CLOSE_LABEL, DIAL_MAX, DIAL_MIN, OPEN_LABEL, hourToLabel, nairobiHour, nextChange, rigFor } from "../lib/hours.mjs";
+import { CLOSE_LABEL, DIAL_MAX, DIAL_MIN, OPEN_LABEL, hourToLabel, nairobiHourFloat, nextChange, rigFor } from "../lib/hours.mjs";
 
 // `name` makes the id unique per call site. `Astro.uid` does not exist in Astro 5.18 — it is an
 // island-HMR prop, not context — so every dial used to render `id="dial-undefined"`, and the home
@@ -21,14 +26,21 @@ const noteId = `dial-note-${name}`;
 
 // The same build-time hour Base.astro writes onto <html>, from the same function — so the server HTML
 // and this component agree without either one hardcoding a time.
-const rig = rigFor(nairobiHour());
+const rig = rigFor(nairobiHourFloat());
 const countdown = nextChange();
 
-// Stops are the phase boundaries from hours.mjs, not tidy round numbers, and they start at midnight
-// because the dial covers the whole day rather than only the service. Eight is the limit of what
-// stays legible across a panel; the compact variant keeps the four that frame it.
-const STOP_HOURS = minimal ? [0, 8, 13, 20] : [DIAL_MIN, 6.5, 9, 11.5, 15, 17.5, 19.5, 22];
-const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: rigFor(hour).name }));
+// Marks the guest can actually orient on: midnight, the hour of record opening the kitchen, the middle
+// of the day, golden hour, and the closing minute. The compact variant keeps the two ends and noon.
+const STOP_HOURS = minimal ? [DIAL_MIN, 12, DIAL_MAX] : [DIAL_MIN, 6.5, 12, 17.5, 23, DIAL_MAX];
+const stops = STOP_HOURS.map((hour) => ({
+  hour,
+  label: hourToLabel(hour),
+  name: rigFor(hour).name,
+  // The track spans DIAL_MIN→DIAL_MAX, so an hour's place on it is a plain ratio. Written as a
+  // custom property rather than a hard-coded `left`, so the ruler and the domain cannot drift if the
+  // dial is ever narrowed or widened.
+  pct: ((hour - DIAL_MIN) / (DIAL_MAX - DIAL_MIN)) * 100,
+}));
 ---
 
 <div class:list={['dial', { 'dial--minimal': minimal }]} data-dial>
@@ -42,24 +54,24 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
 
   <p class="meta" data-line>{rig.line}</p>
 
-  <div class="dial__track">
-    <label class="sr-only" for={dialId}>Hour of the day in Nairobi, by half hour</label>
+  <div class="dial__track" data-track>
+    <label class="sr-only" for={dialId}>Hour of the day in Nairobi</label>
     <input
       type="range"
       id={dialId}
       min={String(DIAL_MIN)}
       max={String(DIAL_MAX)}
-      step="0.5"
+      step="any"
       value={rig.hour}
       data-dial-input
       aria-describedby={minimal ? null : noteId}
     />
   </div>
 
-  <div class="dial__stops" aria-hidden="true">
+  <div class="dial__ruler" aria-hidden="true">
     {
       stops.map((s) => (
-        <span data-phase-stop data-hour={s.hour}>
+        <span data-phase-stop data-hour={s.hour} style={`--p:${s.pct.toFixed(3)}%`}>
           {s.label}
           <em data-stop-name>{s.name}</em>
         </span>
@@ -82,25 +94,33 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
   }
 
   <p class="meta dial__note" id={noteId}>
-    The dial runs the whole day; {OPEN_LABEL}–{CLOSE_LABEL} are the hours of record, and the chip says
-    which side of them you are on. It changes the light in the room, not the menu, and it books nothing.
+    The dial runs the whole day, continuously — no half-hour jumps. {OPEN_LABEL}–{CLOSE_LABEL} are the
+    hours of record, and the chip says which side of them you are on. It changes the light in the room,
+    not the menu, and it books nothing.
   </p>
 </div>
 
 <script>
-  import { applyHour, currentHour, HOUR_EVENT } from "../lib/rig-client.mjs";
+  import { applyHour, currentHour, HOUR_EVENT, releaseToNow } from "../lib/rig-client.mjs";
   // DIAL_MIN/DIAL_MAX are used by the playback wrap below. The frontmatter has its own import list, and
   // adding them there is what made this block throw `DIAL_MAX is not defined` on the first tick of
   // "Watch the day go" while `astro build` reported success — a script block resolves names at click
   // time, not build time. Both lists have to be edited together.
-  import { DIAL_MAX, DIAL_MIN, nairobiHour, nextChange, rigFor } from "../lib/hours.mjs";
+  import { DIAL_MAX, DIAL_MIN, nairobiHourFloat, nextChange, rigFor } from "../lib/hours.mjs";
   import { collection } from "../lib/page.mjs";
+
+  // A full day, played in 26 seconds. Slower and nobody reads it as motion; faster and the room strobes.
+  const DAY_MS = 26_000;
+  // Arrow keys on a `step="any"` range move 1% of the domain — 0.24 h, about fourteen minutes, which is
+  // a number no keyboard guest would choose. These are the steps a person actually means.
+  const KEY_STEP = 0.25; // 15 minutes
+  const PAGE_STEP = 1; // an hour
 
   // Every dial on the page gets wired, because a hero carries a small one and the rig section a full
   // one, and a `document.querySelector` would silently leave the second dead. `collection` rather than a
   // `forEach` at module scope because the module runs once: after a navigation the dials are new elements,
   // and a second `forEach(wire)` over the document would bind the surviving ones twice — two playback
-  // intervals, two countdowns, one handle answering to both.
+  // loops, two countdowns, one handle answering to both.
   collection("[data-dial]", { mount: wire, unmount: (stop) => stop?.() });
 
   function wire(dial: HTMLElement) {
@@ -120,6 +140,9 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
     const paint = (hour: number) => {
       const r = rigFor(hour);
       input.value = String(r.hour); // the play loop advances from here, so it has to move
+      // The track's fill is the day so far, drawn from the handle's own position rather than a second
+      // number that could disagree with it.
+      dial.style.setProperty("--dial-p", `${((r.hour - DIAL_MIN) / (DIAL_MAX - DIAL_MIN)) * 100}%`);
       if (clock) {
         clock.textContent = r.label;
         clock.setAttribute("datetime", r.label);
@@ -161,22 +184,58 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
       applyHour(Number(input.value));
     });
 
+    // Keyboard: 15 minutes per arrow, an hour per Page Up/Down, the ends per Home/End. Without this a
+    // keyboard guest moves the whole room by fourteen-minute shuffles and cannot reach 00:00 at all.
+    input.addEventListener("keydown", (event: KeyboardEvent) => {
+      const from = Number(input.value);
+      let to: number | null = null;
+      if (event.key === "ArrowLeft" || event.key === "ArrowDown") to = from - KEY_STEP;
+      else if (event.key === "ArrowRight" || event.key === "ArrowUp") to = from + KEY_STEP;
+      else if (event.key === "PageDown") to = from - PAGE_STEP;
+      else if (event.key === "PageUp") to = from + PAGE_STEP;
+      else if (event.key === "Home") to = DIAL_MIN;
+      else if (event.key === "End") to = DIAL_MAX;
+      if (to === null) return;
+      event.preventDefault();
+      stop();
+      // The domain wraps rather than sticks: 24:00 and 00:00 are the same instant, and a guest who
+      // presses Right at midnight should find themselves at 00:15, not pinned at one end.
+      const wrapped = (to + 24) % 24;
+      applyHour(to > DIAL_MAX && from >= DIAL_MAX - KEY_STEP ? wrapped : Math.max(DIAL_MIN, Math.min(DIAL_MAX, to)));
+    });
+
     dial.querySelector("[data-dial-now]")?.addEventListener("click", () => {
       stop();
-      // The wall clock, not the show. At 02:00 the handle goes to 02:00, the chip reads Closed and the
-      // countdown says when it opens — the hour is never rounded up to opening time to look better.
-      applyHour(nairobiHour());
+      // The wall clock, not the show, and to the second. At 02:00 the handle goes to 02:00, the chip
+      // reads Closed and the countdown says when it opens — the hour is never rounded up to opening
+      // time to look better. This also hands the room back to the ambient drift, which only runs while
+      // nobody has dialled it.
+      releaseToNow();
       tickCountdown();
     });
 
-    /* The day, played. Same writer as the slider, so the room and the handle cannot disagree. */
-    let timer: ReturnType<typeof setInterval> | null = null;
+    /* The day, played. Same writer as the slider, so the room and the handle cannot disagree — but
+       frame-accurate rather than stepped: the old loop applied +0.5 h every 1.1 s, which is exactly the
+       detent this dial no longer has, and it showed. Position now comes from elapsed time, so the
+       smoothness survives a slow frame instead of dropping an hour. */
+    let raf = 0;
+    let at = 0;
+    let last = 0;
     const play = dial.querySelector<HTMLButtonElement>("[data-dial-play]");
 
+    function step(now: number) {
+      const delta = last ? now - last : 0;
+      last = now;
+      at = (at + (delta / DAY_MS) * (DIAL_MAX - DIAL_MIN)) % (DIAL_MAX - DIAL_MIN);
+      applyHour(DIAL_MIN + at);
+      raf = requestAnimationFrame(step);
+    }
+
     function stop() {
-      if (timer === null) return;
-      clearInterval(timer);
-      timer = null;
+      if (!raf) return;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      last = 0;
       if (play) {
         play.setAttribute("aria-pressed", "false");
         play.textContent = "Watch the day go";
@@ -184,18 +243,16 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
     }
 
     play?.addEventListener("click", () => {
-      if (timer !== null) {
+      if (raf) {
         stop();
         return;
       }
       play.setAttribute("aria-pressed", "true");
       play.textContent = "Stop";
-      timer = setInterval(() => {
-        const next = Number(input.value) + 0.5;
-        // Midnight wraps to midnight, so the playback is a day rather than a segment of one.
-        applyHour(next > DIAL_MAX ? DIAL_MIN : next);
-      }, 1100);
-      if (Number(input.value) >= DIAL_MAX) applyHour(DIAL_MIN);
+      // Continue from wherever the handle is rather than jumping to midnight, so pressing play never
+      // moves the room the guest is looking at.
+      at = Math.max(0, Math.min(DIAL_MAX - DIAL_MIN, Number(input.value) - DIAL_MIN));
+      raf = requestAnimationFrame(step);
     });
 
     // A looping timer in a hidden tab is nobody's idea of motion, and reduced-motion gets no autoplay.
@@ -210,9 +267,9 @@ const stops = STOP_HOURS.map((hour) => ({ hour, label: hourToLabel(hour), name: 
     // which is which is the whole point of putting both on the panel.
     const countdown = setInterval(tickCountdown, 60_000);
 
-    // Everything with a teardown cost is returned rather than left running: this dial's hour listener and
-    // two intervals. A swapped-out dial keeps no listeners; a dialled-back-to home page gets one fresh set
-    // per live dial, which is the property `collection` exists to hold.
+    // Everything with a teardown cost is returned rather than left running: this dial's hour listener,
+    // its key handler and two timers. A swapped-out dial keeps nothing; a dialled-back-to home page gets
+    // one fresh set per live dial, which is the property `collection` exists to hold.
     return () => {
       stop();
       document.removeEventListener(HOUR_EVENT, onHour);

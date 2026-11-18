@@ -14,6 +14,7 @@
 // Browser-level checks live in M6 next to the dist verifier; this is the arithmetic layer.
 
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -587,9 +588,14 @@ check("placeholder photography is flagged and never captioned as the dish", () =
   for (const i of flagged) {
     if (i.photo.alt !== `${i.name} — photograph pending from the restaurant`) return `${i.id} alt reads as the dish`;
   }
-  const real = ALL_ITEMS.filter((i) => !i.photo.placeholder);
-  if (real.length !== menu.meta.realPhotos) return "real photo count disagrees";
-  for (const i of real) if (!i.photo.local?.startsWith("/menu/")) return `${i.id} has no mirrored path`;
+  // Three states, not two: a kitchen photograph, a render that stands in for a dish nobody has
+  // photographed yet, and a row still waiting. `realPhotos` counts the first alone, so the split has
+  // to be made here the same way DishCard makes it — otherwise a render inflates the photograph count
+  // and the site starts claiming coverage it does not have.
+  const real = ALL_ITEMS.filter((i) => !i.photo.placeholder && !i.photo.illustration);
+  if (real.length !== menu.meta.realPhotos) return `real photo count disagrees: ${real.length} on the rows, ${menu.meta.realPhotos} in meta`;
+  for (const i of ALL_ITEMS.filter((i) => !i.photo.placeholder))
+    if (!i.photo.local?.startsWith("/menu/")) return `${i.id} has no mirrored path`;
   return true;
 });
 
@@ -672,6 +678,105 @@ check("the dial can represent every hour the rig can arrive at", () => {
   const late = hours.rigFor(0.4); // the hour this site was actually built at
   if (late.name !== "Closed") return `00:24 reads as "${late.name}"`;
   if (late.night < 0.95) return `00:24 is not dark (${late.night})`;
+});
+
+/* A19 took the detent out: `step="any"`, a 24-hour domain, and a writer that no longer rounds. A dial
+   that lands on half hours is a lighting board, and the owner asked for the sun instead — "smoothly
+   every second without anyone noticing openly". These are the four claims that make that testable
+   rather than a feeling. */
+check("the dial is continuous, not a detent", () => {
+  if (hours.DIAL_STEP !== 0) return `DIAL_STEP is ${hours.DIAL_STEP}; 0 is the data form of step="any"`;
+  if (hours.DIAL_MAX !== 24) return `DIAL_MAX is ${hours.DIAL_MAX}; a continuous day has to reach 24:00`;
+  // 24:00 and 00:00 are the same instant, and the handle is allowed to arrive there.
+  eq(hours.hourToLabel(24), "00:00", "24:00 wraps");
+  eq(hours.rigFor(24).night, 1, "the rig answers for 24:00");
+  // An eighth of a minute is below anything a thumb can aim at, and the rig must still answer for it.
+  const odd = hours.rigFor(18.4177);
+  if (odd.hour !== 18.4177) return `18.4177 came back as ${odd.hour} — something is snapping it`;
+  if (odd.label !== "18:25") return `18.4177 labels as ${odd.label}`;
+});
+
+check("the night curve moves in sunlight, not in steps", () => {
+  // Worst slope on the curve is the dawn stop (5→6.5 h, 0.38 of night over 1.5 h) ≈ 0.0042 a minute.
+  // A jump of 0.01 in sixty seconds is therefore a discontinuity, not dusk arriving quickly.
+  let worst = 0;
+  for (let h = 0; h < 24; h += 1 / 60) {
+    const d = Math.abs(hours.nightAmount(h + 1 / 60) - hours.nightAmount(h));
+    if (d > worst) worst = d;
+  }
+  if (!(worst < 0.01)) return `the curve jumps ${(worst * 100).toFixed(2)}% of night in one minute`;
+});
+
+check("sun is the complement of night, exactly", () => {
+  for (const h of [0, 3.75, 6.5, 11, 15.5, 18.4177, 23.9, 24]) {
+    const sum = hours.nightAmount(h) + hours.sunAmount(h);
+    if (Math.abs(sum - 1) > 1e-12) return `at ${h} h, night + sun = ${sum}`;
+  }
+});
+
+check("the ambient clock keeps the second hand", () => {
+  // 12:34:56 in Nairobi is 09:34:56 UTC, whatever zone this test runs in.
+  const when = new Date(Date.UTC(2026, 10, 18, 9, 34, 56));
+  eq(hours.nairobiMinutes(when), 12 * 60 + 34, "minutes");
+  eq(hours.nairobiSeconds(when), 12 * 3600 + 34 * 60 + 56, "seconds");
+  const float = hours.nairobiHourFloat(when);
+  if (Math.abs(float - (12 + 34 / 60 + 56 / 3600)) > 1e-9) return `hourFloat is ${float}`;
+  // The reason two functions exist: the booking rules are minute arithmetic and the rig is not.
+  if (hours.nairobiHour(when) === float) return "nairobiHour and nairobiHourFloat are identical — one is redundant";
+});
+
+/* The illustrations are the part of this site a client could reasonably be angry about later, so the
+   label is a fact the build checks rather than a promise in a comment: a render may never stand in for
+   a photograph, and every render must say what it is. */
+check("every illustration says so, and no photograph is one", () => {
+  const ill = ALL_ITEMS.filter((i) => i.photo?.illustration === true);
+  if (!ill.length) return "no illustrations attached — did scripts/ingest-illustrations.mjs run?";
+  for (const i of ill) {
+    if (i.photo.placeholder === true) return `${i.id} is flagged illustrated AND placeholder`;
+    if (!/not a photograph/i.test(i.photo.alt ?? "")) return `${i.id} has an illustration with no admission in its alt text`;
+    if (!i.photo.local || !i.photo.thumb) return `${i.id} is illustrated but has no file`;
+  }
+  const m = menu.meta;
+  eq(m.realPhotos + m.illustratedPhotos + m.placeholderPhotos, m.items, "photo counts add up");
+  eq(ill.length, m.illustratedPhotos, "illustratedPhotos is derived from the rows");
+  // A real photograph must never have picked up the flag on the way past.
+  const polluted = ALL_ITEMS.filter((i) => i.photo?.illustration === true && /supabase|menu-photos/.test(i.photo.remote ?? "") && !/image-to-be-updated/i.test(i.photo.remote ?? ""));
+  if (polluted.length) return `${polluted.map((p) => p.id).join(", ")} has an upstream photo but is marked illustrated`;
+});
+
+// The row-level test above reads the file this repo commits. This one reads what the build produced and
+// compares it against the manifest that decided it, because `prebuild` regenerates menu.json from the
+// upstream feed on every build and knows nothing about the 28 plates in content/illustrations.json. If
+// the illustration step ever falls out of that chain, the site does not break — it publishes a menu that
+// quietly lost 28 pictures while the JPEGs stayed in the bucket, orphaned and unseen. Set equality, not a
+// count, so a half-applied manifest fails too.
+check("the shipped menu matches the illustration manifest exactly", () => {
+  // readFileSync, not await: check() rejects a promise outright, because a suite whose assertions can resolve
+  // out of order is a suite that reports green for tests that never ran.
+  const manifest = JSON.parse(readFileSync(join(ROOT, "content/illustrations.json"), "utf8"));
+  const wanted = new Set();
+  for (const asset of manifest.assets) {
+    if (asset.kind !== "dish") continue;
+    for (const id of asset.items ?? []) {
+      if (wanted.has(id)) return `${id} is claimed by two illustration assets — one plate, one picture`;
+      wanted.add(id);
+    }
+  }
+  const shipped = new Set(ALL_ITEMS.filter((i) => i.photo?.illustration === true).map((i) => i.id));
+  const missing = [...wanted].filter((id) => !shipped.has(id));
+  const extra = [...shipped].filter((id) => !wanted.has(id));
+  if (missing.length) return `${missing.length} of ${wanted.size} manifest plates are not on the menu (${missing.slice(0, 5).join(", ")}) — did prebuild run scripts/ingest-illustrations.mjs?`;
+  if (extra.length) return `the menu carries ${extra.length} illustration(s) the manifest never declared (${extra.slice(0, 5).join(", ")})`;
+  // Each attached row has to point at one of this manifest's own outputs, or a re-render would serve a
+  // file nothing knows about.
+  const outs = new Set(manifest.assets.filter((a) => a.kind === "dish").map((a) => `/menu/${a.out}.jpg`));
+  for (const i of ALL_ITEMS.filter((x) => x.photo?.illustration === true)) {
+    if (!outs.has(i.photo.local)) return `${i.id} points at ${i.photo.local}, which no manifest asset writes`;
+    // And nothing upstream: `meta.photos` counts the kitchen's own distinct image URLs, so a render that
+    // kept its placeholder's remote would be counted twice — once as their photograph, once as ours.
+    if (i.photo.remote !== null) return `${i.id} is an illustration but still carries the upstream remote ${i.photo.remote}`;
+  }
+  return true;
 });
 
 /* -------------------------------------------------------------------- page */

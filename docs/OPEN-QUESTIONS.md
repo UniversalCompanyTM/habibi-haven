@@ -196,3 +196,33 @@ not what the config says it should:
 Nothing in the book notifies anyone yet. A recorded table sits in D1 until someone queries it — for the pitch
 that is exactly what the page claims ("nothing is confirmed", the phone number is who decides); for a trading
 restaurant it is the first thing that needs a watcher. See §8 for who signs off.
+
+## 12. The 74 dishes still without a picture — one export closes it for free
+
+The menu carries 243 rows. 141 of them are the kitchen's own photographs, mirrored from their site. 28 are
+labelled renders standing in for dishes nobody has photographed. **74 show a type card that says "Photograph
+pending"** — the row's name and price, honestly empty.
+
+That last number is not a build problem, and it is not fixable from the outside. Measured on 2026-11-18 and
+recorded in [ASSETS.md](ASSETS.md): every remote URL on the 74 rows is the literal string
+`image-to-be-updated-soon` that their CMS emits for an empty slot; their public bucket refuses a listing
+without credentials; the Instagram and Facebook pages return a login shell with zero image URLs in it; TikTok
+returns a stub; the Google Maps place carries only default avatars; and every reverse image search came back
+with other restaurants' food. Publishing one of those would make the site's central claim — that its facts
+trace to a source — false, so none went in.
+
+**Ask:** one export from whoever holds the phone that took the menu photos. Any of these is enough:
+
+- the **Google Business Profile media library** (owners can download all of it in one action), or
+- a **ZIP / Drive link** to the camera-roll folder or the Instagram grid archive, or
+- a folder of shots for just the highest-traffic gaps — the seven rows the kitchen leads with, and the
+  rice-and-mandy family, account for most of what a guest scrolls looking for.
+
+Worth asking for in the same breath: **10–15 vertical seconds of the courtyard at dusk and one plate of
+mandy arriving at the table.** That is the footage the site currently has no real version of, and it is the
+difference between a menu that looks like a spreadsheet and a place you can picture eating at.
+
+**What happens if it never comes:** nothing breaks. The 74 stay type cards, the 28 keep their "Illustration"
+badge, and the counts in the meta are derived from the rows rather than asserted, so the copy can never claim
+more coverage than the folder actually had. `tests/run.mjs` fails the build if a render is ever saved as if it
+were a photograph — the empty state is the failure mode this project prefers.

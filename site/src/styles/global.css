@@ -897,6 +897,28 @@ html.js [data-reveal]:focus-within {
   transform: scale(1.08);
 }
 
+/* The visible half of the promise in DishCard.astro: a render says it is a render on the picture it
+   stands for, not in the footrow where a guest would read it as another dietary tag the kitchen
+   listed. It carries its own dark plate rather than a palette colour because it sits over an image
+   whose brightness no stylesheet can predict — ivory on --overlay is the pair that survives a white
+   tablecloth and a charcoal grill alike. */
+.frame__badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: var(--overlay);
+  color: var(--paper);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: 0 1px 6px color-mix(in oklab, #04100e 45%, transparent);
+}
+
 /* Dishes whose row carries their "Image to be updated soon" upload get a type card instead of being
    passed off as a photograph — the placeholder is never dressed up as food. */
 .frame--type {
@@ -1379,10 +1401,35 @@ html.js [data-reveal]:focus-within {
 
 .dial__track {
   position: relative;
-  height: 2px;
-  margin-block: 0.9rem;
-  background: linear-gradient(90deg, var(--amber), var(--teal) 55%, var(--amber));
-  border-radius: 2px;
+  height: 8px;
+  margin-block: 1.1rem 0.4rem;
+  /* The strip is the day: where it is dark is when it is dark. The stops are placed at the hour they
+     name (0 h, 6.5 h, 11 h, 15.5 h, 17.5 h, 21 h, 24 h out of 24) rather than spread evenly, so a
+     guest can read "the room goes amber about here" off the control itself. */
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--bg-0), var(--lagoon) 6%) 0%,
+    color-mix(in oklab, var(--bg-0), var(--hibiscus) 22%) 27%,
+    color-mix(in oklab, var(--lagoon) 70%, var(--paper)) 46%,
+    color-mix(in oklab, var(--lagoon) 55%, var(--paper)) 65%,
+    color-mix(in oklab, var(--amber) 80%, var(--ember)) 73%,
+    color-mix(in oklab, var(--ember) 60%, var(--bg-1)) 87%,
+    color-mix(in oklab, var(--bg-0), var(--teal) 8%) 100%
+  );
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--mist) 18%, transparent);
+}
+
+/* The part of the day the handle has passed, marked rather than filled — a fill would read as progress
+   on a control that is not a progress bar. */
+.dial__track::after {
+  content: "";
+  position: absolute;
+  inset: -3px auto -3px 0;
+  width: var(--dial-p, 50%);
+  border-inline-end: 2px solid color-mix(in oklab, var(--mist) 85%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
 }
 
 .dial input[type="range"] {
@@ -1401,39 +1448,81 @@ html.js [data-reveal]:focus-within {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--mist);
+  /* The handle is the sun, not a slider knob: lamp-coloured while the room is dark, paper-white in it. */
+  background: color-mix(in oklab, var(--lamp-glow), var(--paper) calc(var(--sun) * 100%));
   border: 3px solid var(--bg-0);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--teal) 60%, transparent),
-    0 0 26px 4px color-mix(in oklab, var(--teal) 45%, transparent);
+    0 0 26px 4px color-mix(in oklab, var(--amber) calc(20% + var(--sun) * 45%), transparent);
 }
 
 .dial input[type="range"]::-moz-range-thumb {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--mist);
+  background: color-mix(in oklab, var(--lamp-glow), var(--paper) calc(var(--sun) * 100%));
   border: 3px solid var(--bg-0);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--teal) 60%, transparent);
 }
 
-.dial__stops {
-  display: flex;
-  justify-content: space-between;
+.dial input[type="range"]:focus-visible {
+  outline: none;
+}
+
+.dial input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--teal);
+}
+
+/* The ruler is positioned, not flexed: a label for 06:30 sits at 27.1% of the track because that is
+   where 06:30 is on a 24-hour domain. `justify-content: space-between` put eight captions evenly across
+   and let the first and last fall off the ends. */
+.dial__ruler {
+  position: relative;
+  height: 2.4rem;
   font-size: 0.66rem;
   letter-spacing: 0.12em;
   color: var(--mist-3);
 }
 
-/* The hour labels are the ruler; the phase name appears only under the hour the room is actually in,
-   so the dial reads as one instrument instead of eight captions competing for attention. */
-.dial__stops span {
+.dial__ruler span {
+  position: absolute;
+  left: var(--p, 0%);
+  transform: translateX(-50%);
   display: grid;
   justify-items: center;
   gap: 0.2rem;
-  min-width: 3.4rem;
+  white-space: nowrap;
 }
 
-.dial__stops em {
+/* Only the two ends need pulling in, and only they are allowed to: a centred label at 00:00 or 24:00
+   would hang half off the panel. */
+.dial__ruler span:first-child {
+  transform: none;
+}
+
+.dial__ruler span:last-child {
+  transform: translateX(-100%);
+}
+
+/* Each mark carries a tick, so the hour and the position are the same claim twice rather than a caption
+   floating near a line it may or may not mean. */
+.dial__ruler span::before {
+  content: "";
+  position: absolute;
+  top: -0.7rem;
+  width: 1px;
+  height: 0.45rem;
+  background: color-mix(in oklab, var(--mist) 38%, transparent);
+}
+
+.dial__ruler span:first-child::before {
+  inset-inline-start: 0;
+}
+
+.dial__ruler span:last-child::before {
+  inset-inline-end: 0;
+}
+
+.dial__ruler em {
   font-style: normal;
   font-size: 0.58rem;
   letter-spacing: 0.06em;
@@ -1442,11 +1531,11 @@ html.js [data-reveal]:focus-within {
   transition: opacity 0.4s ease;
 }
 
-.dial__stops span.is-active {
+.dial__ruler span.is-active {
   color: var(--mist);
 }
 
-.dial__stops span.is-active em {
+.dial__ruler span.is-active em {
   opacity: 1;
 }
 
