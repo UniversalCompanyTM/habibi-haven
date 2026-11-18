@@ -538,6 +538,51 @@ async function shotRegion(selector, name = "region") {
   return pixelStats(data);
 }
 
+// The same clip as raw bytes, for questions about *motion* rather than about light.
+async function shotOf(selector) {
+  const clip = await evaluate(`
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return null;
+    return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+  `);
+  if (!clip) return null;
+  const { data } = await inPage("Page.captureScreenshot", { format: "png", clip: { ...clip, scale: 1 } });
+  return data;
+}
+
+// Compare two clips pixel by pixel and report both the average difference and the fraction of pixels that
+// changed enough to be an edge moving. The fraction is the useful one: text sliding along a strip moves a
+// lot of pixels a long way, while the page breathing under the light rig moves every pixel a little.
+// Exact byte equality would be the obvious test and is the wrong one — the ticker sits on a background the
+// clock keeps re-tinting, so "identical PNGs" is a claim about the rig as much as about the line.
+async function diffPair(a, b) {
+  if (!a || !b) return null;
+  await park("__hhDiffA", a);
+  await park("__hhDiffB", b);
+  return evaluate(`
+    const load = async (src) => { const i = new Image(); i.src = src; await i.decode(); return i; };
+    const A = await load("data:image/png;base64," + window.__hhDiffA);
+    const B = await load("data:image/png;base64," + window.__hhDiffB);
+    if (A.width !== B.width || A.height !== B.height) return { mismatched: [A.width, A.height, B.width, B.height] };
+    const grab = (img) => {
+      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const da = grab(A), db = grab(B);
+    const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    let sum = 0, moved = 0, n = 0;
+    for (let i = 0; i < da.length; i += 4) {
+      const d = Math.abs(lum(da, i) - lum(db, i));
+      sum += d; n += 1; if (d > 24) moved += 1;
+    }
+    return { w: A.width, h: A.height, meanDiff: Math.round((sum / n) * 100) / 100, shifted: Math.round((moved / n) * 1e5) / 1e5 };
+  `);
+}
+
 // The whole viewport, photograph and scrim and copy included. The door-region frames answer "did the rig
 // move"; they cannot answer "can the headline be read", and only the composite a guest actually sees does.
 async function shotViewport(name) {
@@ -2508,6 +2553,53 @@ if (!samples.missing) {
   if (controls.resumed !== "playing" || controls.pressedAfter !== "false") failures.push(`/ releasing Stop left the rotator ${JSON.stringify(controls.resumed)} / aria-pressed ${JSON.stringify(controls.pressedAfter)}`);
 }
 
+// Does stopping the line stop the *picture*? Two runs of the animation-clock version of this question
+// reported the same 283ms of travel after Stop — identical to the millisecond under two different
+// implementations — which is not what a race looks like. It is what a composited animation's main-thread
+// mirror looks like: the compositor keeps running until the pause reaches it, and the clock on the main
+// thread adopts that last frame in one step. The number is kept below as a measurement, because it is
+// interesting, but the verdict belongs on rendered pixels: the same strip photographed 700ms apart while
+// running has to differ, and photographed 900ms apart while stopped must not. The first pair is the
+// control for the second — without it, "nothing changed" could mean "nothing was ever moving".
+await evaluate(`
+    const r = document.querySelector("[data-ticker-root]");
+    r.scrollIntoView({ block: "center", behavior: "instant" });
+    return true;
+  `);
+const runA = await shotOf(".ticker");
+await new Promise((r) => setTimeout(r, 700));
+const runB = await shotOf(".ticker");
+const moving = await diffPair(runA, runB);
+await evaluate(`
+    document.querySelector("[data-ticker-play]").click();
+    const track = document.querySelector("[data-ticker]");
+    window.__hhTickerStop = Number(track.getAnimations()[0]?.currentTime ?? 0);
+    return getComputedStyle(track).animationPlayState;
+  `);
+const stopA = await shotOf(".ticker");
+await new Promise((r) => setTimeout(r, 900));
+const stopB = await shotOf(".ticker");
+const stopped = await diffPair(stopA, stopB);
+const mirrorDrift = await evaluate(`
+    const track = document.querySelector("[data-ticker]");
+    return Math.round(Number(track.getAnimations()[0]?.currentTime ?? 0) - window.__hhTickerStop);
+  `);
+// Hand the line back to the state the next battery reads at load.
+await evaluate(`document.querySelector("[data-ticker-play]").click(); return true;`);
+const stillLogged = drain();
+results.push({
+  path: "/ (the moving line, stopped)",
+  value: { moving, stopped, mirrorDrift },
+  errors: stillLogged.errors,
+  warnings: stillLogged.warnings,
+});
+if (!moving || !stopped) {
+  failures.push("/ the ticker strip could not be photographed twice, so nothing can be said about whether stopping it stops the picture");
+} else {
+  if (!(moving.shifted > 0.005)) failures.push(`/ two shots 700ms apart while the line was running differ on ${(moving.shifted * 100).toFixed(2)}% of pixels — the strip is not moving, or the capture cannot see it move, and either way the stillness claim below proves nothing`);
+  if (stopped.shifted > 0.001 || stopped.meanDiff > 2) failures.push(`/ two shots 900ms apart while stopped still differ on ${(stopped.shifted * 100).toFixed(2)}% of pixels (mean ${stopped.meanDiff}) — the animation clock says ${JSON.stringify(mirrorDrift)}ms of drift, and now the rendered line agrees that Stop did not stop it`);
+}
+
 // The ticker: one CSS animation, and the controls must act on that same animation rather than on a
 // second loop of our own.
 const line = await evaluate(`
@@ -2598,7 +2690,10 @@ if (line.missing) {
   if (!line.hasPrice || !line.hasEmoji || !line.hasQuote) failures.push(`/ the line is missing its content claims (price ${line.hasPrice}, emoji ${line.hasEmoji}, quoted caption ${line.hasQuote}): "${line.text}"`);
   if (line.stopPlayState !== "paused" || line.stopPressed !== "true" || line.stopState !== "paused") failures.push(`/ pressing Stop left the animation ${JSON.stringify(line.stopPlayState)} and the button aria-pressed ${JSON.stringify(line.stopPressed)} — WCAG 2.2.2 wants a real pause on content that moves for more than five seconds`);
   if (line.stopCss !== "paused" || line.runCss !== "running" || line.holdCss !== "paused" || line.releaseCss !== "running") failures.push(`/ the play state read ${JSON.stringify([line.stopCss, line.runCss, line.holdCss, line.releaseCss])} from the stylesheet — the sheet has to be the one owner, or a style recalculation from the light rig will resume the line under a reader who stopped it`);
-  if (line.driftWhileStopped !== 0) failures.push(`/ the ticker drifted ${line.driftWhileStopped}ms of animation time while stopped — pause has to mean stopped`);
+  // Only a full-window drift is a failure from the clock: a one-step catch-up (283ms, twice, in two
+  // different implementations) is the main-thread mirror adopting the last pre-pause compositor frame, and
+  // the "/ (the moving line, stopped)" pixel pair above is what decides whether the line really held.
+  if (line.driftWhileStopped > 1100) failures.push(`/ the ticker travelled ${line.driftWhileStopped}ms of a 1200ms stopped window — the pause is not reaching the compositor at all`);
   if (line.runPlayState !== "running") failures.push(`/ releasing Stop returned the animation to ${JSON.stringify(line.runPlayState)}`);
   if (!line.focusIsRoot) failures.push("/ the ticker is not focusable as a region — the arrow-key path the hint promises does not exist");
   if (!line.keyMoved || line.keyPaused !== "paused") failures.push(`/ an arrow key moved the line ${line.keyMoved} and left it ${JSON.stringify(line.keyPaused)} — a reader stepping through text does not want it running underneath`);
