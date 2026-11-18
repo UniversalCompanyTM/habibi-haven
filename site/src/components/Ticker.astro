@@ -16,10 +16,13 @@
 // kind of fact follows; the words inside the quotation marks are theirs, unchanged.
 //
 // The interaction is deliberately not a second animation loop. The line is still a CSS keyframe, and the
-// Web Animations API hands that same animation back through `getAnimations()`, so pausing is
-// `animation.pause()`, resuming is `animation.play()`, and dragging is a `currentTime` write — a seek on
-// the animation the browser is already running, not a requestAnimationFrame of our own. The frame gate in
-// scripts/verify-runtime.mjs therefore sees no new loop, and the count stays what it was.
+// Web Animations API hands that same animation back through `getAnimations()` — but only for *reading*
+// (duration, and a time write while a drag is in flight). Stopping and position are both CSS properties:
+// `animation-play-state`, keyed off `data-ticker-state`, and a negative `animation-delay` carried in
+// `--ticker-offset`. The first version paused through the API, and CI measured it travelling for 283ms
+// after the reader pressed Stop: Blink re-asserts a CSS animation's computed play state whenever that
+// element's style is recalculated, and the light rig dirties the tree once a second. The frame gate in
+// scripts/verify-runtime.mjs still sees no new loop, so the count stays what it was.
 //
 // `currentTime` is in the animation's own timeline; the loop is one copy wide (the track holds two, and
 // `slide` translates -50%), so a horizontal drag of `dx` pixels maps to
@@ -154,6 +157,11 @@ const speed = Astro.props.speed ?? 60;
       let hovering = false;
       let startX = 0;
       let startT = 0;
+      // Where the reader scrubbed to, in the animation's own milliseconds, and whether that position has
+      // been handed back to CSS yet. See the note on `.ticker__track` in global.css: the stylesheet is the
+      // only thing allowed to own the play state, so a scrub has to end in `--ticker-offset`.
+      let offset = 0;
+      let dirty = false;
 
       const cycle = () => {
         const timing = anims()[0]?.effect?.getComputedTiming?.();
@@ -164,19 +172,25 @@ const speed = Astro.props.speed ?? 60;
 
       const apply = () => {
         const stop = manual || holding || hovering;
-        for (const a of anims()) {
-          if (stop) a.pause();
-          else a.play();
-        }
         root.setAttribute("data-ticker-state", stop ? "paused" : "playing");
         btn.setAttribute("aria-pressed", String(manual));
         btn.textContent = manual ? "Run" : "Stop";
       };
 
-      const seek = (ms) => {
-        const c = cycle();
-        for (const a of anims()) a.currentTime = mod(ms, c);
-        root.setAttribute("data-ticker-time", Math.round(mod(ms, c)).toString());
+      // Mid-gesture the seek is a direct time write: it moves the line this frame without rebuilding the
+      // CSS animation on every pointermove. At the end of the gesture the same position is committed to
+      // `--ticker-offset`, so the animation that carries on running is one CSS describes from scratch.
+      const nudge = (ms) => {
+        offset = mod(ms, cycle());
+        dirty = true;
+        for (const a of anims()) a.currentTime = offset;
+        root.setAttribute("data-ticker-time", Math.round(offset).toString());
+      };
+
+      const commit = () => {
+        if (!dirty) return;
+        dirty = false;
+        track.style.setProperty("--ticker-offset", `${(-offset / 1000).toFixed(3)}s`);
       };
 
       const on = (node, ev, fn, opts) => {
@@ -207,7 +221,7 @@ const speed = Astro.props.speed ?? 60;
           if (!holding) return;
           const dx = e.clientX - startX;
           root.setAttribute("data-ticker-shift", String(Math.round(dx)));
-          seek(startT - (dx / halfWidth()) * cycle());
+          nudge(startT - (dx / halfWidth()) * cycle());
         }),
 
         on(root, "pointerup", () => {
@@ -215,12 +229,14 @@ const speed = Astro.props.speed ?? 60;
           holding = false;
           root.removeAttribute("data-ticker-hold");
           apply();
+          commit();
         }),
         on(root, "pointercancel", () => {
           if (!holding) return;
           holding = false;
           root.removeAttribute("data-ticker-hold");
           apply();
+          commit();
         }),
 
         // Keyboard: the line is a focusable region, and the arrows move it the way a drag does. A step
@@ -232,7 +248,8 @@ const speed = Astro.props.speed ?? 60;
           manual = true;
           apply();
           const step = ((e.key === "ArrowRight" ? -1 : 1) * cycle()) / 24;
-          seek(Number(anims()[0]?.currentTime ?? 0) + step);
+          nudge(Number(anims()[0]?.currentTime ?? 0) + step);
+          commit();
         }),
 
         on(btn, "click", () => {

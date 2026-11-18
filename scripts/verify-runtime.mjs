@@ -753,15 +753,25 @@ const door = (async () => {
   // the question asked afterwards. The class is what the mechanism adds; opacity is its consequence and
   // carries a 700-800ms transition plus a per-element delay, so sampling it mid-flight reports "stuck"
   // for elements that are on their way in — which is how four reveals got blamed for being broken.
+  //
+  // The walk goes in steps of 60% of the viewport, not in fixed fractions of the document. An
+  // IntersectionObserver compares the rect at a frame; a jump larger than the viewport can carry an
+  // element from below the fold to above it between two sampled frames, and then no frame ever showed it
+  // intersecting and the class never lands — which is how the "Staying" heading read as broken the day a
+  // new section pushed the page taller, while remaining perfectly visible to any reader who scrolled.
   const reveal = await evaluate(`
     const nodes = [...document.querySelectorAll("[data-reveal], .kin")];
     const H = document.documentElement.scrollHeight;
-    for (const frac of [0.15, 0.35, 0.55, 0.75, 0.95, 1]) {
-      scrollTo({ top: H * frac, behavior: "instant" });
-      await new Promise((r) => setTimeout(r, 650));
+    const step = Math.max(innerHeight * 0.6, 240);
+    const stops = Math.ceil(H / step);
+    for (let i = 0; i <= stops; i += 1) {
+      scrollTo({ top: Math.min(H, i * step), behavior: "instant" });
+      await new Promise((r) => setTimeout(r, 220));
     }
+    scrollTo({ top: H, behavior: "instant" });
+    await new Promise((r) => setTimeout(r, 700));
     const missed = nodes.filter((el) => !el.classList.contains("is-in"));
-    return { total: nodes.length, missed: missed.length, which: missed.slice(0, 6).map((el) => { const r = el.getBoundingClientRect(); return el.tagName.toLowerCase() + "." + String(el.className).replace(/\\s+/g, ".").slice(0, 40) + " \\"" + String(el.textContent).replace(/\\s+/g, " ").trim().slice(0, 34) + "\\" at " + Math.round(r.top) + ".." + Math.round(r.bottom); }) };
+    return { total: nodes.length, missed: missed.length, steps: stops + 1, which: missed.slice(0, 6).map((el) => { const r = el.getBoundingClientRect(); return el.tagName.toLowerCase() + "." + String(el.className).replace(/\\s+/g, ".").slice(0, 40) + " \\"" + String(el.textContent).replace(/\\s+/g, " ").trim().slice(0, 34) + "\\" at " + Math.round(r.top) + ".." + Math.round(r.bottom); }) };
   `);
   const { errors, warnings } = drain();
   const contributed = withCanvas.uniq !== withoutCanvas.uniq || withCanvas.mean.join() !== withoutCanvas.mean.join();
@@ -1439,7 +1449,13 @@ for (const [route, cap] of [["/", 24], ["/menu", 26], ["/table", 22], ["/visit",
   const audit = await evaluate(`
     const sel = "a[href], button:not([disabled]), input:not([type=hidden]), select, textarea, [tabindex]";
     const nodes = [...document.querySelectorAll(sel)].filter((el) => el.getAttribute("aria-hidden") !== "true");
-    const tabbable = nodes.filter((el) => (Number(el.getAttribute("tabindex")) || 0) >= 0);
+    // inert belongs with the first group in the note below, not the second: a browser takes an inert
+    // subtree out of the tab order just as it takes display:none out. The rotator's off-screen samples
+    // are transparent AND inert (item 11 — a quotation nobody is reading must not be a tab stop), so
+    // counting them here would punish the correct implementation. This exemption is not trust in an
+    // attribute: the "/ (review samples)" battery calls focus() on one of those links for real and fails
+    // the run unless the browser refuses it.
+    const tabbable = nodes.filter((el) => (Number(el.getAttribute("tabindex")) || 0) >= 0 && !el.closest("[inert]"));
     const identity = (el) => {
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
@@ -2502,9 +2518,14 @@ const line = await evaluate(`
     const btn = q("[data-ticker-play]");
     const anim = () => track.getAnimations()[0];
     const mod = (n, m) => ((n % m) + m) % m;
+    // The component stops the line with a stylesheet rule now, so the honest question is what the style
+    // engine computes — and asking it is also what forces the recalculation that hands the new play state
+    // to the animation. Reading the animation's own playState can answer from before the click.
+    const cssState = () => getComputedStyle(track).animationPlayState;
     const out = {};
     out.buttonHiddenAtLoad = btn.hidden;
     out.stateAtLoad = root.getAttribute("data-ticker-state");
+    out.cssAtLoad = cssState();
     out.playStateAtLoad = anim().playState;
     const cycle = Number(anim().effect.getComputedTiming().duration);
     out.cycle = cycle;
@@ -2518,11 +2539,13 @@ const line = await evaluate(`
     btn.click();
     out.stopState = root.getAttribute("data-ticker-state");
     out.stopPressed = btn.getAttribute("aria-pressed");
+    out.stopCss = cssState();
     out.stopPlayState = anim().playState;
     const tStop = Number(anim().currentTime);
     await new Promise((r) => setTimeout(r, 1200));
     out.driftWhileStopped = Math.round(Number(anim().currentTime) - tStop);
     btn.click();
+    out.runCss = cssState();
     out.runPlayState = anim().playState;
 
     root.focus();
@@ -2530,6 +2553,7 @@ const line = await evaluate(`
     const tKey = Number(anim().currentTime);
     root.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     out.keyMoved = Math.round(Number(anim().currentTime)) !== Math.round(tKey);
+    out.keyCss = cssState();
     out.keyPaused = anim().playState;
     out.keyPressed = btn.getAttribute("aria-pressed");
     btn.click();
@@ -2543,6 +2567,7 @@ const line = await evaluate(`
     }));
     send("pointerdown", x0);
     out.holdState = root.getAttribute("data-ticker-state");
+    out.holdCss = cssState();
     out.holdPlayState = anim().playState;
     const t0 = Number(anim().currentTime);
     send("pointermove", x0 + 120);
@@ -2551,8 +2576,12 @@ const line = await evaluate(`
     out.shiftAttr = root.getAttribute("data-ticker-shift");
     send("pointerup", x0 + 120);
     out.releaseState = root.getAttribute("data-ticker-state");
+    out.releaseCss = cssState();
     out.releasePlayState = anim().playState;
     out.holdAttrCleared = !root.hasAttribute("data-ticker-hold");
+    // Where the scrub ended up: the stylesheet has to own it, or the next style recalculation from the
+    // light rig is the thing that decides where the line is (measured: 283ms of travel after Stop).
+    out.cssDelayAfterRelease = getComputedStyle(track).animationDelay;
     const tAfter = Number(anim().currentTime);
     await new Promise((r) => setTimeout(r, 500));
     out.movedAfterRelease = Number(anim().currentTime) !== tAfter;
@@ -2564,10 +2593,11 @@ if (line.missing) {
   failures.push("/ has no [data-ticker-root] — the ticker the owner asked to be able to stop is gone");
 } else {
   if (line.buttonHiddenAtLoad) failures.push("/ the ticker's Stop button is still hidden with a running animation — the control exists but the reader cannot see it");
-  if (line.stateAtLoad !== "playing" || line.playStateAtLoad !== "running") failures.push(`/ the ticker loaded ${JSON.stringify(line.stateAtLoad)} / ${JSON.stringify(line.playStateAtLoad)} — with motion allowed and nothing touching it, it moves`);
+  if (line.stateAtLoad !== "playing" || line.playStateAtLoad !== "running" || line.cssAtLoad !== "running") failures.push(`/ the ticker loaded ${JSON.stringify([line.stateAtLoad, line.cssAtLoad, line.playStateAtLoad])} — with motion allowed and nothing touching it, it moves`);
   if (line.items < 12) failures.push(`/ the ticker walks ${line.items} facts; it used to walk ten captions and the owner called it dry — the factual surface is now most of the line`);
   if (!line.hasPrice || !line.hasEmoji || !line.hasQuote) failures.push(`/ the line is missing its content claims (price ${line.hasPrice}, emoji ${line.hasEmoji}, quoted caption ${line.hasQuote}): "${line.text}"`);
   if (line.stopPlayState !== "paused" || line.stopPressed !== "true" || line.stopState !== "paused") failures.push(`/ pressing Stop left the animation ${JSON.stringify(line.stopPlayState)} and the button aria-pressed ${JSON.stringify(line.stopPressed)} — WCAG 2.2.2 wants a real pause on content that moves for more than five seconds`);
+  if (line.stopCss !== "paused" || line.runCss !== "running" || line.holdCss !== "paused" || line.releaseCss !== "running") failures.push(`/ the play state read ${JSON.stringify([line.stopCss, line.runCss, line.holdCss, line.releaseCss])} from the stylesheet — the sheet has to be the one owner, or a style recalculation from the light rig will resume the line under a reader who stopped it`);
   if (line.driftWhileStopped !== 0) failures.push(`/ the ticker drifted ${line.driftWhileStopped}ms of animation time while stopped — pause has to mean stopped`);
   if (line.runPlayState !== "running") failures.push(`/ releasing Stop returned the animation to ${JSON.stringify(line.runPlayState)}`);
   if (!line.focusIsRoot) failures.push("/ the ticker is not focusable as a region — the arrow-key path the hint promises does not exist");
@@ -2576,6 +2606,8 @@ if (line.missing) {
   if (line.seekError > 2) failures.push(`/ dragging 120px right seeked the animation ${line.seekError.toFixed(1)}ms off the arithmetic (${line.shiftAttr}px reported) — the text would not track the finger`);
   if (line.releasePlayState !== "running" || !line.holdAttrCleared) failures.push(`/ letting go left the line ${JSON.stringify(line.releasePlayState)} with the hold flag ${line.holdAttrCleared ? "cleared" : "still set"} — a scrub should hand the line back`);
   if (!line.movedAfterRelease) failures.push("/ the line did not resume moving after the drag was released — it is parked where the reader left it, which is a stop, not a scrub");
+  if (line.keyCss !== "paused") failures.push(`/ an arrow-key step left the stylesheet saying ${JSON.stringify(line.keyCss)} — the step is only durable if CSS holds it`);
+  if (!line.cssDelayAfterRelease || line.cssDelayAfterRelease === "0s") failures.push(`/ after a 120px drag the track's animation-delay is still ${JSON.stringify(line.cssDelayAfterRelease)} — the scrub was never handed back to the stylesheet, so the resumed position belongs to a main-thread write the next recalculation can disagree with`);
 }
 
 // ---------------------------------------------------------------- phone width

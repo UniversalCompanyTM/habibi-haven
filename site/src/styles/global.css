@@ -717,7 +717,20 @@ html.js [data-reveal]:focus-within {
   gap: 2.4rem;
   width: max-content;
   animation: slide var(--ticker-dur) linear infinite;
+  /* The scrub position lives here, as a negative delay (seconds into the cycle), and the stop lives in
+     `animation-play-state` below. Both are CSS properties rather than Web Animations calls for a reason
+     that a11y-wonkery would have missed and a clock does not: Blink re-asserts the *computed* play state
+     of a CSS animation on every style change of that element, and this page writes a custom property on
+     <html> once a second for the light rig — which invalidates the whole tree. A `pause()` from script was
+     therefore quietly undone by the next tick (CI measured 283ms of travel after Stop, and a track that
+     reported `running` while its time never advanced after a drag). A stylesheet pause cannot be
+     overruled by a style recalculation, because it *is* the style recalculation. */
+  animation-delay: var(--ticker-offset, 0s);
   will-change: transform;
+}
+
+.ticker[data-ticker-state="paused"] .ticker__track {
+  animation-play-state: paused;
 }
 
 /* Hover-pause is the fallback for a page whose JavaScript never ran. Once it does, the component owns
