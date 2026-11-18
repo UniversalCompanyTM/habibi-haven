@@ -493,7 +493,11 @@ if (!/data-map-load/.test(visitHtml)) bad("map", "/visit ships no [data-map-load
 const embedUrl = decodeHtml(visitHtml.match(/data-embed="([^"]*)"/)?.[1] ?? "");
 if (!/output=embed/.test(embedUrl)) bad("map", `/visit's data-embed is ${JSON.stringify(embedUrl)} — that is not a Maps embed URL`);
 const embedQuery = (embedUrl.split("q=")[1] ?? "").split("&")[0];
-if (!/^-?\d+\.\d+,-?\d+\.\d+$/.test(embedQuery))
+// Percent-decoded before the shape test, because the component builds the URL with `encodeURIComponent` —
+// which is the correct way to write a coordinate pair into a query — and the comma comes out as `%2C`. The
+// assertion is about the claim ("the embed points at a pair of numbers, not at a search string"), and a
+// checker that only recognises one legal spelling of a value would report a working map as a broken one.
+if (!/^-?\d+\.\d+,-?\d+\.\d+$/.test(decodeURIComponent(embedQuery)))
   bad("map", `/visit's embed carries no coordinate pair (q=${JSON.stringify(embedQuery)}) — an embed pointed at a search string is a different claim from a pin`);
 if (!/plus code/.test(visitHtml)) bad("map", "/visit no longer prints where the pin came from");
 if (!/Nothing is fetched from Google until/.test(visitHtml.replace(/\s+/g, " ")))
