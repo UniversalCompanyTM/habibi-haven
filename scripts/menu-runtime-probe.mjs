@@ -116,9 +116,11 @@ function bodyFor(state) {
     const expectedTop = navBox.bottom + 0.4 * Number.parseFloat(getComputedStyle(root).fontSize);
 
     // Measure after a real scroll: position:sticky at load says nothing about whether the bar follows the
-    // guest through 243 cards, and a sticky grid item can be constrained by a shorter grid area.
+    // guest through 243 cards, and a sticky grid item can be constrained by a shorter grid area. Align to
+    // the start rather than centering: a single short search result cannot reach the sticky threshold when
+    // centered in a tall viewport, even though the production bar is behaving correctly.
     const deepestCard = cards.at(-1);
-    if (deepestCard) deepestCard.scrollIntoView({ block: "center", behavior: "instant" });
+    if (deepestCard) deepestCard.scrollIntoView({ block: "start", behavior: "instant" });
     await settleScroll(deepestCard);
     const stuckBox = box(bar);
 

@@ -307,9 +307,14 @@ test("Menu filter writes preserve router history state", () => {
   assert.doesNotMatch(writeUrl, /history\.replaceState\(null,/);
 });
 
-test("mobile Menu focus targets reserve clearance for the fixed action dock", () => {
-  assert.match(css, /@media \(max-width: 720px\) \{\s*body \{[^{}]*\}\s*\.explorer \[data-groups\] :is\([^{]+\) \{\s*scroll-margin-bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\) \+ 1rem\);/,
-    "a focused deep control must be able to scroll above the bottom dock, not merely clear the top bar");
+test("mobile Menu focus targets, including filter chips, reserve clearance for the fixed action dock", () => {
+  assert.match(css, /@media \(max-width: 720px\) \{\s*body \{[^{}]*\}\s*\.explorer :is\([^{]+\) \{\s*scroll-margin-bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\) \+ 1rem\);/,
+    "a focused filter chip or deep card control must be able to scroll above the bottom dock, not merely clear the top bar");
+});
+
+test("the sticky-depth probe reaches the sticky threshold even when search leaves one short result", () => {
+  assert.match(menuProbeSource, /deepestCard\.scrollIntoView\(\{ block: "start", behavior: "instant" \}\)/,
+    "centering the only search result can leave the filter bar below its sticky threshold on a tall tablet");
 });
 
 test("cleared Menu controls remove their own query parameters without dropping other state", () => {

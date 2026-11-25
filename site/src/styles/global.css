@@ -699,9 +699,10 @@ html.js [data-reveal]:focus-within {
     padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Top clearance alone cannot protect a deep Menu control: the fixed ActionDock owns the bottom
-     strip of a phone. Focus/Tab scrolling must be able to leave the whole control above that dock. */
-  .explorer [data-groups] :is([data-card], a, button, input, select) {
+  /* Top clearance alone cannot protect a Menu control: the fixed ActionDock owns the bottom strip of a
+     phone. This includes filter chips outside [data-groups]; focus/Tab scrolling must leave the whole
+     control above that dock, not just its border box somewhere inside the viewport. */
+  .explorer :is([data-card], a, button, input, select) {
     scroll-margin-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px) + 1rem);
   }
 }
