@@ -1333,7 +1333,7 @@ async function noJsStyleProbe(route) {
     probe.galleryTiles = (galleryTiles.nodeIds || []).length;
     if (viewer.nodeId) {
       const { attributes } = await inPage("DOM.getAttributes", { nodeId: viewer.nodeId });
-      probe.galleryViewerHidden = attributes.some(([name]) => name === "hidden");
+      probe.galleryViewerHidden = attributes.some((value, index) => index % 2 === 0 && value === "hidden");
     }
     // First, middle and last in document order. The last is the block furthest down the page — the one an
     // observer would never have reached on a guest's first screen, and therefore the one a no-JS claim
@@ -1389,12 +1389,27 @@ await goto("/");
 const seeded = await runAt("/table", "add, then reload", `
   const all = (s) => [...document.querySelectorAll(s)];
   const q = (s) => document.querySelector(s);
-  const before = all("[data-inc]").length;
-  all("[data-add]")[0].click();
+  const clear = q("[data-clear]");
+  const add = all("[data-add]")[0];
+  if (!clear || !add) return { missing: true };
+  clear.click();
+  await new Promise((r) => setTimeout(r, 60));
+  const beforeTable = all("[data-inc]").length;
+  const dishId = add.dataset.add;
+  const qtyFor = () => {
+    const inc = all("[data-inc]").find((button) => button.dataset.inc === dishId);
+    return inc ? Number(inc.closest("li")?.querySelector("output.num")?.textContent) : 0;
+  };
+  const beforeQty = qtyFor();
+  add.click();
   await new Promise((r) => setTimeout(r, 180));
   return {
-    before,
+    missing: false,
+    dishId,
+    before: beforeTable,
+    beforeQty,
     after: all("[data-inc]").length,
+    afterQty: qtyFor(),
     total: q("[data-total]") ? q("[data-total]").textContent.trim() : null,
     stored: (localStorage.getItem("habibi-haven:table:v1") || "").slice(0, 240),
   };
@@ -1402,8 +1417,11 @@ const seeded = await runAt("/table", "add, then reload", `
 const restored = await runAt("/table", "table restored", `
   const all = (s) => [...document.querySelectorAll(s)];
   const q = (s) => document.querySelector(s);
+  const dishId = ${JSON.stringify(seeded?.dishId ?? null)};
+  const inc = all("[data-inc]").find((button) => button.dataset.inc === dishId);
   return {
     rows: all("[data-inc]").length,
+    restoredQty: inc ? Number(inc.closest("li")?.querySelector("output.num")?.textContent) : 0,
     total: q("[data-total]") ? q("[data-total]").textContent.trim() : null,
     // On /table the house-set buttons are what say "this is already on the table" — data-on belongs to the
     // party dots here, so counting [data-card][data-on] would have been a MenuExplorer hook wearing this
@@ -1412,9 +1430,11 @@ const restored = await runAt("/table", "table restored", `
     stored: (localStorage.getItem("habibi-haven:table:v1") || "").slice(0, 120),
   };
 `);
-if (seeded.after <= seeded.before) failures.push(`/table the first "add" left ${seeded.after} row(s) where there were ${seeded.before}`);
+if (seeded.before !== 0) failures.push(`/table persistence did not start from an empty sheet (${seeded.before} row(s))`);
+if (seeded.afterQty !== seeded.beforeQty + 1) failures.push(`/table "add" changed ${seeded.dishId} from quantity ${seeded.beforeQty} to ${seeded.afterQty}, not one plate`);
 if (!seeded.stored) failures.push("/table adding a dish wrote nothing to localStorage — there is no table to restore");
 if (restored.rows !== seeded.after) failures.push(`/table came back with ${restored.rows} row(s), but the load before it had ${seeded.after} — the saved table does not restore`);
+else if (restored.restoredQty !== seeded.afterQty) failures.push(`/table restored ${seeded.dishId} at quantity ${restored.restoredQty}, not ${seeded.afterQty}`);
 else if (restored.total !== seeded.total) failures.push(`/table restored ${restored.rows} row(s) but the total went ${seeded.total} → ${restored.total} across the reload`);
 else if (restored.marked === 0) failures.push("/table restored the rows but no card is marked as on the table — the page forgot which dishes it is holding");
 await evaluate(`localStorage.removeItem("habibi-haven:table:v1"); return true;`);
@@ -2595,7 +2615,7 @@ const barGeo = await evaluate(`
       bar: { h: Math.round(r.height), w: Math.round(r.width), top: Math.round(r.top) },
       share: Math.round((r.height / innerHeight) * 1000) / 1000,
       navH: cs(document.documentElement).getPropertyValue("--nav-h").trim(),
-      barH: cs(document.documentElement).getPropertyValue("--bar-h").trim() || cs(bar.parentElement).getPropertyValue("--bar-h").trim(),
+      barH: cs(bar.parentElement).getPropertyValue("--bar-h").trim() || cs(document.documentElement).getPropertyValue("--bar-h").trim(),
       bg,
       alpha,
       blur: cs(bar).backdropFilter || cs(bar).webkitBackdropFilter,

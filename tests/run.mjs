@@ -1733,6 +1733,23 @@ function runNodeSuite(file, nodeTest = true, timeout = 120_000) {
   return true;
 }
 
+check("the no-JS gallery probe reads CDP's flat attribute array", () => {
+  const source = readFileSync(join(ROOT, "scripts/verify-runtime.mjs"), "utf8");
+  if (!/attributes\.some\(\(value, index\) => index % 2 === 0 && value === "hidden"\)/.test(source)) {
+    return "DOM.getAttributes returns [name, value, name, value]; destructuring each string as a pair cannot find hidden";
+  }
+  return true;
+});
+
+check("the table persistence battery starts from a clean sheet and measures quantity deltas", () => {
+  const source = readFileSync(join(ROOT, "scripts/verify-runtime.mjs"), "utf8");
+  const seeded = source.slice(source.indexOf('const seeded = await runAt("/table", "add, then reload"'), source.indexOf('const restored = await runAt("/table", "table restored"'));
+  if (!/\[data-clear\][\s\S]*?beforeTable/.test(seeded)) return "the persistence battery inherits the previous phase's table";
+  if (!/beforeQty[\s\S]*?afterQty/.test(seeded)) return "Add must assert the selected dish's quantity delta, not unconditional row-count growth";
+  if (/seeded\.after <= seeded\.before/.test(source)) return "an existing dish increments quantity without creating a row; row-count growth is not the contract";
+  return true;
+});
+
 check("reduced-motion runtime phases retain and fail on their browser errors", () => {
   const source = readFileSync(join(ROOT, "scripts/verify-runtime.mjs"), "utf8");
   for (const path of ["/ (reduced motion)", "/menu (reduced motion)", "/visit (gallery, reduced motion)"]) {

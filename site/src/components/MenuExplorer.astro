@@ -189,9 +189,10 @@ const priceBands = [
     const groups = Array.from(root.querySelectorAll<HTMLElement>("[data-group]"));
     // Capture the kitchen's sequence before the first sort moves any nodes. A later "As the menu lists"
     // selection must restore these exact elements; returning early would silently keep the previous order.
-    const menuOrder = new Map<HTMLElement, HTMLElement[]>(subgroups.map((sub) => [
-      sub,
-      Array.from(sub.querySelectorAll<HTMLElement>("[data-card]")),
+    const decks = Array.from(root.querySelectorAll<HTMLElement>(".deck"));
+    const menuOrder = new Map<HTMLElement, HTMLElement[]>(decks.map((deck) => [
+      deck,
+      Array.from(deck.querySelectorAll<HTMLElement>("[data-card]")),
     ]));
     const search = root.querySelector<HTMLInputElement>("[data-q]")!;
     const sort = root.querySelector<HTMLSelectElement>("[data-sort]")!;
@@ -261,7 +262,7 @@ const priceBands = [
       else p.delete("sort");
       const qs = p.toString();
       const hash = state.room ? `#${state.room}` : "";
-      history.replaceState(null, "", qs ? `?${qs}${hash}` : `${location.pathname}${hash}`);
+      history.replaceState(history.state, "", qs ? `?${qs}${hash}` : `${location.pathname}${hash}`);
     };
 
     const sortDeck = (deck: HTMLElement) => {

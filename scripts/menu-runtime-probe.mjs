@@ -5,7 +5,7 @@
 //   setViewport: (metrics) => inPage("Emulation.setDeviceMetricsOverride", metrics)
 //   pressKey: (keyName) => press(keyName) // a real CDP key, not a synthetic KeyboardEvent
 // alongside the harness's existing evaluate/goto/results/failures/drain helpers.
-import { encodeTable } from "../site/src/lib/table.mjs";
+import { decodeTable, encodeTable } from "../site/src/lib/table.mjs";
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -45,6 +45,19 @@ function bodyFor(state) {
     const q = (selector) => document.querySelector(selector);
     const all = (selector) => [...document.querySelectorAll(selector)];
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const settleScroll = async (target) => {
+      let previous = scrollY;
+      let stable = 0;
+      for (let i = 0; i < 72 && stable < 3; i += 1) {
+        await frame();
+        const current = scrollY;
+        stable = Math.abs(current - previous) < 1 ? stable + 1 : 0;
+        previous = current;
+      }
+      if (!target) return { stable: stable >= 3, onScreen: null };
+      const r = box(target);
+      return { stable: stable >= 3, onScreen: r.top >= -1 && r.bottom <= innerHeight + 1 };
+    };
     const box = (el) => {
       const r = el.getBoundingClientRect();
       return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
@@ -68,6 +81,7 @@ function bodyFor(state) {
       search.dispatchEvent(new Event("input", { bubbles: true }));
       sort.value = "menu";
       sort.dispatchEvent(new Event("change", { bubbles: true }));
+      if (toggle && toggle.getAttribute("aria-expanded") === "true") toggle.click();
     };
 
     if (state.name !== "initial") reset();
@@ -96,15 +110,16 @@ function bodyFor(state) {
     const barBox = box(bar);
     const navBox = box(nav);
     const rootStyle = getComputedStyle(root);
-    const measuredBar = Number.parseFloat(rootStyle.getPropertyValue("--bar-h"));
-    const fallbackBar = Number.parseFloat(getComputedStyle(bar.parentElement).getPropertyValue("--bar-h"));
-    const savedBar = Number.isFinite(measuredBar) ? measuredBar : fallbackBar;
+    const localBar = Number.parseFloat(getComputedStyle(bar.parentElement).getPropertyValue("--bar-h"));
+    const fallbackBar = Number.parseFloat(rootStyle.getPropertyValue("--bar-h"));
+    const savedBar = Number.isFinite(localBar) ? localBar : fallbackBar;
     const expectedTop = navBox.bottom + 0.4 * Number.parseFloat(getComputedStyle(root).fontSize);
 
     // Measure after a real scroll: position:sticky at load says nothing about whether the bar follows the
     // guest through 243 cards, and a sticky grid item can be constrained by a shorter grid area.
-    if (cards[0]) cards[0].scrollIntoView({ block: "center", behavior: "instant" });
-    await frame();
+    const deepestCard = cards.at(-1);
+    if (deepestCard) deepestCard.scrollIntoView({ block: "center", behavior: "instant" });
+    await settleScroll(deepestCard);
     const stuckBox = box(bar);
 
     const overlaps = [];
@@ -189,7 +204,7 @@ function bodyFor(state) {
     let anchor = null;
     if (firstGroup) {
       firstGroup.scrollIntoView({ block: "start", behavior: "instant" });
-      await frame();
+      await settleScroll(firstGroup);
       const r = box(firstGroup);
       anchor = { top: Math.round(r.top), barBottom: Math.round(box(bar).bottom), clear: r.top >= box(bar).bottom - 1 };
     }
@@ -210,6 +225,7 @@ function bodyFor(state) {
         focused: document.activeElement === focusEl,
         ownsHit: ownsControlHit(el, hit, painted),
         clear,
+        onScreen: r.top >= -1 && r.bottom <= innerHeight + 1,
         obstructed: !bar.contains(el) && !clear,
         top: Math.round(r.top), barBottom: Math.round(box(bar).bottom),
         hit: hit ? hit.tagName.toLowerCase() + "." + String(hit.className).slice(0, 30) : null,
@@ -217,16 +233,6 @@ function bodyFor(state) {
     };
     // Focus from the top of the document, never from a pre-centred target. Deep Add/accompaniment controls
     // therefore have to survive the browser's own focus scrolling and scroll-margin calculation.
-    const settleScroll = async () => {
-      let previous = scrollY;
-      let stable = 0;
-      for (let i = 0; i < 12 && stable < 2; i += 1) {
-        await frame();
-        const current = scrollY;
-        stable = Math.abs(current - previous) < 1 ? stable + 1 : 0;
-        previous = current;
-      }
-    };
     const deepCard = cards.at(-1);
     const add = deepCard?.querySelector("[data-add]");
     const deepAccompanimentCard = cards.slice().reverse().find((card) => {
@@ -251,7 +257,7 @@ function bodyFor(state) {
       window.scrollTo({ top: 0, behavior: "instant" });
       await frame();
       focus.focus();
-      await settleScroll();
+      await settleScroll(focus);
       controls.push(measureControl(el, focus));
     }
 
@@ -322,6 +328,9 @@ function tabPrepareBody(target) {
     await frame();
     return {
       ready: document.activeElement === previous && scrollY === 0,
+      focused: document.activeElement === previous,
+      atTop: scrollY === 0,
+      scrollY,
       previous: previous.getAttribute("aria-label") || previous.textContent.trim(),
     };
   `;
@@ -343,7 +352,7 @@ function tabMeasureBody(target) {
     const nameOf = (el) => (el.getAttribute("aria-label") || el.textContent || el.tagName).trim().replace(/\\s+/g, " ").slice(0, 50);
     let previous = scrollY;
     let stable = 0;
-    for (let i = 0; i < 12 && stable < 2; i += 1) {
+    for (let i = 0; i < 72 && stable < 3; i += 1) {
       await frame();
       const current = scrollY;
       stable = Math.abs(current - previous) < 1 ? stable + 1 : 0;
@@ -367,6 +376,7 @@ function tabMeasureBody(target) {
       active: document.activeElement === document.body ? "body" : nameOf(document.activeElement),
       ownsHit: ownsControlHit(el, hit, painted),
       clear,
+      onScreen: r.top >= -1 && r.bottom <= innerHeight + 1,
       obstructed: !bar.contains(el) && !clear,
       top: Math.round(r.top), barBottom: Math.round(box(bar).bottom),
       hit: hit ? hit.tagName.toLowerCase() + "." + String(hit.className).slice(0, 30) : null,
@@ -381,7 +391,9 @@ export async function auditMenuTabTarget({ target, label, failures, evaluate, pr
   }
   try {
     const prepared = await evaluate(tabPrepareBody(target));
-    if (!prepared?.ready) throw new Error(prepared?.reason ?? "could not prepare the preceding Tab stop");
+    if (!prepared?.ready) {
+      throw new Error(prepared?.reason ?? `preceding Tab stop was not ready (focused: ${prepared?.focused}, at top: ${prepared?.atTop}, scrollY ${prepared?.scrollY})`);
+    }
     await pressKey("Tab");
     const sample = await evaluate(tabMeasureBody(target));
     if (!sample || sample.missing) throw new Error("Tab target disappeared before it could be measured");
@@ -470,7 +482,7 @@ export async function auditMenuStateLifecycle({
           hash: url.hash,
         };
       } finally {
-        history.replaceState(null, "", originalHref);
+        history.replaceState(history.state, "", originalHref);
       }
     `);
   } catch (error) {
@@ -501,7 +513,8 @@ export async function auditMenuStateLifecycle({
   for (const parameter of ["q", "tag", "band", "sort"]) {
     if (report.params?.[parameter] != null) fail(`cleared ${parameter} remains in the URL as ${JSON.stringify(report.params[parameter])}`);
   }
-  if (report.params?.t !== expectedTable) fail("the shared table parameter was lost or changed");
+  const expectedDecoded = decodeURIComponent(expectedTable);
+  if (report.params?.t !== expectedDecoded) fail(`the shared table parameter was lost or changed (expected ${JSON.stringify(expectedDecoded)})`);
   if (report.params?.keep !== "1") fail("an unrelated query parameter was dropped");
   if (report.hash !== "#morning") fail("the room hash was lost");
   return { ok: failures.length === startedAt };
@@ -571,12 +584,13 @@ export async function auditMenuLayout({ evaluate, goto, results, failures, drain
       if (report.bar.heightDrift > 1) fail(`saved --bar-h is ${report.bar.savedHeight}px but the bar is ${report.bar.height}px`);
       if (report.anchor && !report.anchor.clear) fail(`room anchor lands at ${report.anchor.top}px under the bar bottom ${report.anchor.barBottom}px`);
       const blocked = report.controls.filter(
-        (control) => !control.ownsHit || control.obstructed || !control.focused || !control.clear,
+        (control) => !control.ownsHit || control.obstructed || !control.focused || !control.clear || control.onScreen === false,
       );
       if (blocked.length) {
         const reasons = blocked.map((control) => {
           const problems = [];
           if (!control.focused) problems.push("not focused");
+          if (control.onScreen === false) problems.push("outside viewport");
           if (control.obstructed || !control.clear) problems.push("under sticky bar");
           if (!control.ownsHit) problems.push(`hit ${control.hit ?? "nothing"}`);
           return `${control.name}${control.method ? ` (${control.method})` : ""}: ${problems.join(", ")}`;

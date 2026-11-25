@@ -500,6 +500,8 @@ function probePoint(hour, night, eventHour = hour, eventNight = night) {
     inlineNight: night,
     inlineSun: sun,
     raw: { "--hour": String(hour), "--night": String(night), "--sun": String(sun) },
+    doorTier: "full",
+    doorCanvas: true,
     doorNight: door.night.toFixed(3),
     doorExposure: door.exposure.toFixed(3),
     dials: [{
@@ -548,6 +550,7 @@ function probeReport() {
       reduced: false,
       ambient: true,
       manual: false,
+      doorTier: "full",
       property: "--night, --sun",
       duration: "1s, 1s",
       timing: "linear, linear",
@@ -598,6 +601,52 @@ await check("runtime probe rejects a stale DoorScene rig even when CSS and the h
   const { failures } = await runClockProbe(report);
   assert.ok(failures.some((line) => line.includes("dusk") && line.includes("DoorScene")),
     `stale renderer exposure was accepted: ${JSON.stringify(failures)}`);
+});
+
+await check("runtime probe accepts the reduced-motion poster tier without invented renderer attributes", async () => {
+  const report = probeReport();
+  report.contract.reduced = true;
+  report.contract.ambient = false;
+  report.contract.doorTier = "poster";
+  report.contract.property = "none";
+  report.contract.duration = "0s";
+  report.contract.timing = "linear";
+  for (const sample of report.samples) {
+    sample.animations = [];
+    sample.during = probePoint(rigFor(sample.target.hour).hour, sample.target.night);
+    sample.doorChanged = false;
+    for (const point of [sample.before, sample.during, sample.target]) {
+      point.doorTier = "poster";
+      point.doorCanvas = false;
+      point.doorNight = null;
+      point.doorExposure = null;
+    }
+  }
+  const { failures } = await runClockProbe(report);
+  assert.deepEqual(failures, [], "poster CSS and visible dials still advance even though no canvas/rig exists");
+});
+
+await check("runtime probe rejects a poster tier that claims a canvas or renderer attributes", async () => {
+  const report = probeReport();
+  report.contract.reduced = true;
+  report.contract.ambient = false;
+  report.contract.doorTier = "poster";
+  report.contract.property = "none";
+  report.contract.duration = "0s";
+  for (const sample of report.samples) {
+    sample.animations = [];
+    sample.during = probePoint(rigFor(sample.target.hour).hour, sample.target.night);
+    sample.doorChanged = false;
+    for (const point of [sample.before, sample.during, sample.target]) {
+      point.doorTier = "poster";
+      point.doorCanvas = false;
+      point.doorNight = null;
+      point.doorExposure = null;
+    }
+  }
+  report.samples[0].before.doorCanvas = true;
+  const invalid = await runClockProbe(report);
+  assert.ok(invalid.failures.some((failure) => failure.includes("poster") && failure.includes("canvas")), invalid.failures.join("\n"));
 });
 
 await check("runtime probe rejects stale visible dial labels or a lost open/closed state", async () => {

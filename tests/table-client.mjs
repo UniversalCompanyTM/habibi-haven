@@ -28,7 +28,7 @@ function memoryStorage(initial = {}) {
   };
 }
 
-async function loadClient({ url = "https://example.test/table", stored = {} } = {}) {
+async function loadClient({ url = "https://example.test/table", stored = {}, routerState = null } = {}) {
   const location = new URL(url);
   const listeners = new Map();
   const window = {
@@ -48,7 +48,11 @@ async function loadClient({ url = "https://example.test/table", stored = {} } = 
   const document = new EventTarget();
   const localStorage = memoryStorage(stored);
   const history = {
-    replaceState(_state, _title, next) {
+    state: routerState,
+    replaceStates: [],
+    replaceState(state, _title, next) {
+      this.state = state;
+      this.replaceStates.push(state);
       const resolved = new URL(next, location.href);
       location.pathname = resolved.pathname;
       location.search = resolved.search;
@@ -123,6 +127,14 @@ test("a shared URL wins over storage and becomes the canonical persisted table",
   });
   assert.equal(urlTable(location), encodeTable(client.getTable()));
   assert.deepEqual(JSON.parse(localStorage.getItem(KEY)), client.getTable());
+});
+
+test("table URL commits preserve the router history state needed for later DOM swaps", async () => {
+  const routerState = { current: "/table", forward: "/menu", scroll: 240 };
+  const { client, history } = await loadClient({ routerState });
+  client.addToTable("karak-chai");
+  assert.equal(history.state, routerState, "replaceState(null) makes Astro treat later popstate as URL-only");
+  assert.deepEqual(history.replaceStates, [routerState]);
 });
 
 test("table commits preserve menu filters and hashes while writing the shareable t parameter", async () => {

@@ -10,6 +10,7 @@ const css = read("site/src/styles/global.css").replace(/\/\*[\s\S]*?\*\//g, "");
 const explorer = read("site/src/components/MenuExplorer.astro");
 const dish = read("site/src/components/DishCard.astro");
 const menuPage = read("site/src/pages/menu.astro");
+const menuProbeSource = read("scripts/menu-runtime-probe.mjs");
 
 // These are source/DOM contracts, not screenshots: each assertion names the layout invariant a browser
 // depends on. The runtime probe in scripts/menu-runtime-probe.mjs measures the resulting boxes later.
@@ -68,7 +69,7 @@ test("cards and their controls clear the sticky bands when scrolled into view", 
   const candidates = rules().filter((candidate) =>
     candidate.selectors.some(
       (selector) => selector.includes("[data-groups]") && selector.includes("[data-card]"),
-    ),
+    ) && /scroll-margin-top\s*:/.test(candidate.body),
   );
   assert.ok(candidates.length, "card/focus scrolling has no sticky clearance contract");
   for (const candidate of candidates) {
@@ -196,6 +197,48 @@ test("the runtime audit fails when an ancestor owns a focused control's hit", as
   assert.ok(failures.some((failure) => failure.includes("hit article.card")), failures.join("\n"));
 });
 
+test("the runtime audit fails a focused control that remains outside the viewport", async () => {
+  const failures = await auditWithControl({
+    name: "Add to table", tag: "button", ownsHit: true, obstructed: false,
+    focused: true, clear: true, onScreen: false, hit: "button.btn",
+  });
+  assert.ok(failures.some((failure) => failure.includes("outside viewport")), failures.join("\n"));
+});
+
+test("the geometry probe reads the explorer-local bar height before the root fallback", () => {
+  const local = menuProbeSource.indexOf('getComputedStyle(bar.parentElement).getPropertyValue("--bar-h")');
+  const root = menuProbeSource.indexOf('rootStyle.getPropertyValue("--bar-h")');
+  assert.ok(local >= 0 && root >= 0, "both the measured local value and root fallback must be available");
+  assert.ok(local < root, "7.6rem on the root must not override the explorer's measured pixel height");
+});
+
+test("each Menu probe state closes the filter panel unless that state explicitly opens it", () => {
+  const reset = /const reset = \(\) => \{[\s\S]*?\n    \};/.exec(menuProbeSource)?.[0];
+  assert.ok(reset, "missing probe reset");
+  assert.match(reset, /toggle\.getAttribute\("aria-expanded"\) === "true"[\s\S]*?toggle\.click\(\)/,
+    "an open phone panel must not leak into searched/sorted geometry states");
+});
+
+test("Tab preparation distinguishes lost focus from residual smooth scrolling", async () => {
+  const failures = [];
+  let body = "";
+  const result = await menuProbe.auditMenuTabTarget({
+    target: { cardId: "karak-chai", kind: "add", name: "Add to table" },
+    label: "/menu phone",
+    failures,
+    evaluate: async (source) => {
+      body = source;
+      return { ready: false, focused: false, atTop: false, scrollY: 75, previous: "Search" };
+    },
+    pressKey: async () => {},
+  });
+  assert.equal(result, null);
+  assert.match(body, /focused: document\.activeElement === previous/);
+  assert.match(body, /atTop: scrollY === 0/);
+  assert.ok(failures.some((failure) => failure.includes("focus")), failures.join("\n"));
+  assert.ok(failures.some((failure) => failure.includes("scrollY 75")), failures.join("\n"));
+});
+
 test("the Tab preparation uses the preceding visible stop without centering the target", async () => {
   const bodies = [];
   const failures = [];
@@ -247,12 +290,26 @@ test("Menu filter writes preserve the shared table parameter already in the addr
   assert.match(explorer, /const p = new URLSearchParams\(location\.search\);/, "filter writes must start from the current query, not an empty one");
 });
 
-test("selecting menu order restores each section's captured server order", () => {
-  assert.match(explorer, /const menuOrder = new Map<HTMLElement, HTMLElement\[\]>\(/, "the original card nodes must be captured before any sort mutates a deck");
+test("selecting menu order restores each deck's captured server order", () => {
+  const captured = /const decks = [\s\S]*?const menuOrder = new Map<HTMLElement, HTMLElement\[\]>[\s\S]*?\]\)\);/.exec(explorer);
+  assert.ok(captured, "the original card nodes must be captured before any sort mutates a deck");
+  assert.match(captured[0], /querySelectorAll<HTMLElement>\("\.deck"\)/,
+    "the snapshot must be keyed by the same deck elements that sortDeck restores");
   const sortDeck = explorerFunction("sortDeck");
   assert.doesNotMatch(sortDeck, /if \(state\.sort === "menu"\) return;/, "menu order cannot be a no-op after another sort has moved the cards");
   assert.match(sortDeck, /menuOrder\.get\(deck\)\?\.forEach\(\(node\) => deck\.append\(node\)\);/,
     "menu order must put the original nodes back, not clone or retain the ranked order");
+});
+
+test("Menu filter writes preserve router history state", () => {
+  const writeUrl = explorerFunction("writeUrl");
+  assert.match(writeUrl, /history\.replaceState\(history\.state,/, "null history state turns Back into a URL-only change");
+  assert.doesNotMatch(writeUrl, /history\.replaceState\(null,/);
+});
+
+test("mobile Menu focus targets reserve clearance for the fixed action dock", () => {
+  assert.match(css, /@media \(max-width: 720px\) \{\s*body \{[^{}]*\}\s*\.explorer \[data-groups\] :is\([^{]+\) \{\s*scroll-margin-bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\) \+ 1rem\);/,
+    "a focused deep control must be able to scroll above the bottom dock, not merely clear the top bar");
 });
 
 test("cleared Menu controls remove their own query parameters without dropping other state", () => {
@@ -266,7 +323,7 @@ test("cleared Menu controls remove their own query parameters without dropping o
 });
 
 test("the Menu state lifecycle audit exercises real sort restoration and URL cleanup", async () => {
-  const expectedTable = "encoded-table-fixture";
+  const expectedTable = "2%7Ckarak-chaix1";
   const report = {
     total: 243,
     visible: 243,
@@ -277,7 +334,7 @@ test("the Menu state lifecycle audit exercises real sort restoration and URL cle
     filtersClear: true,
     searchValue: "",
     sortValue: "menu",
-    params: { q: null, tag: null, band: null, sort: null, t: expectedTable, keep: "1" },
+    params: { q: null, tag: null, band: null, sort: null, t: "2|karak-chaix1", keep: "1" },
     hash: "#morning",
   };
   const calls = [];

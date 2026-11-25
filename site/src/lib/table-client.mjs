@@ -113,7 +113,7 @@ function writeUrl(table) {
   if (table.lines.length) url.searchParams.set("t", encodeTable(table));
   else url.searchParams.delete("t");
   const next = `${url.pathname}${url.search}${url.hash}`;
-  if (next !== `${location.pathname}${location.search}${location.hash}`) history.replaceState(null, "", next);
+  if (next !== `${location.pathname}${location.search}${location.hash}`) history.replaceState(history.state, "", next);
 }
 
 /** A router swap or Back/Forward can introduce a different shared table in the same document. */

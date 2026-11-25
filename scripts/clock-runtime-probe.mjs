@@ -71,6 +71,8 @@ export async function auditClockContinuity({ evaluate, goto, results, failures, 
           inlineHour: Number(root.style.getPropertyValue("--hour")),
           inlineNight: Number(root.style.getPropertyValue("--night")),
           inlineSun: Number(root.style.getPropertyValue("--sun")),
+          doorTier: door?.dataset.tier ?? null,
+          doorCanvas: !!door?.querySelector("canvas"),
           doorNight: door?.dataset.rigNight ?? null,
           doorExposure: door?.dataset.rigExposure ?? null,
           dials: [...document.querySelectorAll("[data-dial]")].map((dial) => ({
@@ -103,6 +105,7 @@ export async function auditClockContinuity({ evaluate, goto, results, failures, 
           reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
           ambient: root.hasAttribute("data-ambient"),
           manual: root.hasAttribute("data-manual"),
+          doorTier: document.querySelector("[data-door]")?.dataset.tier ?? null,
           property: initial.transitionProperty,
           duration: initial.transitionDuration,
           timing: initial.transitionTimingFunction,
@@ -208,6 +211,7 @@ export async function auditClockContinuity({ evaluate, goto, results, failures, 
   if (contract.manual) failures.push(`${label}: manual mode was still active, so ambient continuity was not exercised`);
   if (contract.reduced) {
     if (contract.ambient) failures.push(`${label}: reduced motion re-enabled data-ambient interpolation`);
+    if (contract.doorTier !== "poster") failures.push(`${label}: reduced motion selected ${contract.doorTier ?? "unknown"} instead of the canvas-free poster tier`);
     for (const property of ["--hour", "--night", "--sun"]) {
       const glide = transitionAt(contract, property);
       if (glide && glide.duration > 0) failures.push(`${label}: reduced motion still transitions ${property}`);
@@ -280,8 +284,19 @@ export async function auditClockContinuity({ evaluate, goto, results, failures, 
     ]) {
       const expectedRig = rigFor(expectedHour);
       const expectedDoor = rigValues(expectedRig.night, expectedRig.open);
-      if (point.doorNight !== expectedDoor.night.toFixed(3) || point.doorExposure !== expectedDoor.exposure.toFixed(3)) {
-        failures.push(`${label}: ${name} ${pointName} DoorScene snapshots were ${point.doorNight}/${point.doorExposure}, expected ${expectedDoor.night.toFixed(3)}/${expectedDoor.exposure.toFixed(3)}`);
+      const tier = point.doorTier ?? contract.doorTier;
+      if (tier === "full" || tier === "lite") {
+        if (point.doorCanvas !== true) failures.push(`${label}: ${name} ${pointName} ${tier} renderer has no canvas`);
+        if (point.doorNight !== expectedDoor.night.toFixed(3) || point.doorExposure !== expectedDoor.exposure.toFixed(3)) {
+          failures.push(`${label}: ${name} ${pointName} DoorScene snapshots were ${point.doorNight}/${point.doorExposure}, expected ${expectedDoor.night.toFixed(3)}/${expectedDoor.exposure.toFixed(3)}`);
+        }
+      } else if (tier === "poster" || tier === "2d") {
+        if (point.doorCanvas !== false) failures.push(`${label}: ${name} ${pointName} ${tier} tier unexpectedly has a canvas`);
+        if (point.doorNight !== null || point.doorExposure !== null) {
+          failures.push(`${label}: ${name} ${pointName} canvas-free ${tier} tier claims renderer attributes ${point.doorNight}/${point.doorExposure}`);
+        }
+      } else {
+        failures.push(`${label}: ${name} ${pointName} DoorScene tier is unknown: ${String(tier)}`);
       }
       if (!Array.isArray(point.dials) || point.dials.length === 0) {
         failures.push(`${label}: ${name} ${pointName} reported no visible dials`);

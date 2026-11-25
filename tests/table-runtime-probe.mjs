@@ -100,11 +100,22 @@ test("the runtime comparison rejects a share URL that disagrees with the canonic
   assert.ok(failures.some((failure) => failure.includes("URL table differs")), failures.join("\n"));
 });
 
+test("the router-swap comparison treats the URL as authoritative over stale same-document storage", () => {
+  const urlTable = { party: 3, lines: [{ id: "full-mandy", qty: 4 }] };
+  const report = snapshot(urlTable);
+  report.table = sanitizeTable(menu, table);
+  const failures = [];
+  compareState(report, failures, "router swap", urlTable, { allowStaleStorage: true });
+  assert.deepEqual(failures, [], "a same-document storage write emits no storage event and cannot replace the live URL sheet");
+
+  const strict = [];
+  compareState(report, strict, "ordinary URL mismatch", urlTable);
+  assert.ok(strict.some((failure) => failure.includes("URL table differs")), strict.join("\n"));
+});
+
 test("the runtime comparison rejects a side merge that collapses quantity or identity incorrectly", () => {
-  const report = snapshot();
-  report.table.lines = [{ id: "grilled-chicken-breast", option: "Chips", qty: 3 }];
-  report.rows = [{ key: "grilled-chicken-breast::Chips", name: "Grilled Chicken Breast", note: "KSh 1,350 × 3", qty: 3, option: "Chips" }];
-  report.total = "KSh 4,050";
+  const merged = { party: 2, lines: [{ id: "grilled-chicken-breast", option: "Chips", qty: 3 }] };
+  const report = snapshot(merged);
   const failures = [];
   compareState(report, failures, "side merge", table);
   assert.ok(failures.some((failure) => failure.includes("canonical table differs")));

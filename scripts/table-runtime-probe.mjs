@@ -102,16 +102,27 @@ const battery = `
   return out;
 `;
 
-function canonical(report) {
-  return sanitizeTable(menu, report?.table);
-}
-
-function compareState(report, failures, label, expected) {
+function compareState(report, failures, label, expected, { allowStaleStorage = false } = {}) {
   if (!report) {
     failures.push(`${label}: no table snapshot`);
     return;
   }
-  const table = canonical(report);
+  const stored = sanitizeTable(menu, report?.table);
+  let encoded = null;
+  let fromUrl = null;
+  try {
+    encoded = new URL(report.url, "https://table.invalid").searchParams.get("t");
+    if (encoded !== null) fromUrl = sanitizeTable(menu, decodeTable(encoded));
+  } catch (error) {
+    failures.push(`${label}: URL table could not be decoded: ${error?.message ?? String(error)}`);
+  }
+  // The address is the live authority after a same-document router swap. localStorage.setItem() in that
+  // document emits no cross-tab storage event, so stale bytes there are evidence to report, not UI state.
+  const table = fromUrl ?? stored;
+  if (fromUrl && JSON.stringify(stored) !== JSON.stringify(fromUrl)) {
+    report.storageDiverged = true;
+    if (!allowStaleStorage) failures.push(`${label}: URL table differs from the canonical sheet`);
+  }
   const clean = expected ? sanitizeTable(menu, expected) : table;
   if (JSON.stringify(table) !== JSON.stringify(clean)) failures.push(`${label}: canonical table differs: ${JSON.stringify(table)}`);
   const priced = totals(menu, table);
@@ -125,17 +136,8 @@ function compareState(report, failures, label, expected) {
   if (JSON.stringify(report.rows) !== JSON.stringify(visibleRows)) {
     failures.push(`${label}: visible rows ${JSON.stringify(report.rows)} differ from canonical names, quantities and sides`);
   }
-  try {
-    const encoded = new URL(report.url, "https://table.invalid").searchParams.get("t");
-    if (table.lines.length) {
-      const fromUrl = sanitizeTable(menu, encoded ? decodeTable(encoded) : null);
-      if (JSON.stringify(fromUrl) !== JSON.stringify(table)) failures.push(`${label}: URL table differs from the canonical sheet`);
-    } else if (encoded !== null) {
-      failures.push(`${label}: an empty sheet left table state in the URL`);
-    }
-  } catch (error) {
-    failures.push(`${label}: URL table could not be decoded: ${error?.message ?? String(error)}`);
-  }
+  if (table.lines.length && encoded === null) failures.push(`${label}: a populated sheet has no shareable URL table`);
+  else if (!table.lines.length && encoded !== null) failures.push(`${label}: an empty sheet left table state in the URL`);
   if (report.total !== money(priced.subtotal)) failures.push(`${label}: total ${report.total} != ${money(priced.subtotal)}`);
   if (report.emptyHidden !== (clean.lines.length > 0)) failures.push(`${label}: empty note visibility does not match the sheet`);
 
@@ -312,7 +314,7 @@ export async function auditTableParity({ evaluate, goto, results, failures, drai
     record(`${label} URL fixture A`, first);
     const swap = await evaluate(`
       localStorage.setItem("habibi-haven:table:v1", ${JSON.stringify(JSON.stringify(storageFixture))});
-      history.pushState(null, "", "/table");
+      history.pushState(history.state, "", "/table");
       document.dispatchEvent(new CustomEvent("astro:after-swap"));
       await new Promise((resolve) => setTimeout(resolve, 150));
       return (${snapshotSource()})();
@@ -343,7 +345,7 @@ export async function auditTableParity({ evaluate, goto, results, failures, drai
   if (!urls || urls.error) failures.push(`${label} router URLs: ${urls?.error ?? "no report"}`);
   else {
     compareState(urls.first, failures, `${label} URL fixture A`, fixture);
-    compareState(urls.swap, failures, `${label} swap preserves current URL table`, fixture);
+    compareState(urls.swap, failures, `${label} swap preserves current URL table`, fixture, { allowStaleStorage: true });
     compareState(urls.storageReload, failures, `${label} fresh load reads storage`, storageFixture);
     compareState(urls.second, failures, `${label} URL fixture B wins over storage`, urlFixtureB);
     if (!urls.swap?.url?.includes("?t=")) failures.push(`${label}: current table was not reconciled back into the URL after the swap`);
