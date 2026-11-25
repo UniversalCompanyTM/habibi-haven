@@ -111,6 +111,15 @@ test("Menu card reveal travel stays below half the minimum grid gap", () => {
     "staggered card rectangles must never cross when neighbouring cards are at opposite reveal positions");
 });
 
+test("Menu card reveal travel is absent when reduced motion is requested", () => {
+  const conditional = /@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*html\.js\s+\.deck\s*>\s*\[data-reveal\]\s*\{([^}]*)\}/.exec(css);
+  assert.ok(conditional,
+    "the more-specific card travel rule must be conditional, or it overrides the reduced-motion transform reset");
+  assert.equal(declaration(conditional[1], "transform"), "translateY(0.4rem)");
+  const reduced = /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?html\.js\s+\[data-reveal\][\s\S]*?transform:\s*none/.exec(css);
+  assert.ok(reduced, "reduced motion must retain the generic untransformed reveal reset");
+});
+
 test("filtered cards, rooms, sections, and disclosures leave layout when hidden", () => {
   for (const selector of [
     ".card[hidden]",

@@ -335,9 +335,12 @@ html.js [data-reveal] {
 /* Menu cards sit in a grid whose smallest gap is 0.8rem. The general 22px reveal rise is wider than
    that, so two staggered neighbours can cross while one is still arriving. Keep the fade and stagger,
    but limit card travel to half the minimum gap: opposite reveal positions still leave 0.4rem clear.
-   This rule precedes .is-in so the finished card returns to transform:none and keeps its normal state. */
-html.js .deck > [data-reveal] {
-  transform: translateY(0.4rem);
+   Only a guest who accepts motion gets the travel: this selector is more specific than the generic
+   reduced-motion reset below. The .is-in rule still restores transform:none when the reveal finishes. */
+@media (prefers-reduced-motion: no-preference) {
+  html.js .deck > [data-reveal] {
+    transform: translateY(0.4rem);
+  }
 }
 
 html.js [data-reveal].is-in {

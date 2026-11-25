@@ -1672,6 +1672,7 @@ const posterMenu = await evaluate(`
   return {
     total: all("[data-card]").length,
     visible: all("[data-card]").filter((c) => !c.hasAttribute("hidden")).length,
+    transformed: all(".deck > [data-card]").filter((c) => getComputedStyle(c).transform !== "none").length,
     groups: all("[data-group]").length,
     count: q("[data-count]") ? q("[data-count]").textContent.trim().slice(0, 46) : null,
   };
@@ -1681,6 +1682,7 @@ results.push({ path: "/menu (reduced motion)", value: posterMenu, errors: reduce
 if (reducedMenuLogs.errors.length)
   failures.push(`/menu under reduced motion logged ${reducedMenuLogs.errors.length} error(s): ${reducedMenuLogs.errors.slice(0, 2).join(" | ")}`);
 if (posterMenu.visible !== posterMenu.total) failures.push(`/menu under reduced motion shows ${posterMenu.visible} of ${posterMenu.total} dishes — a weaker tier is not allowed to change the menu`);
+if (posterMenu.transformed !== 0) failures.push(`/menu under reduced motion left ${posterMenu.transformed} card(s) transformed — removing motion must also remove reveal travel`);
 if (posterMenu.groups !== 6) failures.push(`/menu under reduced motion found ${posterMenu.groups} group containers, expected 6`);
 
 await goto("/visit");
