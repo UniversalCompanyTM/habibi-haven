@@ -101,6 +101,16 @@ test("the card grid can shrink below its preferred column without horizontal ove
   assert.match(rule(".frame img"), /object-fit:\s*(?:cover|contain)/);
 });
 
+test("Menu card reveal travel stays below half the minimum grid gap", () => {
+  const transform = declaration(rule("html.js .deck > [data-reveal]"), "transform");
+  const travel = /^translateY\(([\d.]+)rem\)$/.exec(transform);
+  assert.ok(travel, "Menu cards need a scoped reveal transform measured in the same unit as the grid gap");
+  const gap = /^clamp\(([\d.]+)rem,/.exec(declaration(rule(".deck"), "gap"));
+  assert.ok(gap, "the deck must retain its fluid minimum gap");
+  assert.ok(Number(travel[1]) * 2 <= Number(gap[1]),
+    "staggered card rectangles must never cross when neighbouring cards are at opposite reveal positions");
+});
+
 test("filtered cards, rooms, sections, and disclosures leave layout when hidden", () => {
   for (const selector of [
     ".card[hidden]",
