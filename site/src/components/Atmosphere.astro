@@ -24,10 +24,10 @@ const sun = sunAmount(hour);
 ---
 
 <div class="atmosphere" data-atmosphere aria-hidden="true" style={`--a-sun: ${sun.toFixed(4)}; --a-hour: ${hour.toFixed(4)}`}>
-  // `aria-hidden` on the wrapper already hides this subtree, but the canvas repeats it because the rule the
-  // build audits is the one that survives a refactor: "no canvas in the shipped document is readable by an
-  // assistive tech". A gate that has to go looking for a hidden ancestor is a gate that passes the day
-  // somebody moves the layer into a div that has to be announced. Same for `alt=""` on a decorative image.
+  {/* `aria-hidden` on the wrapper already hides this subtree, but the canvas repeats it because the rule the
+      build audits is the one that survives a refactor: "no canvas in the shipped document is readable by an
+      assistive tech". A gate that has to go looking for a hidden ancestor is a gate that passes the day
+      somebody moves the layer into a div that has to be announced. Same for `alt=""` on a decorative image. */}
   <canvas data-atmosphere-canvas aria-hidden="true"></canvas>
 </div>
 

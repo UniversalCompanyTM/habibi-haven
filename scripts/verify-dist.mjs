@@ -10,11 +10,13 @@
 // Six families of assertions: routes, entry-graph weight, the data attributes the client scripts
 // require, content completeness, references that resolve, and the accessibility floor.
 import { readFile, readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const dist = join(root, "site", "dist");
+// An explicit artifact lets a rendered-output regression prove RED against the last verified release
+// without rebuilding it locally. CI leaves this unset and therefore checks the fresh site/dist.
+const dist = process.env.HH_DIST_DIR ? resolve(root, process.env.HH_DIST_DIR) : join(root, "site", "dist");
 
 const fails = [];
 const notes = [];
@@ -356,6 +358,25 @@ for (const ref of referenced) {
 }
 if (broken.length) bad("broken references", `${broken.length} local paths with no file: ${broken.slice(0, 8).join(", ")}${broken.length > 8 ? " …" : ""}`);
 else ok("references", `${referenced.size} local paths, all present on disk`);
+
+// ---------------------------------------------------------------- rendered source comments
+// JavaScript `//` comments belong in frontmatter or a script block. In Astro markup they are literal text,
+// even inside an aria-hidden wrapper: aria-hidden changes the accessibility tree, not visual painting.
+// That mistake put implementation notes over the home and Menu headers while every markup contract still
+// passed. Remove executable/style/template bodies and real HTML comments, then inspect the direct text
+// nodes the browser would otherwise paint.
+for (const [route, src] of all) {
+  const renderedText = src
+    .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  const leaked = renderedText
+    .split(/<[^>]*>/)
+    .map((node) => decodeHtml(node).trim())
+    .filter((text) => text.startsWith("//"));
+  if (leaked.length) bad("rendered comments", `${route} paints ${leaked.length} source-comment text node(s): ${JSON.stringify(leaked[0].slice(0, 120))}`);
+}
+if (!fails.some((f) => f.includes("rendered comments")))
+  ok("rendered comments", `${all.length} pages contain no JavaScript-comment text nodes`);
 
 // ---------------------------------------------------------------- accessibility floor
 for (const [route, src] of all) {
