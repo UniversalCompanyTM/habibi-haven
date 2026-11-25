@@ -165,6 +165,7 @@ const priceBands = [
 <script>
   import menu from "../data/menu.json";
   import { addToTable, getTable, EVENT } from "../lib/table-client.mjs";
+  import { wireDishCards } from "../lib/dish-card.mjs";
   import { component } from "../lib/page.mjs";
 
   // The explorer is the heaviest thing on the site that is not the door: 243 cards, a keyboard shortcut on
@@ -186,6 +187,12 @@ const priceBands = [
     // on a card mean only "which family / section does this dish belong to".
     const subgroups = Array.from(root.querySelectorAll<HTMLElement>("[data-subgroup]"));
     const groups = Array.from(root.querySelectorAll<HTMLElement>("[data-group]"));
+    // Capture the kitchen's sequence before the first sort moves any nodes. A later "As the menu lists"
+    // selection must restore these exact elements; returning early would silently keep the previous order.
+    const menuOrder = new Map<HTMLElement, HTMLElement[]>(subgroups.map((sub) => [
+      sub,
+      Array.from(sub.querySelectorAll<HTMLElement>("[data-card]")),
+    ]));
     const search = root.querySelector<HTMLInputElement>("[data-q]")!;
     const sort = root.querySelector<HTMLSelectElement>("[data-sort]")!;
     const live = root.querySelector<HTMLElement>("[data-count]")!;
@@ -242,11 +249,16 @@ const priceBands = [
     };
 
     const writeUrl = () => {
-      const p = new URLSearchParams();
+      // Start from the live query so table commits and room links survive filter/sort changes.
+      const p = new URLSearchParams(location.search);
       if (state.q) p.set("q", state.q);
+      else p.delete("q");
       if (state.tags.size) p.set("tag", [...state.tags].join(","));
+      else p.delete("tag");
       if (state.band) p.set("band", state.band);
+      else p.delete("band");
       if (state.sort !== "menu") p.set("sort", state.sort);
+      else p.delete("sort");
       const qs = p.toString();
       const hash = state.room ? `#${state.room}` : "";
       history.replaceState(null, "", qs ? `?${qs}${hash}` : `${location.pathname}${hash}`);
@@ -254,7 +266,10 @@ const priceBands = [
 
     const sortDeck = (deck: HTMLElement) => {
       const items = Array.from(deck.querySelectorAll<HTMLElement>("[data-card]"));
-      if (state.sort === "menu") return; // the server's order is the kitchen's order; leave it alone
+      if (state.sort === "menu") {
+        menuOrder.get(deck)?.forEach((node) => deck.append(node));
+        return;
+      }
       const by = {
         cheap: (a: number, b: number) => a - b,
         dear: (a: number, b: number) => b - a,
@@ -304,6 +319,10 @@ const priceBands = [
       paintBadge();
       syncControls();
       writeUrl();
+      // The live count and active-filter badge share the sticky tools row. Either can change its wrapping,
+      // so the offset used by cards and deep links has to be measured from the finished state, not the
+      // previous filter's rectangle.
+      measureBar();
       document.dispatchEvent(new CustomEvent("hh:prep"));
     };
 
@@ -325,16 +344,19 @@ const priceBands = [
       foldCount.textContent = String(n);
     };
 
+    const measureBar = () => {
+      if (bar) root.style.setProperty("--bar-h", `${Math.round(bar.getBoundingClientRect().height)}px`);
+    };
+
     const paintFold = () => {
       if (!fold || !panel) return;
       const wide = !narrow.matches;
       fold.hidden = wide;
       panel.hidden = wide ? false : !chipsOpen;
       fold.setAttribute("aria-expanded", String(wide || chipsOpen));
-      // The bar is sticky and the room headings anchor underneath it, so the number the anchors have to
-      // clear is this element's height — which is exactly what folding changes.
-      if (bar) root.style.setProperty("--bar-h", `${Math.round(bar.getBoundingClientRect().height)}px`);
+      // Badge first: revealing the active-filter count can widen the button and add a tools row.
       paintBadge();
+      measureBar();
     };
 
     fold?.addEventListener("click", () => {
@@ -406,42 +428,9 @@ const priceBands = [
 
     /* ---------------- the table, from here ---------------- */
 
-    const labelOf = (card: HTMLElement) => card.querySelector<HTMLElement>("[data-add]");
-
-    const paintOnTable = () => {
-      const table = getTable();
-      const counts = new Map<string, number>();
-      for (const line of table.lines) counts.set(line.id, (counts.get(line.id) ?? 0) + line.qty);
-      for (const card of cards) {
-        const id = card.dataset.id ?? "";
-        const qty = counts.get(id) ?? 0;
-        card.toggleAttribute("data-on", qty > 0);
-        const button = labelOf(card);
-        if (button) {
-          button.textContent = qty > 0 ? `On your table · ${qty}` : "Add to table";
-          button.setAttribute("aria-pressed", String(qty > 0));
-        }
-      }
-    };
-
-    root.addEventListener("click", (event: MouseEvent) => {
-      const button = (event.target as HTMLElement)?.closest?.<HTMLElement>("[data-add]");
-      if (!button) return;
-      const card = button.closest<HTMLElement>("[data-card]");
-      if (!card) return;
-      const id = button.dataset.add ?? "";
-      const choice = card.querySelector<HTMLInputElement>(`[name^="acc-"][type="radio"]:checked`);
-      addToTable(id, choice ? choice.value : undefined);
-      button.animate(
-        [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }],
-        { duration: 260, easing: "cubic-bezier(0.2,1.24,0.32,1)" }
-      );
-    });
-
-    // The same function object, subscribed and unsubscribed by name: a wrapper arrow would be a different
-    // reference each time and `removeEventListener` would quietly do nothing.
-    document.addEventListener(EVENT, paintOnTable);
-    paintOnTable();
+    // Homepage and Menu share this painter and delegated Add handler. It restores stored side choices,
+    // reports multiple selected sides honestly, and returns one teardown for both of its listeners.
+    const stopDishCards = wireDishCards(root, { target: document, event: EVENT, getTable, addToTable });
 
     // Always run once: a query, tag or band can arrive in the address, and the page has to agree with
     // the URL it was opened with even when nobody touched a control.
@@ -465,7 +454,7 @@ const priceBands = [
       removeEventListener("keydown", onKey);
       removeEventListener("resize", paintFold);
       if (narrow.removeEventListener) narrow.removeEventListener("change", paintFold);
-      document.removeEventListener(EVENT, paintOnTable);
+      stopDishCards();
     };
   }
 </script>

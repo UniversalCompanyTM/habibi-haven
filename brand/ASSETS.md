@@ -1,9 +1,11 @@
 # Habibi Haven — real brand assets
 
-Salvaged 2026-11-14 from the image set the restaurant's own abandoned Relume project used
-(`habibi-haven/assets/`, deleted after this ran — the script is a one-time record of the copy).
-These are the **only local copies** of the real logo and the real venue
-photography. The CDN URLs in the capture were signed and expire; these bytes do not.
+The original set was salvaged 2026-11-14 from the image set the restaurant's own abandoned Relume
+project used (`habibi-haven/assets/`, deleted after this ran — the script is a one-time record of the
+copy). On 2026-11-24, six more venue photographs were retrieved anonymously from the restaurant's
+`menu.or.ke` page and mirrored byte-for-byte. Together these are the canonical local copies of the
+real logo and venue photography. The CDN URLs in the capture were signed and expire; these bytes do
+not.
 
 This corrects an earlier research note that said Habibi had no logo file and no venue
 photography. That was wrong: it was based on probing menu.or.ke's Supabase buckets (which hold
@@ -13,7 +15,7 @@ dish photos only) and on never opening the capture's own asset manifest. See
 ## What is in hand
 
 - **1 logo** — `logo/habibi-haven-badge.jpg`, a 200×200 raster of the circular teal badge. No vector original exists locally.
-- **9 venue photographs** — night facade (1200×1200), daylight facade, the timber arches, the teal-sofa interior, the terrace, four table settings, the window table.
+- **15 venue photographs** — the original night facade (1200×1200), daylight facade, timber arches, teal-sofa interior, terrace, four table settings and window table, plus six portrait venue originals from `menu.or.ke`.
 - **3 food photographs** — two sandwich plates and the karak chai service.
 - **2 Google marks** — for attributing the review quotes.
 
@@ -31,6 +33,12 @@ dish photos only) and on never opening the capture's own asset manifest. See
 | `photos/venue-table-mid-meal.jpg` | 19.8 KB | 300×225 | `cff8811cb6e9` | Terrace table mid-meal: iced frappe, yellow cushion, sauce bottles, dates, menu card. |
 | `photos/venue-terrace-table-city.jpg` | 20.5 KB | 300×225 | `eee7c9246085` | Near-identical framing of the same terrace table, CBD tower rising behind the greenery. |
 | `photos/venue-table-by-window.jpg` | 12.9 KB | 300×225 | `e204258fb17a` | Table setting with greenery in front and Nairobi towers behind. |
+| `photos/venue-lounge-teal-sofa.jpg` | 224.3 KB | 346×506 | `62b8539c3503` | Teal sofa beneath timber arches and greenery, with a yellow heart neon sign behind it. |
+| `photos/venue-terrace-daylight.jpg` | 215.7 KB | 346×506 | `cb1a8a1b6e86` | Daylit terrace: round wooden table, white cushioned chairs, stone-and-grass paving, green canopy and city towers. |
+| `photos/venue-neon-green-wall.jpg` | 223.2 KB | 329×512 | `e3e8b20b7c57` | Green living wall with illuminated “My Habibi” lettering, tan chairs and teal seating. |
+| `photos/venue-dessert-counter.jpg` | 189.6 KB | 329×512 | `3b4fcb4d721c` | Dessert display counter and glass cakes beneath woven pendants and curved timber arches. |
+| `photos/venue-timber-arches-wide.jpg` | 282.5 KB | 329×512 | `4ad51039e9ea` | Wide interior view through timber arches, with dense overhead greenery, woven lanterns and teal seating. |
+| `photos/venue-banquette-occupied.jpg` | 248.4 KB | 329×512 | `086111ec5643` | Curved teal banquette in the foreground, timber arches above and guests seated in the background. |
 | `photos/food-grilled-sandwich-fries.jpg` | 20.7 KB | 300×225 | `2b06052dad46` | Grilled sandwich with chips, slaw and a sauce jug. |
 | `photos/food-chicken-sandwich-fries.jpg` | 20.7 KB | 300×225 | `cd26dbef2fb4` | Pressed chicken sandwich, fries and slaw on a wooden board. |
 | `photos/food-tea-service.jpg` | 16.1 KB | 300×225 | `52c834e7be8f` | White teapot and a cup of karak chai on a habibi-scripted saucer. |
@@ -38,11 +46,31 @@ dish photos only) and on never opening the capture's own asset manifest. See
 | `third-party/google-g.png` | 13.7 KB | unknown | `fc6013a69eda` | Google mark, raster variant of the same icon. |
 
 Authored alt text in the capture was generic ("Guest photo at Habibi Haven") and in one case
-wrong, so the descriptions above come from opening each file, not from its metadata.
+wrong, so the descriptions above come from opening each file, not from its metadata. The six
+`menu.or.ke` originals retain their source text overlays; none was cropped, resized or edited.
+
+## `menu.or.ke` provenance — accessed 2026-11-24
+
+Source page: [Habibi Haven on menu.or.ke](https://menu.or.ke/Habibi_Haven/habibi-haven.html).
+The page references these six official-source venue JPEGs. Each response was verified as JPEG,
+its dimensions were parsed from the file, and its full SHA-256 was checked against every existing
+brand file and mirrored menu file before ingestion; none was byte-identical to another asset.
+
+| local file | exact original URL |
+|---|---|
+| `photos/venue-lounge-teal-sofa.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience2.jpg |
+| `photos/venue-terrace-daylight.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience3.jpg |
+| `photos/venue-neon-green-wall.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience4.jpg |
+| `photos/venue-dessert-counter.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience5.jpg |
+| `photos/venue-timber-arches-wide.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience6.jpg |
+| `photos/venue-banquette-occupied.jpg` | https://menu.or.ke/Habibi_Haven/images/Habibi_Haven_Ambience7.jpg |
+
+No explicit reuse licence was found. These are official-source images, **not licensed assets**;
+they remain subject to the private-preview/rights-open warning below.
 
 ## Deleting the capture is lossless
 
-All 19 files in the capture are accounted for: 15 copied, and the 4 below are byte-identical duplicates of a file that was. Nothing is lost by removing the capture.
+All 19 files in the 2026-11-14 capture are accounted for: 15 copied, and the 4 below are byte-identical duplicates of a file that was. Nothing is lost by removing the capture.
 
 | capture file (second CDN id, not copied) | identical to |
 |---|---|
@@ -53,10 +81,12 @@ All 19 files in the capture are accounted for: 15 copied, and the 4 below are by
 
 ## Resolution reality
 
-Measured from the headers, the set spans 1200×1200, 200×200, 300×225, 408×272. Only the night facade is large;
-most venue and food shots are 300×225 — thumbnail size. Blown up to a hero they will read soft,
-so the layout uses them as cards and proofs of the room, and the one 1200×1200 frame is the only
-candidate for a full-bleed image.
+Measured from the headers, the set spans 1200×1200, 346×506, 329×512, 408×272, 300×225 and
+200×200. The six `menu.or.ke` venue originals are larger than the 300×225 thumbnails but remain
+portrait-sized rather than hero-resolution. Most original venue and food shots are still 300×225 —
+thumbnail size — so the one 1200×1200 night facade remains the only full-bleed candidate. A
+1280×604 exterior found during research was only a different crop of that same facade and was
+excluded.
 
 ## What the real assets say about the brand
 
@@ -67,5 +97,6 @@ carries a "habibi" script mark. Any palette or scene work has to start from thes
 
 ## Status
 
-Reference assets for a **private pitch preview**, not cleared for publication. Photo ownership and
-the original logo file are open questions for the client call — `../docs/OPEN-QUESTIONS.md`.
+Reference assets for a **private pitch preview**, not cleared for publication. Photo ownership,
+reuse permission (including the six `menu.or.ke` originals, for which no explicit licence was found)
+and the original logo file are open questions for the client call — `../docs/OPEN-QUESTIONS.md`.

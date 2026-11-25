@@ -38,7 +38,7 @@ const rooms = [
     src: "/brand/venue-terrace-seating.jpg",
     alt: "The terrace: outdoor tables with the city behind them",
     name: "The terrace",
-    note: "First to fill at lunch, and the one with the view of Koinange Street.",
+    note: "Outdoor tables and teal banquettes beneath a green canopy.",
   },
   {
     src: "/brand/venue-interior-teal-sofa.jpg",
@@ -173,7 +173,7 @@ const rooms = [
         </p>
       </header>
 
-      <div class="deck">
+      <div class="deck" data-signature-deck>
         {
           signatures.map((item, i) => (
             <DishCard item={item} priority={i < 3} />
@@ -347,3 +347,14 @@ const rooms = [
     </div>
   </section>
 </Base>
+
+<script>
+  import { addToTable, getTable, EVENT } from "../lib/table-client.mjs";
+  import { wireDishCards } from "../lib/dish-card.mjs";
+  import { component } from "../lib/page.mjs";
+
+  component("[data-signature-deck]", {
+    mount: (root) => wireDishCards(root, { target: document, event: EVENT, getTable, addToTable }),
+    unmount: (stop) => stop?.(),
+  });
+</script>

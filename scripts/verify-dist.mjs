@@ -97,6 +97,53 @@ for (const [route, src] of all) {
 if (!fails.some((f) => f.includes("canonical")))
   ok("canonical", `${all.length} pages publish their own slash-free, extension-free address`);
 
+// ---------------------------------------------------------------- preview policy
+// A preview is private unless the exact PUBLIC_INDEXABLE=true opt-in was supplied. Check every emitted
+// HTML file, including 404: a layout change that drops the meta from one route is otherwise invisible.
+const INDEXABLE = process.env.PUBLIC_INDEXABLE === "true";
+const PREVIEW_WARNING =
+  "Private pitch preview — not Habibi Haven’s official website. Media rights remain with their respective rights holders; reuse and redistribution permission is unconfirmed. For evaluation only; do not publish or redistribute.";
+const metaAttribute = (tag, name) =>
+  tag.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "i"))?.[1] ?? null;
+const hiddenPreview = (attributes) =>
+  /\bhidden(?:\s|=|$)/i.test(attributes) ||
+  /\baria-hidden\s*=\s*["']true["']/i.test(attributes) ||
+  /\bstyle\s*=\s*["'][^"']*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.test(attributes);
+const elementWithExactText = (html, wanted) => {
+  for (const match of html.matchAll(/<(p|span|div|li)\b([^>]*)>/gi)) {
+    const start = match.index + match[0].length;
+    const end = html.indexOf(`</${match[1]}>`, start);
+    if (end === -1) continue;
+    const text = decodeHtml(html.slice(start, end)).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (text === wanted) return match;
+  }
+  return undefined;
+};
+
+for (const [route, src] of all) {
+  const robots = [...src.matchAll(/<meta\b[^>]*>/gi)]
+    .map((match) => ({ name: metaAttribute(match[0], "name"), content: metaAttribute(match[0], "content") }))
+    .filter((meta) => meta.name?.toLowerCase() === "robots");
+  if (INDEXABLE) {
+    if (robots.length)
+      bad("indexing", `${route} ships ${robots.length} robots meta tag(s) despite explicit PUBLIC_INDEXABLE=true`);
+  } else {
+    const content = robots[0]?.content?.trim().toLowerCase().replace(/\s+/g, " ");
+    if (robots.length !== 1 || content !== "noindex, nofollow")
+      bad("indexing", `${route} must ship exactly one robots meta with noindex, nofollow while private (got ${JSON.stringify(robots)})`);
+  }
+
+  const footer = src.match(/<footer\b([^>]*)>([\s\S]*?)<\/footer>/i);
+  const footerText = decodeHtml(footer?.[2] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const warning = elementWithExactText(footer?.[2] ?? "", PREVIEW_WARNING);
+  if (!footer || !footerText.includes(PREVIEW_WARNING))
+    bad("preview disclosure", `${route} has no footer carrying the exact private-preview and rights warning`);
+  else if (!warning || hiddenPreview(footer[1]) || hiddenPreview(warning[2]))
+    bad("preview disclosure", `${route} hides the private-preview and rights warning`);
+}
+if (!fails.some((f) => f.includes("indexing") || f.includes("preview disclosure")))
+  ok("preview policy", `${all.length} pages ${INDEXABLE ? "omit robots meta for the explicit public opt-in" : "ship noindex, nofollow"} and visibly carry the rights warning`);
+
 // ---------------------------------------------------------------- entry graph
 // ARCHITECTURE.md decision 5: three is never in the entry graph. The one honest test is that the entry
 // HTML of every page contains no reference to the three chunk — not a `<script src>`, not a
@@ -130,7 +177,10 @@ const CONTRACTS = {
     "data-when-day", "data-when-time", "data-whatsapp",
     "data-record-form", "data-record-send", "data-record-hint", "data-record-state", "data-handoff", "data-api",
   ],
-  "/visit": ["data-dial", "data-dial-input", "data-request-form", "data-send", "data-outcome", "data-handoff", "data-api"],
+  "/visit": [
+    "data-dial", "data-dial-input", "data-request-form", "data-send", "data-outcome", "data-handoff", "data-api",
+    "data-gal", "data-gal-open", "data-gal-box", "data-gal-play", "data-gal-prev", "data-gal-next", "data-gal-close",
+  ],
 };
 for (const [route, needed] of Object.entries(CONTRACTS)) {
   const src = all.find(([r]) => r === route)?.[1];
@@ -194,6 +244,7 @@ if (!fails.some((f) => f.includes("class:list"))) ok("class:list", "the dial ele
 // this check; reading `item.signature` off the ingest silently returned an empty set. The page's inputs
 // are the ones to verify against.
 const { PARTY_MAX, PARTY_MIN, signatureItems } = await import(new URL("../site/src/lib/table.mjs", import.meta.url).href);
+const { VENUE_FRAMES, dishPhotographs } = await import(new URL("../site/src/lib/gallery.mjs", import.meta.url).href);
 const menu = JSON.parse(await readFile(join(root, "site", "src", "data", "menu.json"), "utf8"));
 // The built menu is a tree — families > sections > items — and `meta.items` is the flat count the copy
 // quotes. Flatten to compare like with like instead of reaching for a top-level `items` array that does
@@ -232,6 +283,31 @@ if (illustrated.length && badges < illustrated.length)
 else if (illustrated.length) ok("photo pipeline", `${illustrated.length} illustrated dishes, all ${badges} labelled; ${pending.length} rows still show their pending state`);
 if (pending.length && !menuPage.includes("Photograph pending"))
   bad("photo pipeline", `${pending.length} dishes have no picture but /menu never says so — the placeholder is being hidden, not admitted`);
+
+// The visit wall is also a no-JS interface: each tile is an anchor to the actual file, and the enhanced
+// viewer starts hidden. Compare the built links with the same deterministic selector the component uses;
+// a placeholder, an illustration, a duplicate file, or a silently dropped family then fails here rather
+// than becoming a confident sentence under a wall that does not contain what it claims.
+const visitPage = pages["/visit"] ?? "";
+const galleryLinks = [...visitPage.matchAll(/<a\b[^>]*data-gal-open[^>]*>/g)].map((m) => ({
+  href: m[0].match(/\bhref="([^"]*)"/)?.[1] ?? "",
+  kind: m[0].match(/\bdata-kind="([^"]*)"/)?.[1] ?? "",
+}));
+const expectedGallery = [
+  ...VENUE_FRAMES.map((f) => ({ href: f.src, kind: f.kind })),
+  ...dishPhotographs(menu).map((d) => ({ href: d.src, kind: d.kind })),
+];
+if (galleryLinks.length !== expectedGallery.length)
+  bad("gallery content", `/visit renders ${galleryLinks.length} photograph links, expected ${expectedGallery.length}`);
+else {
+  const wrong = galleryLinks.findIndex((link, i) => link.href !== expectedGallery[i].href || link.kind !== expectedGallery[i].kind);
+  if (wrong !== -1) bad("gallery content", `/visit gallery link ${wrong + 1} is ${JSON.stringify(galleryLinks[wrong])}, expected ${JSON.stringify(expectedGallery[wrong])}`);
+  else ok("gallery content", `${galleryLinks.length} real file links in deterministic order (${VENUE_FRAMES.length} venue / ${dishPhotographs(menu).length} dish)`);
+}
+const viewerTag = visitPage.match(/<div\b[^>]*data-gal-box[^>]*>/)?.[0] ?? "";
+if (!/\bhidden\b/.test(viewerTag)) bad("gallery fallback", "/visit gallery viewer is not hidden in the server HTML");
+if (!/role="dialog"/.test(viewerTag) || !/aria-modal="true"/.test(viewerTag)) bad("gallery a11y", "/visit gallery viewer is not announced as a modal dialog");
+if (!fails.some((f) => f.includes("gallery"))) ok("gallery fallback", "the viewer starts hidden and every tile remains a direct file link without JavaScript");
 
 for (const [route, src] of all) {
   for (const phrase of ["Habibi Haven", "Koinange"]) {
@@ -506,7 +582,19 @@ if (!/Nothing is fetched from Google until/.test(visitHtml.replace(/\s+/g, " "))
 // Attribute values arrive HTML-escaped, so `&z=17&output=embed` is `&amp;z=17…` in the document. Decoding first
 // keeps this gate about the URL rather than about the serialiser.
 function decodeHtml(text) {
-  return String(text).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return String(text)
+    .replace(/&#(x[\da-f]+|\d+);/gi, (_, code) =>
+      String.fromCodePoint(code[0].toLowerCase() === "x" ? parseInt(code.slice(1), 16) : Number(code)),
+    )
+    .replace(/&rsquo;/g, "’")
+    .replace(/&lsquo;/g, "‘")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
+    .replace(/&ldquo;/g, "“")
+    .replace(/&rdquo;/g, "”")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 // ---------------------------------------------------------------- weight

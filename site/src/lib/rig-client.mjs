@@ -7,8 +7,8 @@
 // each keep their own copy of the curve. The curve stays in lib/hours.mjs; this is a writer, nothing more.
 //
 // A19 removed the half-hour detent. `applyHour` clamps and writes; it does not snap. The dial is
-// continuous, the ambient writer moves to the second, and `--sun` is transitioned in CSS so twenty
-// seconds between writes still reads as one uninterrupted drift.
+// continuous and the ambient writer moves to the second. `--hour` is an immediate circular state
+// readout; CSS transitions only the appearance-driving `--night`/`--sun` values, without a frame loop.
 import { DIAL_MAX, DIAL_MIN, nairobiHourFloat, nightAmount, rigFor, sunAmount } from "./hours.mjs";
 
 export const HOUR_EVENT = "hh:hour";
@@ -45,10 +45,10 @@ export function applyHour(hour, { fromAmbient = false } = {}) {
   // `dialled` would freeze the room at the first tick and stop the drift for the rest of the visit.
   if (!fromAmbient) {
     dialled = h;
-    // A drag must track the handle. The 20 s glide on --sun is what makes the *wall clock* invisible, and
-    // it is exactly wrong under a finger: pulling to noon would leave the atmosphere 20 seconds behind
-    // the readout. `data-manual` shortens it to a blink, and the timer below hands the glide back once
-    // the writing stops.
+    // A drag must track the handle. The one-second ambient glide is what makes the *wall clock*
+    // invisible, and it is exactly wrong under a finger: pulling to noon would leave the atmosphere
+    // behind the readout. `data-manual` shortens the sun to a blink and leaves hour/night immediate;
+    // the timer below hands the ambient glide back once the writing stops.
     root.setAttribute("data-manual", "");
     clearTimeout(manualTimer);
     manualTimer = setTimeout(() => root.removeAttribute("data-manual"), 600);
@@ -77,23 +77,26 @@ export function currentHour() {
  * The room, on the wall clock, drifting.
  *
  * Once a visitor has touched the dial the room is theirs and this does nothing until they press "Back to
- * now" — which clears `dialled` and hands the room back. Otherwise it writes the real Nairobi hour to the
- * second, every twenty seconds. The change per write is about 0.0056 of an hour, far below what an eye
- * can step on, and `html[data-ambient]` transitions `--sun` across the whole twenty seconds so the
- * atmosphere moves every frame while the document is written to twice a minute.
+ * now" — which clears `dialled` and hands the room back. Otherwise it writes the real Nairobi hour once
+ * per second. `--hour` updates immediately; `html[data-ambient]` transitions the appearance values
+ * `--night`/`--sun` across that second, so CSS supplies the intervening frames while JavaScript keeps
+ * one bounded timer rather than a render loop.
  *
  * Returns a stop function. Everything with a teardown cost is returned rather than left running: a
- * router swap must not leave two ambient loops writing to the same two properties.
+ * router swap must not leave two ambient loops writing to the same rig values.
  */
-export function startAmbient({ everyMs = 20_000 } = {}) {
+export function startAmbient({ everyMs = 1_000 } = {}) {
   const root = document.documentElement;
-  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
   // Reduced motion gets the drift without the interpolation: the colour still follows the sun, it just
-  // arrives in twenty-second steps instead of gliding. Nothing on this page moves for it.
+  // arrives in one-second steps instead of gliding. Read the live query on every change, including after
+  // an Astro swap clears the attribute, rather than freezing the visitor's preference at startup.
   const glide = () => {
-    if (!calm) root.setAttribute("data-ambient", "");
+    if (motion.matches) root.removeAttribute("data-ambient");
+    else root.setAttribute("data-ambient", "");
   };
   glide();
+  motion.addEventListener("change", glide);
 
   const write = () => {
     if (dialled !== null) return;
@@ -108,15 +111,21 @@ export function startAmbient({ everyMs = 20_000 } = {}) {
   document.addEventListener("visibilitychange", onVisible);
   addEventListener("pageshow", write);
   // swapRootAttributes (astro/dist/transitions/swap-functions.js) clears every attribute off the live
-  // <html> and copies the incoming document's, and the incoming one was built with no `data-ambient` on
-  // it. Without this the glide would survive exactly one navigation and then the room would step again.
-  document.addEventListener("astro:after-swap", glide);
+  // <html> and copies the incoming document's, including its build-time inline hour. Restore the glide and
+  // write the current Nairobi second in the same callback; otherwise the room shows the build hour until the
+  // next interval tick, which is a visible backward jump (and can cross midnight).
+  const afterSwap = () => {
+    glide();
+    write();
+  };
+  document.addEventListener("astro:after-swap", afterSwap);
 
   return () => {
     clearInterval(timer);
     document.removeEventListener("visibilitychange", onVisible);
     removeEventListener("pageshow", write);
-    document.removeEventListener("astro:after-swap", glide);
+    document.removeEventListener("astro:after-swap", afterSwap);
+    motion.removeEventListener("change", glide);
   };
 }
 

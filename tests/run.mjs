@@ -15,6 +15,7 @@
 
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -31,6 +32,7 @@ const schema = await lib("site/src/content-schema.mjs");
 const tags = await lib("site/src/lib/tags.mjs");
 const { localPhotoName, slugify } = await lib("scripts/lib/photo-name.mjs");
 const { createPage } = await lib("site/src/lib/page.mjs");
+const gallery = await lib("site/src/lib/gallery.mjs");
 
 const menu = JSON.parse(await readFile(MENU_PATH, "utf8"));
 const overrides = JSON.parse(await readFile(join(ROOT, "content/menu.overrides.json"), "utf8"));
@@ -346,6 +348,87 @@ check("shareUrl percent-encodes so the link stays one token", () => {
   const url = table.shareUrl("https://example.test", { party: 2, lines: [{ id: "karak-chai", qty: 2 }] });
   if (/\s/.test(url)) return `url has a space: ${url}`;
   return eq(url, "https://example.test/table?t=2%7Ckarak-chaix2", "share url");
+});
+
+/* -------------------------------------------------------- canonical tables */
+
+describe("table — stored and shared selections have one canonical shape");
+
+check("canonicalization drops stale, zero and non-integer lines while clamping the party", () => {
+  const got = table.sanitizeTable(menu, {
+    party: 99,
+    lines: [
+      { id: "a-dish-that-was-removed", qty: 1 },
+      { id: "karak-chai", qty: 0 },
+      { id: "karak-chai", qty: -2 },
+      { id: "karak-chai", qty: 1.5 },
+      { id: "karak-chai", qty: "2" },
+      { id: "karak-chai", qty: 2 },
+    ],
+  });
+  return eq(JSON.stringify(got), JSON.stringify({ party: 30, lines: [{ id: "karak-chai", qty: 2 }] }), "canonical table");
+});
+
+check("a missing or unknown accompaniment becomes the menu default and duplicates merge", () => {
+  const got = table.sanitizeTable(menu, {
+    party: 2,
+    lines: [
+      { id: "grilled-chicken-breast", qty: 1 },
+      { id: "grilled-chicken-breast", option: "Not a side", qty: 2 },
+      { id: "grilled-chicken-breast", option: "Chips", qty: 1 },
+    ],
+  });
+  return eq(JSON.stringify(got.lines), JSON.stringify([{ id: "grilled-chicken-breast", option: "Chips", qty: 4 }]), "default-side merge");
+});
+
+check("different valid accompaniments remain distinct canonical lines", () => {
+  const got = table.sanitizeTable(menu, {
+    party: 3,
+    lines: [
+      { id: "grilled-chicken-breast", option: "Chips", qty: 1 },
+      { id: "grilled-chicken-breast", option: "Mandy Rice", qty: 2 },
+      { id: "full-mandy", option: "Chips", qty: 1 },
+    ],
+  });
+  return eq(
+    JSON.stringify(got.lines),
+    JSON.stringify([
+      { id: "grilled-chicken-breast", option: "Chips", qty: 1 },
+      { id: "grilled-chicken-breast", option: "Mandy Rice", qty: 2 },
+      { id: "full-mandy", qty: 1 },
+    ]),
+    "side identity",
+  );
+});
+
+check("duplicate quantities merge without escaping the printable maximum", () => {
+  const got = table.sanitizeTable(menu, {
+    party: 2,
+    lines: [
+      { id: "karak-chai", qty: 60 },
+      { id: "karak-chai", qty: 60 },
+    ],
+  });
+  return eq(JSON.stringify(got.lines), JSON.stringify([{ id: "karak-chai", qty: 99 }]), "merged quantity");
+});
+
+check("malformed stored shapes degrade to an empty canonical table", () => {
+  for (const candidate of [null, undefined, {}, { party: "nope", lines: {} }]) {
+    const got = table.sanitizeTable(menu, candidate);
+    if (got.party !== table.PARTY_DEFAULT || got.lines.length !== 0)
+      return `candidate ${JSON.stringify(candidate)} became ${JSON.stringify(got)}`;
+  }
+  return true;
+});
+
+check("a malformed encoded side or x0 is skipped without discarding valid sibling lines", () => {
+  let decoded;
+  try {
+    decoded = table.decodeTable("2|grilled-chicken-breast>%E0%A4%Ax1|karak-chaix2|siniax0");
+  } catch (error) {
+    return `decode threw: ${error.message}`;
+  }
+  return eq(JSON.stringify(decoded?.lines), JSON.stringify([{ id: "karak-chai", qty: 2 }]), "decoded lines");
 });
 
 /* --------------------------------------------------------------- whatsapp */
@@ -1553,6 +1636,134 @@ check("the horizon the pickers stop at is the horizon the book accepts, on the d
   return problems.length ? problems.join("; ") : true;
 });
 
+/* ------------------------------------------------------------------ gallery */
+
+describe("gallery — only files that exist, selected without a clock");
+
+check("the room wall holds eighteen distinct venue and food files", () => {
+  const srcs = gallery.VENUE_FRAMES.map((f) => f.src);
+  if (srcs.length !== 18) return `${srcs.length} venue frames, expected 18`;
+  if (new Set(srcs).size !== srcs.length) return "one venue file is listed twice";
+  for (const frame of gallery.VENUE_FRAMES) {
+    if (!frame.alt || !frame.caption || !(frame.w > 0 && frame.h > 0)) return `${frame.id} is missing its description or measured size`;
+    if (frame.size !== `${frame.w} × ${frame.h}`) return `${frame.id} says ${frame.size}, its dimensions say ${frame.w} × ${frame.h}`;
+  }
+  return true;
+});
+
+check("the room wall preserves all five measured landscape and portrait frame sizes", () => {
+  const counts = {};
+  for (const frame of gallery.VENUE_FRAMES) counts[frame.size] = (counts[frame.size] ?? 0) + 1;
+  const got = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
+  const expected = [["1200 × 1200", 1], ["300 × 225", 10], ["329 × 512", 4], ["346 × 506", 2], ["408 × 272", 1]];
+  return eq(JSON.stringify(got), JSON.stringify(expected), "venue size split");
+});
+
+check("the dish wall is eighteen genuine photographs, deterministic and duplicate-free", () => {
+  const first = gallery.dishPhotographs(menu, { limit: 18 });
+  const second = gallery.dishPhotographs(menu, { limit: 18 });
+  if (first.length !== 18) return `${first.length} dishes selected, expected 18`;
+  if (JSON.stringify(first) !== JSON.stringify(second)) return "two identical selections disagree";
+  const srcs = first.map((d) => d.src);
+  if (new Set(srcs).size !== srcs.length) return "one dish file is shown twice";
+  const rows = new Map(gallery.photographedRows(menu).map((r) => [r.item.id, r.item]));
+  for (const dish of first) {
+    const item = rows.get(dish.id);
+    if (!item || !gallery.isRealPhotograph(item)) return `${dish.id} is not a photographed menu row`;
+    if (dish.priceLabel !== (item.price == null ? null : table.money(item.price)))
+      return `${dish.id} says ${dish.priceLabel}, the menu says ${item.price == null ? "no price" : table.money(item.price)}`;
+  }
+  return true;
+});
+
+check("the six families interleave in menu order instead of one family filling the wall", () => {
+  const cycle = ["morning", "small-plates", "kitchen", "handheld", "house", "bar"];
+  const got = gallery.dishPhotographs(menu, { limit: 18 }).map((d) => d.family);
+  return eq(got.join(","), [...cycle, ...cycle, ...cycle].join(","), "family sequence");
+});
+
+check("a signature leads its family, then longer descriptions, then id", () => {
+  const photo = (id, description = "", signatureRole = false) => ({
+    id, name: id, description, signatureRole, price: 700,
+    photo: { local: `/menu/${id}.jpg`, thumb: `/menu/${id}.400.jpg`, width: 800, height: 800, alt: id },
+  });
+  const source = {
+    families: [
+      { id: "alpha", sections: [{ id: "one", items: [
+        photo("alpha-plain", "12345"),
+        photo("alpha-zulu", "12345"),
+        photo("alpha-signature", "x", true),
+        photo("alpha-render", "longer description", true),
+      ] }] },
+      { id: "beta", sections: [{ id: "two", items: [
+        photo("beta-plain", "123456"),
+        photo("beta-signature", "x", true),
+      ] }] },
+    ],
+  };
+  source.families[0].sections[0].items[3].photo.illustration = true;
+  const got = gallery.dishPhotographs(source, { limit: 5 }).map((d) => d.id);
+  return eq(got.join(","), "alpha-signature,beta-signature,alpha-plain,beta-plain,alpha-zulu", "selection");
+});
+
+check("the tally counts dishes and files separately and splits the two non-photograph states", () => {
+  const got = gallery.galleryTally(menu, gallery.dishPhotographs(menu, { limit: 18 }));
+  return eq(
+    JSON.stringify(got),
+    JSON.stringify({ frames: 18, dishes: 18, files: 122, families: 6, withPhoto: 141, total: 243, without: 102, illustrated: 28, placeholder: 74 }),
+    "gallery tally",
+  );
+});
+
+/* ------------------------------------------------------- standalone Node suites */
+// These suites own their fixtures/timers. Run them as child processes so a nonzero exit on any failure
+// remains part of this one cheap CI gate. The clock has its own harness; the Menu suite uses node:test.
+describe("standalone interaction suites");
+
+function runNodeSuite(file, nodeTest = true, timeout = 120_000) {
+  const run = spawnSync(process.execPath, [...(nodeTest ? ["--test"] : []), join("tests", file)], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout,
+  });
+  const output = `${run.stdout ?? ""}${run.stderr ?? ""}`.trim();
+  if (run.error) throw run.error;
+  if (output) console.log(output);
+  if (run.status !== 0) throw new Error(`${file} exited ${run.status ?? "without a status"}`);
+  return true;
+}
+
+check("reduced-motion runtime phases retain and fail on their browser errors", () => {
+  const source = readFileSync(join(ROOT, "scripts/verify-runtime.mjs"), "utf8");
+  for (const path of ["/ (reduced motion)", "/menu (reduced motion)", "/visit (gallery, reduced motion)"]) {
+    const row = source.indexOf(`results.push({ path: "${path}"`);
+    if (row < 0) return `missing runtime result row for ${path}`;
+    const prefix = source.slice(Math.max(0, row - 180), row);
+    if (!/const (\w+) = drain\(\);/.test(prefix)) return `${path} discards drain() before goto clears the queue`;
+    const logs = /const (\w+) = drain\(\);/.exec(prefix)?.[1];
+    if (!source.slice(row, row + 150).includes(`errors: ${logs}.errors`)) return `${path} does not retain drained browser errors`;
+    if (!source.slice(row, row + 500).includes(`if (${logs}.errors.length)`)) return `${path} does not fail on drained browser errors`;
+  }
+  return true;
+});
+
+check("the one-second clock keeps its continuity, writer and lifecycle contracts", () =>
+  runNodeSuite("clock-continuity.mjs", false));
+check("the Menu keeps its sticky clearance, frame ratio and hidden-layout contracts", () =>
+  runNodeSuite("menu-layout.mjs"));
+check("the gallery keeps visible keyboard controls and recovers from a broken frame", () =>
+  runNodeSuite("gallery-behavior.mjs"));
+check("the browser table canonicalizes storage and stays synchronized with shared URLs", () =>
+  runNodeSuite("table-client.mjs"));
+check("Homepage and Menu dish cards keep their visible sides and quantities in table parity", () =>
+  runNodeSuite("card-parity.mjs"));
+check("both WhatsApp handoffs preserve exact table, contact and special-character text", () =>
+  runNodeSuite("whatsapp-parity.mjs"));
+check("the table runtime audit compares complete decoded messages and canonical line identity", () =>
+  runNodeSuite("table-runtime-probe.mjs"));
+check("private/public indexing and the visible rights warning hold on every rendered page", () =>
+  runNodeSuite("preview-policy.mjs", true, 240_000));
+
 /* ----------------------------------------------------------------- summary */
 console.log(`\n${"─".repeat(64)}`);
 if (failures.length) {
@@ -1560,4 +1771,4 @@ if (failures.length) {
   for (const f of failures) console.log(`  ${f.group}\n    ${f.what}: ${f.message}`);
   process.exit(1);
 }
-console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity, page lifecycle, request payloads`);
+console.log(`tests: ${passed} passed — hours, table maths, share links, gate, menu integrity, page lifecycle, gallery, card parity, WhatsApp parity, preview policy, request payloads`);

@@ -10,7 +10,7 @@
 // What it walks now is the factual surface of the place: the six dishes the kitchen itself marks as
 // signature with the kitchen's own prices, the hours of record with their zone, the price per person as
 // the panel reports it, the median of all 243 rows, how many are photographed and how many described, the
-// plus code, the count of third-party clips — interleaved with the captions, still verbatim and now
+// plus code, the count of linked clips — interleaved with the captions, still verbatim and now
 // visibly quoted. Every string is built from `menu.json`/`press.json`/`voice.json` at build time, so a
 // price change moves the ticker without anybody editing a sentence. The emoji are our markers of what
 // kind of fact follows; the words inside the quotation marks are theirs, unchanged.
@@ -42,6 +42,8 @@ import { OPEN_LABEL, CLOSE_LABEL } from "../lib/hours.mjs";
 
 const f = menu.meta.facts;
 const sigs = Object.fromEntries(signatureItems(menu).map((s) => [s.id, s]));
+const linkedVideos = press.coverage.filter((c) => c.kind === "video").length;
+const aggregates = press.coverage.filter((c) => c.kind === "aggregate").length;
 // Our markers, chosen per row: what kind of thing the line is about to tell you.
 const glyph = {
   "full-mandy": "🐐",
@@ -78,7 +80,7 @@ const items = [
   said(4),
   dish("sinia", "goat and grilled chicken together"),
   { mark: "🌿", text: `${menu.meta.families} rooms, ${menu.meta.sections} sections, one garden courtyard` },
-  { mark: "🎥", text: `${press.coverage.length} clips about the place — linked, never re-hosted` },
+  { mark: "🎥", text: `${linkedVideos} linked video${linkedVideos === 1 ? "" : "s"} and ${aggregates} aggregate${aggregates === 1 ? "" : "s"} about the place — linked, never re-hosted` },
   said(0),
   dish("chicken-biryani", "spicy, with biryani rice"),
 ];

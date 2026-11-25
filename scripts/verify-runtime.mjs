@@ -32,11 +32,14 @@ import { platform } from "node:process";
 // The row cap the harness enforces has to be the row cap the site states. Importing it is the difference
 // between a gate and a guess: `LINES_MAX` is the same constant the button, the hint, the guard and (through
 // tests/api.mjs) the Worker's `LIMITS.linesMax` read, so a fifth copy of the number cannot disagree here.
-import { LINES_MAX } from "../site/src/lib/table.mjs";
+import { encodeTable, LINES_MAX } from "../site/src/lib/table.mjs";
 
 // The same reasoning for the When pair: the harness asserts against the constants the pages use, never against
 // dates it worked out for itself, so a change in the horizon moves the gate with the site rather than breaking it.
 import { CLOSE_LABEL, CLOSE_MINUTES, HORIZON_DAYS, LAST_SITTING_LABEL, OPEN_LABEL, OPEN_MINUTES, minutesToLabel } from "../site/src/lib/hours.mjs";
+import { auditClockContinuity } from "./clock-runtime-probe.mjs";
+import { auditMenuLayout, auditMenuStateLifecycle } from "./menu-runtime-probe.mjs";
+import { auditTableParity } from "./table-runtime-probe.mjs";
 
 // The slots /table offers, derived from the same hours the page's own loop uses. Asserting against a list built
 // here rather than a count typed here is the only reason this gate exists: the page once offered
@@ -459,7 +462,7 @@ async function park(name, value) {
 async function goto(path) {
   events.length = 0;
   await inPage("Page.navigate", { url: base + path });
-  // Wait for the load event rather than a fixed sleep: /menu carries 173 photographs and a 243-row grid,
+  // Wait for the load event rather than a fixed sleep: /menu carries a 243-row grid and its real photographs,
   // and a page that has not finished loading produces a battery full of "no such element" that means
   // nothing. The deadline keeps a hung page from hanging the harness.
   const deadline = Date.now() + 25000;
@@ -538,39 +541,50 @@ async function shotRegion(selector, name = "region") {
   return pixelStats(data);
 }
 
-// The same clip as raw bytes, for questions about *motion* rather than about light.
+// A whole-viewport frame plus the element's viewport rectangle, for questions about *motion* rather than
+// about light. Do not feed getBoundingClientRect() straight into CDP's clip after scrolling: the protocol's
+// clip origin has changed meaning across capture paths, and a viewport-relative rectangle can land on a
+// different part of the document. Capturing the viewport and cropping it here removes that ambiguity.
 async function shotOf(selector) {
-  const clip = await evaluate(`
+  const rect = await evaluate(`
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el) return null;
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) return null;
-    return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
   `);
-  if (!clip) return null;
-  const { data } = await inPage("Page.captureScreenshot", { format: "png", clip: { ...clip, scale: 1 } });
-  return data;
+  if (!rect) return null;
+  const { data } = await inPage("Page.captureScreenshot", { format: "png" });
+  return { data, rect };
 }
 
-// Compare two clips pixel by pixel and report both the average difference and the fraction of pixels that
-// changed enough to be an edge moving. The fraction is the useful one: text sliding along a strip moves a
-// lot of pixels a long way, while the page breathing under the light rig moves every pixel a little.
-// Exact byte equality would be the obvious test and is the wrong one — the ticker sits on a background the
-// clock keeps re-tinting, so "identical PNGs" is a claim about the rig as much as about the line.
+// Compare the same viewport rectangle in two full frames pixel by pixel and report both the average
+// difference and the fraction of pixels that changed enough to be an edge moving. The fraction is the useful
+// one: text sliding along a strip moves a lot of pixels a long way, while the page breathing under the light
+// rig moves every pixel a little. Exact byte equality would be the obvious test and is the wrong one — the
+// ticker sits on a background the clock keeps re-tinting, so "identical PNGs" is a claim about the rig as
+// much as about the line.
 async function diffPair(a, b) {
-  if (!a || !b) return null;
-  await park("__hhDiffA", a);
-  await park("__hhDiffB", b);
+  if (!a?.data || !b?.data) return null;
+  await park("__hhDiffA", a.data);
+  await park("__hhDiffB", b.data);
+  await park("__hhDiffRect", a.rect);
   return evaluate(`
     const load = async (src) => { const i = new Image(); i.src = src; await i.decode(); return i; };
     const A = await load("data:image/png;base64," + window.__hhDiffA);
     const B = await load("data:image/png;base64," + window.__hhDiffB);
     if (A.width !== B.width || A.height !== B.height) return { mismatched: [A.width, A.height, B.width, B.height] };
+    const r = window.__hhDiffRect;
+    const sx = A.width / window.innerWidth, sy = A.height / window.innerHeight;
+    const x = Math.max(0, Math.min(A.width - 1, Math.floor(r.x * sx)));
+    const y = Math.max(0, Math.min(A.height - 1, Math.floor(r.y * sy)));
+    const w = Math.max(1, Math.min(A.width - x, Math.ceil(r.width * sx)));
+    const h = Math.max(1, Math.min(A.height - y, Math.ceil(r.height * sy)));
     const grab = (img) => {
-      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
       const g = c.getContext("2d", { willReadFrequently: true });
-      g.drawImage(img, 0, 0);
-      return g.getImageData(0, 0, c.width, c.height).data;
+      g.drawImage(img, x, y, w, h, 0, 0, w, h);
+      return g.getImageData(0, 0, w, h).data;
     };
     const da = grab(A), db = grab(B);
     const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
@@ -579,7 +593,11 @@ async function diffPair(a, b) {
       const d = Math.abs(lum(da, i) - lum(db, i));
       sum += d; n += 1; if (d > 24) moved += 1;
     }
-    return { w: A.width, h: A.height, meanDiff: Math.round((sum / n) * 100) / 100, shifted: Math.round((moved / n) * 1e5) / 1e5 };
+    return {
+      w, h, viewport: [A.width, A.height], rect: { x, y },
+      meanDiff: Math.round((sum / n) * 100) / 100,
+      shifted: Math.round((moved / n) * 1e5) / 1e5,
+    };
   `);
 }
 
@@ -708,6 +726,9 @@ async function runAt(path, label, battery) {
   if (errors.length) failures.push(`${label} logged ${errors.length} error(s): ${errors.slice(0, 3).join(" | ")}`);
   return value;
 }
+
+// ---- clock: one real writer, one-second CSS interpolation, no discontinuity at the day boundaries
+await auditClockContinuity({ evaluate, goto, results, failures, drain });
 
 // ---- home: the door must actually contribute pixels, and the dial must move the room
 const door = (async () => {
@@ -1040,6 +1061,7 @@ if (table && table.incChangedTotal && table.incChangedTotal.before === table.inc
 if (table && table.whatsapp && table.whatsapp.isReservationLanguage) {
   failures.push("/table the WhatsApp handoff uses booking/reservation/confirm language — the table is a wish-list, not a booking");
 }
+await auditTableParity({ evaluate, goto, results, failures, drain });
 
 // ---- visit + 404: no dead links, no errors, and a page with no dial must not be a page with a dead dial
 await page("/visit", `
@@ -1106,6 +1128,159 @@ if (visit && visit.allExternalSecure.length) failures.push(`/visit links over ht
 if (visit && !visit.mapLink) failures.push("/visit offers no Google Maps link for the Koinange Street address");
 if (visit && visit.brokenLocal.length) failures.push(`/visit links to routes this build does not have: ${visit.brokenLocal.join(", ")}`);
 
+// ---- visit gallery: real photographs, a real viewer, and controls that agree with the tile
+const galleryRun = await runAt("/visit", "/visit (gallery)", `
+  const q = (s) => document.querySelector(s);
+  const all = (s) => [...document.querySelectorAll(s)];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const root = q("[data-gal]");
+  if (!root) return { missing: true };
+  const tiles = all("[data-gal-open]");
+  const box = q("[data-gal-box]");
+  const img = q("[data-gal-img]");
+  const title = q("[data-gal-title]");
+  const note = q("[data-gal-note]");
+  const meta = q("[data-gal-meta]");
+  const count = q("[data-gal-count]");
+  const play = q("[data-gal-play]");
+  const prev = q("[data-gal-prev]");
+  const next = q("[data-gal-next]");
+  const close = q("[data-gal-close]");
+  const index = () => Number((count?.textContent || "").split(" ")[0]);
+  const named = () => all("*").filter((el) => el.style.viewTransitionName === "gal-active").length;
+  const out = {
+    tiles: tiles.length,
+    places: tiles.filter((t) => t.dataset.kind === "place").length,
+    dishes: tiles.filter((t) => t.dataset.kind === "dish").length,
+    emptyLinks: tiles.filter((t) => !t.getAttribute("href")).length,
+    badFrameRatios: tiles.flatMap((t) => {
+      const frame = t.querySelector(".frame");
+      const photo = t.querySelector("img");
+      const width = Number(photo?.getAttribute("width"));
+      const height = Number(photo?.getAttribute("height"));
+      const rect = frame?.getBoundingClientRect();
+      if (!rect || !(width > 0 && height > 0) || !(rect.width > 0 && rect.height > 0)) {
+        return [{ kind: t.dataset.kind, title: t.dataset.title, reason: "missing frame or dimensions" }];
+      }
+      const expected = width / height;
+      const actual = rect.width / rect.height;
+      return Math.abs(actual - expected) <= expected * 0.01
+        ? []
+        : [{ kind: t.dataset.kind, title: t.dataset.title, expected, actual }];
+    }),
+    viewerHiddenAtLoad: box?.hidden,
+    controls: [play, prev, next, close].filter(Boolean).length,
+  };
+  const tile = tiles.find((t) => t.dataset.kind === "dish" && t.dataset.price);
+  if (!tile || !box || !img) return { ...out, missingTile: !tile, missingViewer: !box || !img };
+  tile.scrollIntoView({ block: "center", behavior: "instant" });
+  tile.focus();
+  tile.click();
+  out.namedAtClick = named();
+  await wait(40);
+  out.namedDuringMorph = named();
+  await wait(1160);
+  out.opened = {
+    visible: !box.hidden,
+    focusInBox: box.contains(document.activeElement),
+    src: img.getAttribute("src"),
+    wantedSrc: tile.getAttribute("href"),
+    alt: img.alt,
+    wantedAlt: tile.querySelector("img")?.alt,
+    title: title?.textContent,
+    wantedTitle: tile.dataset.title,
+    note: note?.textContent,
+    wantedNote: tile.dataset.note,
+    meta: meta?.textContent,
+    size: tile.dataset.size,
+    price: tile.dataset.price,
+    count: count?.textContent,
+    index: index(),
+  };
+  const beforeStep = index();
+  next.click();
+  await wait(180);
+  out.stepped = { before: beforeStep, after: index() };
+  // The trap starts at the dialog itself. Shift+Tab goes to the last DOM control; Tab from that control
+  // wraps to the first. A ring in any other order looks fine until a keyboard actually reaches its end.
+  box.focus();
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+  out.shiftTabFromBox = document.activeElement === close;
+  close.focus();
+  close.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  out.tabFromClose = document.activeElement === play;
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  await wait(650);
+  out.closed = { hidden: box.hidden, focusReturned: document.activeElement === tile, named: named() };
+
+  tile.focus();
+  tile.click();
+  await wait(650);
+  const beforePlay = index();
+  const probe = window.__hhFrames;
+  if (probe) { probe.events.length = 0; probe.on = true; }
+  await wait(600);
+  const idleUnknown = probe ? probe.events.filter((e) => e[0] === "unknown").length : null;
+  if (probe) probe.events.length = 0;
+  // Plant a failed current frame, then let the real reel advance. The next paint must clear the broken
+  // attribute (and therefore the CSS ::after note) instead of carrying the old failure into a good image.
+  img.dispatchEvent(new Event("error"));
+  out.brokenBeforePlay = box.hasAttribute("data-gal-broken");
+  play.click();
+  out.playLabel = play.textContent.trim();
+  out.playPressed = play.getAttribute("aria-pressed");
+  await wait(600);
+  const playUnknown = probe ? probe.events.filter((e) => e[0] === "unknown").length : null;
+  await wait(3200);
+  out.playAdvanced = { before: beforePlay, after: index() };
+  out.brokenAfterAdvance = box.hasAttribute("data-gal-broken");
+  play.click();
+  out.pauseLabel = play.textContent.trim();
+  out.pausePressed = play.getAttribute("aria-pressed");
+  const pausedAt = index();
+  await wait(3800);
+  out.pauseHeld = { before: pausedAt, after: index() };
+  if (probe) probe.on = false;
+  out.frames = { idleUnknown, playUnknown };
+  close.click();
+  await wait(550);
+  out.final = { hidden: box.hidden, focusReturned: document.activeElement === tile, named: named() };
+  return out;
+`);
+if (galleryRun?.missing) failures.push("/visit has no gallery — the real photograph wall and its viewer are absent");
+if (galleryRun && !galleryRun.missing) {
+  if (galleryRun.tiles !== 36 || galleryRun.places !== 18 || galleryRun.dishes !== 18)
+    failures.push(`/visit gallery has ${galleryRun.tiles} tiles (${galleryRun.places} place / ${galleryRun.dishes} dish), expected 36 (18 / 18)`);
+  if (galleryRun.badFrameRatios?.length)
+    failures.push(`/visit gallery crops ${galleryRun.badFrameRatios.length} frame(s) away from their measured ratio: ${JSON.stringify(galleryRun.badFrameRatios.slice(0, 4))}`);
+  if (galleryRun.emptyLinks) failures.push(`/visit gallery has ${galleryRun.emptyLinks} tile(s) with no file link — the no-JS fallback is broken`);
+  if (galleryRun.viewerHiddenAtLoad !== true) failures.push("/visit gallery viewer is not hidden before a photograph is chosen");
+  if (galleryRun.controls !== 4) failures.push(`/visit gallery exposes ${galleryRun.controls} viewer controls, expected Play / Previous / Next / Close`);
+  if (galleryRun.missingTile || galleryRun.missingViewer) failures.push("/visit gallery could not exercise a priced dish and its viewer");
+  else {
+    const o = galleryRun.opened;
+    if (!o.visible || !o.focusInBox) failures.push("/visit clicking a gallery tile did not open and focus the viewer");
+    if (o.src !== o.wantedSrc || o.alt !== o.wantedAlt) failures.push("/visit viewer opened a different file or alt text than the selected tile");
+    if (o.title !== o.wantedTitle || o.note !== o.wantedNote) failures.push("/visit viewer caption/title disagree with the selected tile");
+    if (!o.meta.includes(o.size) || !o.meta.includes(o.price) || /NaN/.test(o.meta))
+      failures.push(`/visit viewer metadata does not preserve the tile's size and formatted price: ${JSON.stringify(o.meta)}`);
+    if (galleryRun.stepped.after !== galleryRun.stepped.before + 1) failures.push(`/visit Next moved ${galleryRun.stepped.before} → ${galleryRun.stepped.after}, not one photograph`);
+    if (!galleryRun.shiftTabFromBox || !galleryRun.tabFromClose) failures.push("/visit gallery keyboard trap does not follow DOM order at both ends");
+    if (!galleryRun.closed.hidden || !galleryRun.closed.focusReturned) failures.push("/visit Escape did not hide the gallery and return focus to its opener");
+    if (galleryRun.playLabel !== "Pause" || galleryRun.playPressed !== "true") failures.push("/visit gallery Play did not report its running state");
+    if (!galleryRun.brokenBeforePlay) failures.push("/visit gallery did not mark the deliberately failed current image");
+    if (galleryRun.playAdvanced.after <= galleryRun.playAdvanced.before) failures.push("/visit gallery Play did not advance the photograph after 3.8 seconds");
+    if (galleryRun.brokenAfterAdvance) failures.push("/visit gallery carried the previous image's broken state into the next autoplay frame");
+    if (galleryRun.pauseLabel !== "Play" || galleryRun.pausePressed !== "false") failures.push("/visit gallery Pause did not report its stopped state");
+    if (galleryRun.pauseHeld.after !== galleryRun.pauseHeld.before) failures.push(`/visit gallery kept moving while paused (${galleryRun.pauseHeld.before} → ${galleryRun.pauseHeld.after})`);
+    if (!galleryRun.final.hidden || !galleryRun.final.focusReturned) failures.push("/visit gallery Close did not restore the tile after the reel");
+    if (galleryRun.frames.idleUnknown !== null && galleryRun.frames.playUnknown > galleryRun.frames.idleUnknown + 1)
+      failures.push(`/visit gallery added requestAnimationFrame work while playing (${galleryRun.frames.idleUnknown} → ${galleryRun.frames.playUnknown} unknown callbacks)`);
+  }
+  if (Math.max(galleryRun.namedAtClick ?? 0, galleryRun.namedDuringMorph ?? 0, galleryRun.closed?.named ?? 0, galleryRun.final?.named ?? 0) > 1)
+    failures.push("/visit gallery left more than one element with the shared view-transition name");
+}
+
 // ---- scripts killed mid-session: the poster is still the renderer when the bundle dies
 // Not the no-JS battery — the row below this section is. Deleting the tags after the fact leaves html.js
 // set and the already-intersected sections revealed, so it measures a page whose JavaScript died halfway,
@@ -1143,16 +1318,23 @@ if (!noJsFacts.stillPainted) failures.push("/ after the scripts were deleted the
   JavaScript in the page, so the measurement cannot wake the site up in order to prove it was awake.
 */
 async function noJsStyleProbe(route) {
-  const probe = { route, jsClassOnRoot: null, revealNodes: null, opacity: [], probeError: null };
+  const probe = { route, jsClassOnRoot: null, revealNodes: null, galleryTiles: null, galleryViewerHidden: null, opacity: [], probeError: null };
   try {
     await inPage("DOM.enable");
     await inPage("CSS.enable");
     const { root } = await inPage("DOM.getDocument", { depth: 0 });
     const jsClass = await inPage("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "html.js" });
     const reveals = await inPage("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-reveal]" });
+    const galleryTiles = await inPage("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-gal-open]" });
+    const viewer = await inPage("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-gal-box]" });
     const ids = reveals.nodeIds || [];
     probe.jsClassOnRoot = (jsClass.nodeIds || []).length;
     probe.revealNodes = ids.length;
+    probe.galleryTiles = (galleryTiles.nodeIds || []).length;
+    if (viewer.nodeId) {
+      const { attributes } = await inPage("DOM.getAttributes", { nodeId: viewer.nodeId });
+      probe.galleryViewerHidden = attributes.some(([name]) => name === "hidden");
+    }
     // First, middle and last in document order. The last is the block furthest down the page — the one an
     // observer would never have reached on a guest's first screen, and therefore the one a no-JS claim
     // actually lives or dies on.
@@ -1175,15 +1357,18 @@ const noJsHomeLog = drain();
 await goto("/menu");
 const noJsMenu = await noJsStyleProbe("/menu");
 const noJsMenuLog = drain();
+await goto("/visit");
+const noJsVisit = await noJsStyleProbe("/visit");
+const noJsVisitLog = drain();
 await inPage("Emulation.setScriptExecutionDisabled", { value: false });
 // goto clears the event buffer, so each load's complaints have to be collected while that load is current.
 results.push({
   path: "no-JS (execution off)",
-  value: { noJsHome, noJsMenu },
-  errors: [...noJsHomeLog.errors, ...noJsMenuLog.errors],
-  warnings: [...new Set([...noJsHomeLog.warnings, ...noJsMenuLog.warnings])],
+  value: { noJsHome, noJsMenu, noJsVisit },
+  errors: [...noJsHomeLog.errors, ...noJsMenuLog.errors, ...noJsVisitLog.errors],
+  warnings: [...new Set([...noJsHomeLog.warnings, ...noJsMenuLog.warnings, ...noJsVisitLog.warnings])],
 });
-for (const row of [noJsHome, noJsMenu]) {
+for (const row of [noJsHome, noJsMenu, noJsVisit]) {
   if (row.probeError) {
     failures.push(`${row.route}: the script-disabled probe could not run (${row.probeError}) — the no-JS readability claim is unmeasured, and an unmeasured claim does not get to stay in the pitch`);
     continue;
@@ -1193,6 +1378,8 @@ for (const row of [noJsHome, noJsMenu]) {
   if (!row.opacity.length || row.opacity.some((v) => v !== "1"))
     failures.push(`${row.route}: [data-reveal] computes to ${JSON.stringify(row.opacity)} in a document that executed no script — content is invisible to a guest without JavaScript`);
 }
+if (noJsVisit.galleryTiles !== 36) failures.push(`/visit without JavaScript has ${noJsVisit.galleryTiles} gallery file links, expected 36 — the photograph wall depends on its enhancer`);
+if (noJsVisit.galleryViewerHidden !== true) failures.push("/visit without JavaScript exposes an empty gallery viewer instead of leaving the file links usable");
 await goto("/");
 
 // ---- M4: the table has to survive the guest putting the phone down
@@ -1409,6 +1596,9 @@ else {
 // photograph left exactly as it is, and every dish still where it was. A unit test on decide() proves the
 // table of rules; only the browser proves the page reads the same rules.
 await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+// The same deterministic dawn/dusk/midnight samples now have to advance without palette interpolation.
+// A single normal-motion pass could not catch a preference being snapshotted at module startup.
+await auditClockContinuity({ evaluate, goto, results, failures, drain });
 await goto("/");
 const poster = await evaluate(`
   const q = (s) => document.querySelector(s);
@@ -1440,8 +1630,10 @@ const poster = await evaluate(`
     tickerHintHidden: q("[data-ticker-hint]") ? q("[data-ticker-hint]").hidden : null,
   };
 `);
-drain();
-results.push({ path: "/ (reduced motion)", value: poster, errors: [], warnings: [] });
+const reducedHomeLogs = drain();
+results.push({ path: "/ (reduced motion)", value: poster, errors: reducedHomeLogs.errors, warnings: reducedHomeLogs.warnings });
+if (reducedHomeLogs.errors.length)
+  failures.push(`/ under reduced motion logged ${reducedHomeLogs.errors.length} error(s): ${reducedHomeLogs.errors.slice(0, 2).join(" | ")}`);
 if (poster.tier !== "poster") failures.push(`/ a browser asking for reduced motion was given tier ${JSON.stringify(poster.tier)} (${poster.reason}), not poster`);
 if (poster.doorCanvas) failures.push("/ under reduced motion the door mounted a canvas anyway — the WebGL branch is supposed to stop at poster");
 if (!poster.stillPainted) failures.push("/ under reduced motion the CSS photograph is not painted, so the fallback has nothing to show");
@@ -1464,10 +1656,62 @@ const posterMenu = await evaluate(`
     count: q("[data-count]") ? q("[data-count]").textContent.trim().slice(0, 46) : null,
   };
 `);
-drain();
-results.push({ path: "/menu (reduced motion)", value: posterMenu, errors: [], warnings: [] });
+const reducedMenuLogs = drain();
+results.push({ path: "/menu (reduced motion)", value: posterMenu, errors: reducedMenuLogs.errors, warnings: reducedMenuLogs.warnings });
+if (reducedMenuLogs.errors.length)
+  failures.push(`/menu under reduced motion logged ${reducedMenuLogs.errors.length} error(s): ${reducedMenuLogs.errors.slice(0, 2).join(" | ")}`);
 if (posterMenu.visible !== posterMenu.total) failures.push(`/menu under reduced motion shows ${posterMenu.visible} of ${posterMenu.total} dishes — a weaker tier is not allowed to change the menu`);
 if (posterMenu.groups !== 6) failures.push(`/menu under reduced motion found ${posterMenu.groups} group containers, expected 6`);
+
+await goto("/visit");
+const galleryReduced = await evaluate(`
+  const q = (s) => document.querySelector(s);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tile = document.querySelector('[data-gal-open][data-kind="dish"]');
+  const box = q("[data-gal-box]");
+  const play = q("[data-gal-play]");
+  const prev = q("[data-gal-prev]");
+  const next = q("[data-gal-next]");
+  const close = q("[data-gal-close]");
+  const count = q("[data-gal-count]");
+  if (!tile || !box || !play || !next) return { missing: true };
+  tile.scrollIntoView({ block: "center", behavior: "instant" });
+  tile.click();
+  await wait(650);
+  const before = Number(count.textContent.split(" ")[0]);
+  const hidden = play.hidden;
+  // Hidden Play must leave the trap as well as the layout. From Close, forward Tab has to wrap to
+  // Previous; from the dialog, Shift+Tab still reaches Close.
+  box.focus();
+  box.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+  const shiftTabFromBox = document.activeElement === close;
+  close.focus();
+  close.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+  const tabFromClose = document.activeElement === prev;
+  play.click();
+  const pressed = play.getAttribute("aria-pressed");
+  await wait(3700);
+  const held = Number(count.textContent.split(" ")[0]);
+  next.click();
+  await wait(100);
+  const stepped = Number(count.textContent.split(" ")[0]);
+  return { hidden, pressed, before, held, stepped, visible: !box.hidden, shiftTabFromBox, tabFromClose };
+`);
+const reducedGalleryLogs = drain();
+results.push({ path: "/visit (gallery, reduced motion)", value: galleryReduced, errors: reducedGalleryLogs.errors, warnings: reducedGalleryLogs.warnings });
+if (reducedGalleryLogs.errors.length)
+  failures.push(`/visit gallery under reduced motion logged ${reducedGalleryLogs.errors.length} error(s): ${reducedGalleryLogs.errors.slice(0, 2).join(" | ")}`);
+if (galleryReduced?.missing) failures.push("/visit reduced-motion gallery is missing its viewer controls");
+else {
+  if (!galleryReduced.visible) failures.push("/visit reduced motion hid the gallery viewer instead of only its automatic motion");
+  if (galleryReduced.hidden !== true) failures.push("/visit reduced motion still offers Play for an automatic walk that must not run");
+  if (galleryReduced.pressed !== "false" || galleryReduced.held !== galleryReduced.before)
+    failures.push(`/visit reduced motion started the reel anyway (${galleryReduced.before} → ${galleryReduced.held}, aria-pressed ${galleryReduced.pressed})`);
+  if (galleryReduced.stepped !== galleryReduced.before + 1) failures.push("/visit reduced motion removed manual Next along with the automatic reel");
+  if (!galleryReduced.shiftTabFromBox || !galleryReduced.tabFromClose)
+    failures.push("/visit reduced-motion gallery Tab trap still includes hidden Play or does not wrap Close → Previous");
+}
+
 await inPage("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
 
 // ---- M6: the keyboard path, and what the page costs per frame
@@ -2419,6 +2663,28 @@ if (fold.before.chipsReachable) failures.push("/menu at 390px: the folded chip p
 if (fold.after.panelHidden || fold.after.expanded !== "true" || !fold.after.chipsReachable) failures.push("/menu: tapping Filters did not open the panel (aria-expanded went to " + fold.after.expanded + ")");
 if (fold.after.barH <= fold.before.barH) failures.push(`/menu: opening the filters left the bar no taller (${fold.before.barH} → ${fold.after.barH}px) — the panel is not the thing that grows the bar`);
 if (!fold.refolded) failures.push("/menu: tapping Filters a second time did not fold the panel back");
+
+// The source contracts above say what the CSS intends; this battery asks the rendered boxes at three
+// widths and four real search/filter/sort states. It also hit-tests every representative control so a
+// sticky bar cannot quietly win the click while all the cards still look correctly spaced.
+await auditMenuLayout({
+  evaluate,
+  goto,
+  results,
+  failures,
+  drain,
+  setViewport: (metrics) => inPage("Emulation.setDeviceMetricsOverride", metrics),
+  pressKey: press,
+});
+await auditMenuStateLifecycle({
+  expectedTable: encodeURIComponent(encodeTable({ party: 2, lines: [{ id: "karak-chai", qty: 1 }] })),
+  evaluate,
+  goto,
+  results,
+  failures,
+  drain,
+  setViewport: (metrics) => inPage("Emulation.setDeviceMetricsOverride", metrics),
+});
 await inPage("Emulation.clearDeviceMetricsOverride", {});
 await goto("/menu");
 
@@ -2491,7 +2757,7 @@ if (samples.missing) {
   if (samples.live !== "off") failures.push(`/ the rotator's live region is "${samples.live}" while it auto-advances — a timer that announces itself every seven seconds interrupts the reader`);
   if (samples.dots !== samples.slides || samples.selected !== 1) failures.push(`/ the rotator has ${samples.dots} dots for ${samples.slides} samples and ${samples.selected} selected — the dot row is the map of what exists`);
   if (samples.links !== samples.slides || !samples.rel) failures.push(`/ ${samples.links} of ${samples.slides} samples link out to their source, and cross-origin safety reads ${samples.rel} — a quoted review without a way to read it is an accusation`);
-  if (samples.quoted < 3) failures.push(`/ the rotator quotes ${samples.quoted} block(s) — the third-party clips are verbatim and must not arrive rewritten as prose`);
+  if (samples.quoted < 3) failures.push(`/ the rotator quotes ${samples.quoted} block(s) — linked caption excerpts must not arrive rewritten as prose`);
   if (!samples.hasCounts) failures.push("/ the counted themes are not stating their panel and depth (\"of the 541 Google Maps reviews\") — a theme with no denominator is a mood, not a finding");
 }
 

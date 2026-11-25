@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // scripts/sync-brand.mjs — publish the real brand files into the site.
 //
-// brand/ is the source of truth (see brand/ASSETS.md: the logo and twelve genuine photographs,
-// salvaged before the abandoned project's CDN was deleted). Astro cannot import from outside the
+// brand/ is the source of truth (see brand/ASSETS.md: the logo and eighteen genuine venue/food
+// photographs, including six later retrieved from the restaurant's listing). Astro cannot import from outside the
 // app root, so the build copies them into site/public/brand/ rather than pointing the app at ../brand.
 // This script is the only bridge, it is idempotent, and it verifies each copy against the sha256
 // recorded in brand/ASSETS.md so a half-copied file cannot ship.

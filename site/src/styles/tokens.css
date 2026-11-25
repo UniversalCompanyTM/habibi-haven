@@ -22,10 +22,10 @@
  * legible at midnight is not legible at noon, and the clock moves between the two continuously.
  */
 
-/* Registered so the clock can interpolate them. An unregistered custom property is a token: it changes
-   instantly and nothing can transition it. `--sun` is the one the atmosphere layer animates, and it is
-   registered with a syntax so the browser can interpolate it frame by frame between two writes that are
-   twenty seconds apart — the room moves like the sun does, without a style write every frame. */
+/* Registered so the appearance values can interpolate. An unregistered custom property is a token: it
+   changes instantly and nothing can transition it. `--night` and `--sun` drive the palette and light;
+   their number syntax lets the browser interpolate each one-second write without a JavaScript style
+   write every frame. `--hour` is deliberately unregistered circular state, never an animated number. */
 @property --sun {
   syntax: "<number>";
   inherits: true;
@@ -35,11 +35,6 @@
   syntax: "<number>";
   inherits: true;
   initial-value: 1;
-}
-@property --hour {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 19;
 }
 
 :root {
@@ -120,10 +115,11 @@
      --teal on --paper is 2.6:1 — use --teal-deep. The same applies to every bright accent.        */
 
   /* ---- the rig: shared by CSS, the atmosphere shader and the WebGL door ----
-     --hour is 0 → 24 in Africa/Nairobi, continuous: the dial has no half-hour detent any more, and the
-     ambient writer moves it by the real clock. --night is the 0→1 curve lib/hours.mjs computes from it;
-     --sun is its complement, the amount of daylight reaching the room. With no JavaScript --night keeps
-     the value the media query chose, so the site still reads. */
+     --hour is the immediate 0 → 24 state in Africa/Nairobi: the dial has no half-hour detent, and the
+     ambient writer moves it by the real clock. It is not interpolated because 24 → 0 is circular.
+     --night is the continuous 0→1 appearance curve lib/hours.mjs computes from that state; --sun is its
+     complement, the amount of daylight reaching the room. With no JavaScript --night keeps the value the
+     media query chose, so the site still reads. */
   --hour: 19;
   --night: 1;
   --sun: 0;
@@ -212,16 +208,16 @@
   }
 }
 
-/* The ambient writer moves --sun twenty seconds at a time; this is what makes this twenty seconds a
-   continuous drift rather than a step. Only the atmosphere layer reads --sun, so the interpolation
-   repaints one fixed element instead of every card on /menu. */
+/* One write per second, with CSS supplying the frames between writes. Only the bounded appearance
+   values glide: `--hour` wraps 24 → 0 and must expose the new state immediately, never interpolate
+   backward through midday. The palette, atmosphere and door light remain on the continuous curve. */
 html[data-ambient] {
-  transition: --sun 20s linear;
+  transition: --night 1s linear, --sun 1s linear;
 }
 
-/* …and a drag turns it off. Twenty seconds of glide is the wall clock being invisible; under a finger it
-   is the atmosphere arriving late to a position the guest already chose. rig-client sets this on manual
-   writes and clears it 600 ms after the last one. */
+/* …and a drag turns the ambient glide off. Under a finger the atmosphere must not arrive late to a
+   position the guest already chose: the sun keeps its 120 ms response, while hour/night stay immediate.
+   rig-client sets this on manual writes and clears it 600 ms after the last one. */
 html[data-manual] {
   transition: --sun 120ms linear;
 }

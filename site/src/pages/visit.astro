@@ -14,6 +14,7 @@ import { PARTY_MAX, PARTY_MIN } from "../lib/table.mjs";
 import MapEmbed from "../components/MapEmbed.astro";
 import SocialLinks from "../components/SocialLinks.astro";
 import HoursClock from "../components/HoursClock.astro";
+import Gallery from "../components/Gallery.astro";
 
 const f = menu.meta.facts;
 const open = isOpen();
@@ -30,14 +31,6 @@ const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComp
 // printed under the buttons rather than hidden: docs/OPEN-QUESTIONS.md §9.
 const pin = f.coordinates ? `${f.coordinates.latitude},${f.coordinates.longitude}` : null;
 const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(pin ?? f.mapsQuery)}`;
-
-// Frames we hold, in the order a guest would walk them: street, door, courtyard, table.
-const frames = [
-  { src: "/brand/venue-facade-day.jpg", alt: "The façade on Koinange Street, in daylight", caption: "The door, in daylight." },
-  { src: "/brand/venue-courtyard-arches.jpg", alt: "The courtyard arches and planting", caption: "The courtyard, where the planting is." },
-  { src: "/brand/venue-terrace-table-city.jpg", alt: "A terrace table with the city behind it", caption: "A terrace table, and the CBD behind it." },
-  { src: "/brand/venue-table-mid-meal.jpg", alt: "A table mid-meal", caption: "Mid-meal: goat, rice, and the second plate." },
-];
 ---
 
 <Base
@@ -155,31 +148,13 @@ const frames = [
           <h2 class="display--h2" data-kin>What the photographs show</h2>
         </div>
         <p class="meta dim">
-          {press.gaps[1]} That is why these frames sit at their real size instead of being stretched
-          across a viewport — a stock shot of a different restaurant would be a lie about a specific
-          place.
+          {press.gaps[1]} That is why the wall below is shown at the sizes these files actually are, and
+          says what each one is — a stock shot of a different restaurant would be a lie about a specific
+          place. Pick a frame and it opens large; Play walks the wall on a timer you can stop.
         </p>
       </header>
 
-      <div class="deck deck--wide">
-        {
-          frames.map((frame, i) => (
-            <figure class="card lit-edge" data-reveal style={`--i:${i}`}>
-              <span class="frame">
-                <img
-                  src={frame.src}
-                  alt={frame.alt}
-                  width="300"
-                  height="225"
-                  loading={i < 2 ? "eager" : "lazy"}
-                  decoding="async"
-                />
-              </span>
-              <figcaption class="card__desc">{frame.caption}</figcaption>
-            </figure>
-          ))
-        }
-      </div>
+      <Gallery />
     </div>
   </section>
 

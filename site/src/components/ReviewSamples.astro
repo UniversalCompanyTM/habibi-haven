@@ -3,8 +3,8 @@
 //
 // Item 11 of the owner's list: "give the users samples of the reviews. And that need to be shifting
 // after sometime." The honest version of that is a problem, because there is no review corpus to sample
-// from. What the restaurant's public footprint actually gives is: three third-party clips quoted verbatim
-// with their links (`press.coverage`), four themes Google Maps publishes with their own mention counts
+// from. What the restaurant's public footprint actually gives is: five linked videos and one aggregate
+// quoted verbatim with their links (`press.coverage`), four themes Google Maps publishes with their own mention counts
 // (`press.themes`), and two rating panels at wildly different depths (4.5 from 541, 3.7 from 3). This
 // rotator shows exactly those and nothing invented: no paraphrased five-star prose, no composite persona,
 // no review written to fill a slot. A "sample" here is either a quotation with its source or a count with
@@ -25,9 +25,11 @@ import press from "../data/press.json";
 // The panel the theme counts come from, taken from the same object the rating cards render, so a number
 // cannot disagree with itself between the two places it appears.
 const gmaps = press.ratings.find((r) => r.panel === "Google Maps") ?? press.ratings[0];
+const linkedVideos = press.coverage.filter((c) => c.kind === "video").length;
+const aggregates = press.coverage.filter((c) => c.kind === "aggregate").length;
 
 const clips = press.coverage.map((c) => ({
-  kind: c.kind === "video" ? "Their clip, linked" : "Visitor clips, aggregated",
+  kind: c.kind === "video" ? "Video, linked" : "Visitor clips, aggregated",
   text: c.quote,
   quoted: true,
   by: c.by,
@@ -123,7 +125,7 @@ const slides = [...clips, ...counts];
       }
     </div>
     <p class="rs__rule meta dim">
-      {clips.length} linked clips and {counts.length} counted themes move here. Everything else in the
+      {linkedVideos} linked video{linkedVideos === 1 ? "" : "s"} and {aggregates} aggregate{aggregates === 1 ? "" : "s"} move here, alongside {counts.length} counted themes. Everything else in the
       record — the two rating panels and the two smaller dish themes — sits on this page unmoved, at its
       real depth.
     </p>

@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party coverage. Every entry carries the URL it was read from and how it was read, so the page can cite instead of paraphrase. Full notes and the reason none of this is re-hosted: research/PRESS.md.",
+  "comment": "Linked coverage from the restaurant and third parties. Every entry carries the URL it was read from and how it was read, so the page can cite instead of paraphrase. Full notes and the reason none of this is re-hosted: research/PRESS.md.",
   "ratings": [
     {
       "panel": "Google Maps",
@@ -47,6 +47,30 @@
     }
   ],
   "coverage": [
+    {
+      "kind": "video",
+      "title": "The week is finally over",
+      "by": "Habibi Haven, Facebook",
+      "quote": "The week is finally over",
+      "url": "https://www.facebook.com/61575101935569/videos/the-week-is-finally-over-now-its-time-to-eatlaugh-and-enjoy-good-companyhabibi-f/2280376199396414/",
+      "how": "Link out to the restaurant's own post; credited and linked, never re-hosted. Reuse permission is unconfirmed."
+    },
+    {
+      "kind": "video",
+      "title": "Good mornings start with great breakfast",
+      "by": "Habibi Haven, Facebook",
+      "quote": "Good mornings start with great breakfast!",
+      "url": "https://www.facebook.com/61575101935569/videos/good-mornings-start-with-great-breakfasthabibi-fyp-foryoupage-habibihaven-goodfo/1386843973177228/",
+      "how": "Link out to the restaurant's own post; credited and linked, never re-hosted. Reuse permission is unconfirmed."
+    },
+    {
+      "kind": "video",
+      "title": "Beauty captured in every angle",
+      "by": "Habibi Haven, TikTok",
+      "quote": "Beauty captured in every angle",
+      "url": "https://www.tiktok.com/@habibi.haven/video/7703445462203862279",
+      "how": "Link out to the restaurant's own post; credited and linked, never re-hosted. Reuse permission is unconfirmed."
+    },
     {
       "kind": "video",
       "title": "Nairobi CBD Habibi Haven is a Green Escape in the heart of Nairobi CBD",
@@ -100,7 +124,7 @@
   ],
   "gaps": [
     "No press article, award or forum thread about the restaurant was found — the coverage that exists is social-video and review listings.",
-    "Venue photography in hand is real but small (nine of ten frames 300×225), so full-bleed imagery still needs a shoot or the client's originals.",
+    "Venue and food photography in hand is real but small (eighteen venue/food photographs: ten 300×225, one 408×272, one 1200×1200, two 346×506 and four 329×512), so full-bleed imagery still needs a shoot or the client's originals.",
     "No vector logo on hand: the badge is a 200×200 raster, so the wordmark is typeset rather than traced.",
     "No booking system is evidenced anywhere in their stack; WhatsApp is the channel the site hands off to."
   ]

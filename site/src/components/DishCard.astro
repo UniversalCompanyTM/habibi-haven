@@ -42,7 +42,7 @@ const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.lo
   data-illus={isIllustration ? "true" : null}
   data-reveal
 >
-  <div class={`frame${isPlaceholder ? " frame--type" : ""}`} style={isPlaceholder ? null : `aspect-ratio: ${photo.width} / ${photo.height}`}>
+  <div class={`frame${isPlaceholder ? " frame--type" : ""}`} style={`aspect-ratio: ${photo.width} / ${photo.height}`}>
     {
       isPlaceholder ? (
         <>
@@ -111,6 +111,10 @@ const srcset = photo.local && photo.local !== media ? `${media} 400w, ${photo.lo
       </fieldset>
     ) : null
   }
+
+  {/* One radio controls the next plate. This separate live line reports every side already selected,
+      including the case where the same dish is on the table with two different accompaniments. */}
+  <p class="card__selection meta" data-card-selection aria-live="polite" hidden></p>
 
   <div class="card__foot">
     {

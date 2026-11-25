@@ -89,7 +89,7 @@ in `docs/OPEN-QUESTIONS.md` §1 and in `research/BRAND-FACTS.md` §6.
 | Phone / WhatsApp | 0116 880 000 → `wa.me/254116880000` | Maps + menu.or.ke |
 | Address / Plus code | Koinange Street, Nairobi CBD · PR99+82 | Google Maps |
 | Hours | Maps 06:30–23:00 daily · menu.or.ke computes 06:00–23:00 · Uber Eats 09:00–17:00 | three sources |
-| Menu scale | **243 items**, all 243 with a photo, **173 unique photos**, 107 with descriptions, 1 flagged out of stock | menu.or.ke render |
+| Menu scale | **243 items**; 141 genuine dish-photo rows/files, 28 labelled illustrations, 74 upstream placeholders; 113 descriptions; 1 flagged out of stock | shipped menu, amended by A21 |
 | Prices | KSh **100 → 6,000**, median **550** | menu.or.ke render |
 | Taxonomy caveat | `BREAKFAST COMBO` (65) and `HABIBI COFFEE` (87) are over-collected — they absorbed following sub-groups; Uber Eats splits the same kitchen into **~37 real sections** | verified this session |
 | Beverages | ≈⅓ of the menu: coffees, lattes, teas (Karak Chai, Camel Tea, African Tea Pot), Cool Specials, iced teas, 10 milkshakes, smoothies, **dawas**, nojitos, coladas, 10 juices | both sources |
@@ -258,14 +258,14 @@ any teal that enters the token set.
 - 100% usable keyboard-only and screen-reader-only; the 3D table is an *enhancement* over a real
   form; `prefers-reduced-motion` respected; every dish reachable in the plain menu list.
 - SEO: Restaurant + Menu JSON-LD from validated data, sitemap, per-route titles/descriptions,
-  `X-Robots-Tag: noindex` while in private preview.
+  `<meta name="robots" content="noindex, nofollow">` in default private-preview builds.
 
 ## Verification plan
 
 | Layer | Check |
 |---|---|
 | Ingest | `probe-ingest.mjs` reports whether a headless read of menu.or.ke is possible; if not, M0 records the scripted-read fallback and the plan proceeds. Image refs HEAD-checked before mirroring. |
-| Content | `build-content.mjs` fails the build if any item lacks family/section/price/photo-reference; count assertions: 243 items in, 243 out, 173 unique photos; `check-drift.mjs` exits non-zero on unreviewed upstream change |
+| Content | `build-content.mjs` fails the build if any item lacks family/section/price/photo-reference; count assertions: 243 items in, 243 out, 173 unique source image URLs; the gallery digest audit separately records 141 photographed rows / 122 unique genuine dish files; `check-drift.mjs` exits non-zero on unreviewed upstream change |
 | Unit | `lib/table.mjs` (party scaling, cake formats, totals, KSh formatting, WhatsApp URL escaping), `lib/hours.mjs` with TZ frozen to Africa/Nairobi at 06:29/06:30/22:59/23:00, taxonomy mapping for the two over-collected headings |
 | Backend | `tests/api.mjs` executes the real migration and the real build-generated seed on `node:sqlite` (foreign keys on, as D1 has them), drives the Worker's `fetch` with real `Request`s, sweeps all 1440 minutes against the site's own `hours.mjs`, and runs the whole Daraja path against a fake Safaricom. Then `wrangler d1 execute --local` + `wrangler dev --local` proves the same in workerd. What neither proves: the remote binding, and Safaricom. (A12) |
 | E2E | _(planned, superseded by Amendment A6)_ Playwright at 1440×900, 1280×800, 390×844: configurator total updates, `/table` URL round-trips, menu search/filter, all four gate tiers forced (reduced-motion, WebGL blocked, save-data) each producing a working checkout |
@@ -1140,7 +1140,9 @@ frame gate is untouched; hovering or focusing a sample holds it; the Stop button
 through `aria-pressed`, `Pause samples`/`Resume samples` and `aria-live` (which is `off` while the timer drives
 and `polite` only when a person does); arrows step, dots jump; reduced motion never starts the timer but keeps
 every sample reachable by hand. Inactive samples carry `inert`, so a hidden quotation is not a tab stop.
-Without JavaScript the first sample stays and the control row is absent rather than dead.
+Without JavaScript the first sample stays and the control row is absent rather than dead. A22 later expands
+the data set to five linked videos and one aggregate; the rotation, pause and accessibility contract is
+unchanged, and every quotation is limited to wording verified at its public source.
 
 **A20 — item 12, `Ticker.astro`.** The line used to walk ten captions and pause only on hover, which is not a
 control on a touchscreen and not a control for a keyboard. It now walks eighteen items: the six signature dishes
@@ -1170,12 +1172,214 @@ payload and selection/data parity, both already built and tested at the unit lev
 wave's harness) remain. Payments stay dark on instruction. The publish job is skipped by design; production gets
 the dist only when it is uploaded from a green run.
 
+### Amendment A21 — the real photograph wall, and a pixel check that does not guess at coordinates
 
+A20c (`0d630e2`, run `44296225580`) failed one assertion: the running ticker control and the stopped pair
+both reported `0.00%` changed pixels. The same run measured only `17ms` of animation-clock drift while
+stopped; two earlier implementations had reported an identical `283ms` catch-up. A main-thread animation
+clock is therefore not the verdict for a composited CSS animation. The rendered picture is.
+
+The remaining measurement suspect was the capture geometry. The harness passed a viewport-relative
+`getBoundingClientRect()` to CDP's `Page.captureScreenshot` clip after scrolling, although clip coordinate
+origins have differed across capture paths. A21 removes that ambiguity instead of tuning a threshold:
+`shotOf()` captures the whole viewport and records the element's viewport rectangle; `diffPair()` decodes
+both PNGs inside the page, scales that rectangle by the screenshot's device-pixel ratio, crops both images
+to the same pixels, and compares only the ticker. The running pair remains the control for the stopped
+pair. This is a measurement repair, not a claim that the ticker is green; the next runner decides that.
+The investigation used the [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/),
+[Chrome DevTools MCP issue #2684](https://github.com/ChromeDevTools/chrome-devtools-mcp/issues/2684), and the
+[CDP clip-coordinate report](https://stackoverflow.com/questions/76908352/chrome-devtools-protocol-what-does-the-scale-parameter-do-in-the-clip-argument).
+
+**A21 — items 4, 5 and 8, `Gallery.astro` and `lib/gallery.mjs`.** No media was generated. The wall uses
+only files already held from the restaurant's own abandoned project and the listing's mirrored menu
+photographs. The exact inventory is now asserted rather than estimated:
+
+```
+venue frames       12   = 10 at 300×225 + 1 at 408×272 + 1 at 1200×1200
+menu rows          243
+genuine dish rows   141  = 141 distinct genuine files
+selected dishes      18  across all 6 families, interleaved in menu order
+photographs shown    30  = 12 venue/food + 18 dishes
+genuine available   153  = 12 venue/food + 141 dishes
+without a photo     102  = 74 upstream placeholders + 28 labelled illustrations
+descriptions        113 of 243; 106 of the 141 photographed rows
+```
+
+The old board and early fact-base wording (`173 photos`, `107 descriptions`) describe the first ingest,
+which counted placeholders and illustrations as image references. A21's figures above are the current
+shipped-menu truth; the board remains the historical architecture snapshot it says it is. The restaurant
+has not supplied descriptions for the other 130 rows, so the site does not invent them.
+
+Selection is deterministic: signature dishes first, then longest descriptions, then item id; family
+buckets interleave in literal menu order. Duplicate files, upstream placeholders and this site's labelled
+illustrations are excluded. Every tile is a real anchor to the full file, so JavaScript is an enhancement,
+not the only way to see a photograph. The viewer starts hidden, traps focus in DOM order, closes on Escape,
+returns focus to its opener, and reports a broken file instead of leaving a permanent busy state.
+
+The Lusion-like selection is a shared-element View Transition, not a generic fade: the source receives
+the transient `gal-active` name before `startViewTransition()`, the destination receives it inside the
+mutation callback, and only one element carries the name in either snapshot. Both `ready` and `finished`
+are handled; the root cross-fade is suppressed only while this morph runs. Reduced motion skips the morph
+and the automatic reel, hides Play, and leaves Previous/Next available. The reel uses timeouts plus a CSS
+progress transition, not a second `requestAnimationFrame` loop.
+
+**Self-caught defects, disclosed.** The first viewer formatted an already-formatted `KSh 700` again and
+printed `KSh NaN`; its focus ring was reversed against DOM order; and its automatic reel still ran under
+reduced motion. Those are fixed and now have runtime assertions. The prose also said eleven venue frames
+were 300×225 when the files prove ten; the copy and a unit assertion now say 10/1/1. The gallery unit tests
+were added after the implementation during resumed work and passed immediately, so they are regression
+checks, not evidence of a local red phase. The new browser batteries must supply the runtime red/green
+evidence on the runner.
+
+**Verification added.** Unit tests pin the inventory, deterministic ordering, family interleaving, price
+labels and exact tally. `verify-dist.mjs` pins all 30 static file links in order, rejects non-genuine
+images, and requires the hidden dialog fallback. `verify-runtime.mjs` opens a priced dish, checks its
+metadata and one-step arrow movement, exercises both ends of the focus trap, runs/pauses the reel, checks
+for unknown frame work, verifies reduced motion, and repeats the tile/viewer contract with JavaScript
+disabled. Local cheap gates passed: `check-ssr-safety` (12 modules), `check-astro-parse` (22 files, 15
+script blocks), `check-css` (2 files, 74 declared properties), `tests: 116 passed`, runtime syntax and
+`git diff --check`. No build or headless browser ran locally.
+
+**Still open.** CI must prove the new gallery batteries and the repaired ticker capture. Items 16 and 17
+still need the browser re-walk of WhatsApp compilation and selection/data parity. Payments stay dark on
+instruction. Production receives the `dist` artifact only after a green run and the authorized local
+Cloudflare upload; this amendment does not claim a deployment.
+
+### Amendment A22 — one-second light, unobstructed Menu, and six more genuine venue frames
+
+A22 is the 2026-11-24 enhancement wave. It changes three user-visible systems without changing the
+backend contract: the atmosphere advances every second, Menu controls keep clear of sticky chrome, and
+the photograph wall grows only with verified restaurant media. It also enforces the private-preview
+privacy boundary and corrects factual media/copy claims. Payments remain dark by instruction.
+
+**The clock now moves continuously instead of stepping every twenty seconds.** `rig-client.mjs`
+keeps one bounded 1,000 ms interval and writes Nairobi decimal hours with one-second resolution.
+`--hour` is an immediate, unregistered circular state readout; interpolating it would sweep backward
+through noon when 24:00 wraps to 00:00. Only the appearance-driving `--night` and `--sun` registered
+properties transition for one second in CSS, so the browser paints the intervening states without a
+JavaScript animation loop. `--sun` remains the exact complement of `--night`. Reduced motion keeps
+the one-second factual clock but removes interpolation; manual dialling removes the ambient glide
+while the handle is moving. `astro:after-swap` restores the live Nairobi second over the incoming
+build-time values, manual mode is reasserted at fixed precision without redundant broadcasts, and
+`visibilitychange`, `pageshow` and teardown retain one writer.
+
+The deterministic browser probe substitutes `Date`, dispatches `pageshow`, and measures dawn, dusk and
+midnight against inline/computed values, exact `rigFor()`/`rigValues()` DoorScene exposure/night
+snapshots, and every visible dial's value, label, phase, line and open/closed state. It validates the
+event's hour/night/open fields and transition properties/durations, then restores the real clock. Rounded
+three-decimal DoorScene attributes need not change at every one-second sample; the exact expected
+snapshot is checked instead. The runtime harness runs this audit under both normal and reduced motion,
+including a live preference change. The standalone suite has 22 checks and its RED/GREEN evidence is
+recorded in `tests/clock-continuity.mjs`.
+
+**Menu reserves the space it actually uses.** The old bar height was sampled before its badge was
+painted and was not sampled again after search, filter or sort changes. `MenuExplorer.astro` now paints
+the badge, synchronises controls, writes the URL and then measures the bar; fold changes measure after
+the badge as well. Cards and their interactive descendants receive the same live
+`--nav-h + --bar-h + 1.4rem` scroll clearance as section headings. Placeholder dish frames use their
+metadata width/height instead of falling back to 4:3.
+
+`menu-runtime-probe.mjs` exercises three viewports (1440×900, 820×1180 and 390×844) in four states
+(initial, searched, filtered and sorted): twelve combinations. It fails on horizontal overflow,
+pairwise card overlap, text/image containment errors, wrong frame ratios, a displaced sticky bar,
+saved bar-height drift, obstructed anchors and controls that `elementFromPoint()` cannot actually hit.
+The browser lifecycle audit also sorts and restores the kitchen's original DOM order, clears real
+search/tag/band/sort controls, removes only the Menu's reset query parameters, and preserves the
+shared table parameter, unrelated query state and room hash. The dependency-free Menu suite has 21
+passing source, geometry-helper and lifecycle contracts. Real geometry remains a CI claim until the
+matching runner completes.
+
+**Table selections and WhatsApp messages share one canonical state.** Stored, shared and live lines
+are menu-aware sanitized values; accompaniment remains part of line identity, and changing a side onto
+an existing side merges quantities. `?t=` wins on a fresh load and is reconciled on commits,
+`popstate`, router swaps and page loads without losing Menu filters or hashes. The browser probe
+decodes both actual handoff URLs and compares their complete text, recipient, visible rows, totals
+and share URL with `whatsappText()`/`encodeTable()`; empty handoffs stay disabled. Its comparator
+suite and the table-client/WhatsApp source suites pass locally. Browser execution remains part of CI.
+
+**The wall now contains 36 photographs, not 30.** Six official-source portrait JPEGs were retrieved
+from the restaurant's `menu.or.ke` page on 2026-11-24. They are byte-for-byte mirrors, not generated
+images; their source text overlays are retained and documented. No additional dish photographs were
+found, and blocked/signed Instagram/TikTok media is still linked rather than re-hosted. The current
+inventory is:
+
+```
+venue/food frames    18  = 10 at 300×225 + 1 at 408×272 + 1 at 1200×1200
+                          + 2 at 346×506 + 4 at 329×512
+menu rows           243
+genuine dish rows    141  = 141 photographed rows / 122 distinct SHA-256 files
+selected dishes       18  across all 6 families, interleaved in menu order
+photographs shown     36  = 18 venue/food + 18 selected unique dishes
+genuine available    140  = 18 venue/food + 122 unique dish files
+without a photo      102  = 74 upstream placeholders + 28 labelled illustrations
+descriptions         113 of 243; 106 of the 141 photographed rows
+```
+
+`Gallery.astro` binds every frame to its own measured width/height. The six portrait files therefore
+keep their published shape instead of inheriting the old room frames' 4:3 crop; square dish frames keep
+the same binding. The runtime gallery audit compares every rendered frame rectangle with its image
+metadata. `gallery.mjs`, `press.json`, the component copy, static expectations and no-JS expectations
+now agree on 18 venue/food frames, 36 displayed photographs and 140 unique genuine photographs.
+
+Two viewer defects found during review are fixed with tests: a reduced-motion focus ring no longer
+includes the hidden Play button, and every new frame clears the previous image's broken state before
+its own load/error event decides what to show. Play remains a timeout plus CSS progress bar, not a
+second RAF loop. The latest inventory and frame-ratio regressions were written first and failed for
+the expected reasons (two failures), then passed after integration; the gallery suite now has 20
+passing tests, including the official-footage provenance and verified-caption contract.
+
+**Media evidence was independently rechecked.** All six canonical/mirror pairs have matching full
+SHA-256 hashes, valid JPEG SOI/SOF/EOI markers and the documented dimensions. A 421-file duplicate
+scan found each new hash only in its canonical file and mirror. All eighteen gallery frames match
+their files; all 141 photographed dish rows (122 unique files) and their 400 px thumbs retain
+800×800/400×400 dimensions. The manifest
+records 21 brand files totaling 2,122,518 bytes. No explicit reuse licence was found, so the private
+preview/rights-open warning remains mandatory. The worktree contains no playable genuine venue video:
+official social footage is signed/blocked for direct reuse. Five stable public video links — three from
+the restaurant's own accounts and two from third parties — plus one aggregate are credited, linked and
+never re-hosted. No signed CDN URL, downloaded footage, tracking embed or speculative/generated video is
+shipped. The 36-frame gallery is therefore a photograph reel.
+
+**Private-preview and factual-copy enforcement is complete.** Every default build carries exactly one
+`noindex, nofollow` directive; `PUBLIC_INDEXABLE=true` is the explicit opt-out. `preview-policy.mjs` renders
+all five real pages in both modes and requires the exact visible footer warning once per page, while
+`verify-dist.mjs` enforces the same boundary on every emitted HTML file, including 404. The footer states
+that this is not the restaurant's official website, that reuse/redistribution permission is unconfirmed,
+and that video/reviews are linked rather than re-hosted. Unsupported lunch/view claims were replaced with
+the photographed outdoor tables and teal banquettes; media counts now distinguish 18 venue/food frames,
+141 photographed rows, 122 unique dish files and 140 unique genuine photographs.
+
+**Self-caught errors, disclosed.** Running the custom-harness clock file and `node:test` files in one
+`node --test` process produced a misleading aggregate summary; `tests/run.mjs` now runs the clock file
+directly and each `node:test` suite in its own child process. The original gallery behaviour tests were
+added after that implementation and passed immediately, so A21 correctly labels them regression
+checks rather than a red phase. A22's new inventory/ratio tests have an explicit RED/GREEN cycle.
+When the clock probe was strengthened, its synthetic before-sample incorrectly carried the target
+dial labels and its range-value tolerance was tighter than the sample's sub-second precision; both
+test-fixture errors were corrected before accepting GREEN. The invalid demand that rounded DoorScene
+attributes change at every sample was also removed in favour of exact expected snapshots. The first
+official Facebook quotation was initially reconstructed from its URL slug; a new provenance regression
+failed on that longer sentence, and the shipped quote now contains only the verified caption excerpt.
+
+**Local evidence, 2026-11-25.** The lightweight gates passed SSR safety (13 modules), Astro parse
+(22 files, 16 script blocks), CSS variables (74 declared properties), 131 aggregate source checks,
+the standalone clock (22), Menu (21), gallery (20), table-client (7), card-parity (6), WhatsApp
+source (4), runtime-comparator (7) and rendered preview-policy (4) suites, plus drift (3 checks).
+`tests/api.mjs` passed 95 checks. Brand sync verified 21 files/2,073 KB; the board check verified
+177 visible strings; runtime/dist syntax and `git diff --check` passed. No build or headless browser
+ran locally.
+
+**Still open.** The matching GitHub Actions run must prove the new clock, twelve Menu geometry states,
+gallery ratios, repaired ticker pixels and WhatsApp runtime parity before its `dist` is downloaded.
+Only a green run may be uploaded to the existing private preview at `habibihavenpreview.pages.dev`.
+This amendment does not yet claim CI success or a live update. Payments stay dark. Photo rights,
+synthetic D1 cleanup, production indexing and the other client decisions in `OPEN-QUESTIONS.md` remain
+open.
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
   and log the rest rather than smoothing it over.
-- Descriptions exist for only 107 of 243 items. The other 136 stay photo-led and description-free;
-  inventing ingredient copy is out of bounds.
+- Descriptions exist for only 113 of 243 items (106 of the 141 genuinely photographed rows). The other
+  130 stay photo-led and description-free; inventing ingredient copy is out of bounds.
 - Photos are hosted in their Supabase bucket and returned 401/403 to REST probes from outside the
   browser. Mirroring into the build is intended, but permission to redistribute is an OPEN-QUESTION
   for the client call; the preview must not be published as official before that.

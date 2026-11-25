@@ -1,0 +1,456 @@
+---
+// Gallery.astro — every photograph that exists, shown at the size it exists, in a viewer you can drive.
+//
+// Item 4 of the owner's list: "There are far too few images… Give users a beautiful view of the
+// restaurant. Images, videos, short videos, and so much more." The complaint was correct and the fix had
+// to be honest, so this file is mostly a decision about what "more" can mean when we are not allowed to
+// invent the missing half.
+//
+// What we actually hold, measured rather than estimated:
+//
+//   · 18 venue/food photographs (15 venue and 3 food): twelve from the restaurant's own abandoned
+//     project and six portrait originals from its menu.or.ke page (brand/ASSETS.md). Ten are 300×225,
+//     one is 408×272, one is 1200×1200, two are 346×506 and four are 329×512. Every frame keeps its measured ratio.
+//   · 141 menu rows with the restaurant's own dish photographs, all 800×800 with 400px thumbs. Independent
+//     SHA-256 checks reduce those repeated uploads to 122 unique files, which is what the wall counts.
+//   · 102 menu rows with no photograph at all — 28 are our own labelled illustrations and 74 still say
+//     "Image to be updated soon" upstream.
+//   · Five linked videos (three from the restaurant's own accounts, two third-party) and one aggregate
+//     of visitor clips, credited and linked, never re-hosted (press.json records the source and rights gap).
+//
+// So the available set is 140 unique real photographs, and the two things the wall will not do are on purpose:
+// it does not upscale a 300px frame into a hero (the viewer prints the file's pixel size, because the
+// alternative is a soft picture and a hidden limitation), and it does not fill the gaps with generated
+// food. "Short videos" is answered the only true way available: a reel that walks the real photographs on
+// a timer you can stop, next to the linked videos and the visitor-clip aggregate.
+//
+// The interaction is what item 5 asked for — "a smooth transition like lusion.co when users select
+// something". Picking a tile runs a View Transition between the tile and the enlarged frame, which is the
+// browser morphing one image into the other rather than a fade we fake. It is feature-detected
+// (`document.startViewTransition`), skipped under reduced motion, and the whole page is deliberately kept
+// out of the morph: the router also uses view transitions, and `::view-transition-*-root` is where its
+// cross-fade lives, so the root animation is suppressed by a class that only exists while this morph is
+// running. Without the class the router's own transition is untouched.
+//
+// No JavaScript is not a broken page here: every tile is an `<a href>` at the full file, so with the
+// component absent a photograph still opens. The reel, the trap and the morph are enhancements on top of
+// that, and with no script the box stays `hidden` rather than showing an empty frame.
+import menu from "../data/menu.json";
+import { VENUE_FRAMES, dishPhotographs, galleryTally } from "../lib/gallery.mjs";
+
+const limit = Astro.props.dishes ?? 18;
+const place = VENUE_FRAMES.map((f, i) => ({ ...f, i }));
+const dishes = dishPhotographs(menu, { limit }).map((d, i) => ({ ...d, i: i + VENUE_FRAMES.length }));
+const tally = galleryTally(menu, dishes);
+const groups = [
+  { cls: "gal__strip", list: place },
+  { cls: "gal__wall", list: dishes },
+];
+---
+
+<section class="gal" data-gal>
+  <div class="gal__groups">
+    {
+      groups.map((group) => (
+        <div class={group.cls}>
+          {group.list.map((s, n) => (
+            <a
+              class="gal__tile"
+              href={s.src}
+              data-gal-open={String(s.i)}
+              data-kind={s.kind}
+              data-title={s.title ?? s.caption}
+              data-note={s.kind === "dish" ? s.caption : null}
+              data-price={s.priceLabel ?? null}
+              data-size={s.size}
+              data-reveal
+              style={`--i:${n}`}
+            >
+              <span class="frame" style={`aspect-ratio: ${s.w} / ${s.h}`}>
+                <img
+                  src={s.thumb ?? s.src}
+                  alt={s.alt}
+                  width={s.w}
+                  height={s.h}
+                  loading={s.kind === "place" && n < 3 ? "eager" : "lazy"}
+                  decoding="async"
+                />
+              </span>
+              <span class="gal__label meta">
+                {s.kind === "dish" ? s.title : s.caption}
+              </span>
+            </a>
+          ))}
+        </div>
+      ))
+    }
+  </div>
+
+  <p class="gal__rule meta dim">
+    {tally.frames} venue/food photographs and {tally.dishes} of the {tally.files} photographs the listing
+    carries, chosen by signature and description and spread across the {tally.families} families — the wall
+    is {tally.dishes} of {tally.files}, not all of them, because a page is not an archive.
+    {tally.without} of the {tally.total} menu rows have no photograph upstream at all
+    ({tally.placeholder} still read &ldquo;Image to be updated soon&rdquo; on the listing and
+    {tally.illustrated} are our own labelled illustrations), so those dishes are not here either. Sizes are
+    the file&rsquo;s real pixel size and ratio. Ten of the eighteen venue/food photographs are
+    300&nbsp;&times;&nbsp;225; one is 408&nbsp;&times;&nbsp;272, one is 1200&nbsp;&times;&nbsp;1200,
+    two are 346&nbsp;&times;&nbsp;506 and four are 329&nbsp;&times;&nbsp;512. That is what the restaurant
+    has published, and nothing on this page is stretched past it.
+  </p>
+
+  <div class="gal__box" data-gal-box role="dialog" aria-modal="true" aria-label="Photograph, enlarged" tabindex="-1" hidden>
+    <div class="gal__boxbar">
+      <span class="gal__count meta" data-gal-count></span>
+      <span class="gal__spacer"></span>
+      <button class="gal__ctl" type="button" data-gal-play aria-pressed="false">Play</button>
+      <button class="gal__ctl" type="button" data-gal-prev aria-label="Previous photograph">←</button>
+      <button class="gal__ctl" type="button" data-gal-next aria-label="Next photograph">→</button>
+      <button class="gal__ctl gal__ctl--close" type="button" data-gal-close aria-label="Close the viewer">Close</button>
+    </div>
+    <div class="gal__plate">
+      <img class="gal__img" data-gal-img alt="" src="" />
+    </div>
+    <div class="gal__caption">
+      <strong class="display--h3" data-gal-title></strong>
+      <p class="gal__note" data-gal-note></p>
+      <p class="gal__meta meta dim" data-gal-meta></p>
+    </div>
+    <span class="gal__bar" data-gal-bar aria-hidden="true"></span>
+  </div>
+</section>
+
+<script>
+  import { component } from "../lib/page.mjs";
+
+  // How long a photograph stays on screen when the reel is playing. The bar under the box runs the same
+  // number, so the timer is visible instead of being something the reader has to infer.
+  const HOLD = 3600;
+
+  component("[data-gal]", {
+    mount(root) {
+      const box = root.querySelector("[data-gal-box]");
+      const img = root.querySelector("[data-gal-img]");
+      const titleEl = root.querySelector("[data-gal-title]");
+      const noteEl = root.querySelector("[data-gal-note]");
+      const metaEl = root.querySelector("[data-gal-meta]");
+      const countEl = root.querySelector("[data-gal-count]");
+      const bar = root.querySelector("[data-gal-bar]");
+      const play = root.querySelector("[data-gal-play]");
+      const prev = root.querySelector("[data-gal-prev]");
+      const next = root.querySelector("[data-gal-next]");
+      const closeBtn = root.querySelector("[data-gal-close]");
+      const tiles = Array.from(root.querySelectorAll("[data-gal-open]"));
+      if (!box || !img || tiles.length === 0) return;
+
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+      const plate = root.querySelector(".gal__plate");
+      let at = 0;
+      let opener = null;
+      let timer = null;
+      let playing = false;
+      let disposed = false;
+      let generation = 0;
+      let reelGeneration = 0;
+      const timeouts = new Set();
+      const isCurrent = (version) => !disposed && version === generation;
+      const schedule = (fn, delay) => {
+        const id = setTimeout(() => {
+          timeouts.delete(id);
+          fn();
+        }, delay);
+        timeouts.add(id);
+        return id;
+      };
+      const cancel = (id) => {
+        clearTimeout(id);
+        timeouts.delete(id);
+      };
+      const cancelTimeouts = () => {
+        for (const id of timeouts) clearTimeout(id);
+        timeouts.clear();
+      };
+
+      // The morph. One name, `gal-active`, and only ever on one element in one snapshot — that is the
+      // whole trick, and getting it backwards is how these transitions log a duplicate-name error: the
+      // OLD snapshot is taken before the mutation callback runs, so the name goes on the *source* image
+      // first, and inside the callback it moves to the *destination* image. Same dance in reverse to
+      // close, with the two roles swapped. The name is inline and transient because a permanent
+      // `view-transition-name` on every tile would make all of them participants in the router's
+      // own page transitions.
+      const NAME = "gal-active";
+      let named = [];
+      const give = (el) => {
+        if (!el) return;
+        el.style.viewTransitionName = NAME;
+        named.push(el);
+      };
+      const take = () => {
+        for (const el of named.splice(0)) el.style.viewTransitionName = "";
+        document.documentElement.classList.remove("is-morph");
+      };
+
+      const morph = (from, to, mutate) => {
+        const version = ++generation;
+        if (typeof document.startViewTransition !== "function" || reduced.matches || !from || !to) {
+          if (isCurrent(version)) {
+            mutate();
+            take();
+          }
+          return;
+        }
+        give(from);
+        document.documentElement.classList.add("is-morph");
+        const t = document.startViewTransition(() => {
+          // A close, another open, or a router replacement can supersede this update before it runs.
+          if (!isCurrent(version)) return;
+          for (const el of named.splice(0)) el.style.viewTransitionName = "";
+          give(to);
+          mutate();
+        });
+        // finished and ready both have to be handled: a skipped or aborted transition rejects one of them,
+        // and an unhandled rejection in a page this site is demonstrating is a console error the harness
+        // is obliged to fail on.
+        if (t?.ready?.then) t.ready.then(() => {}, () => {});
+        // And a belt: if the document is swapped mid-transition the callbacks may never land, and a stale
+        // inline name would sit on a detached node forever. It belongs to the same cleanup set as the reel.
+        const belt = schedule(() => {
+          if (isCurrent(version)) take();
+        }, 1500);
+        const finish = () => {
+          if (!isCurrent(version)) return;
+          cancel(belt);
+          take();
+        };
+        if (t?.finished?.then) t.finished.then(finish, finish);
+        else finish();
+      };
+
+      const readTile = (i) => tiles[i] ?? tiles[0];
+
+      const paint = (i) => {
+        // A new frame starts unbroken; its own load/error event decides the state from here.
+        box.removeAttribute("data-gal-broken");
+        at = ((i % tiles.length) + tiles.length) % tiles.length;
+        const tile = readTile(at);
+        const src = tile.getAttribute("href") || "";
+        const thumb = tile.querySelector("img");
+        // Assigning the same src again does not fire `load`, so a repeat open of the same tile must not
+        // put the box into a busy state nothing will ever clear.
+        const willFetch = !!src && img.getAttribute("src") !== src;
+        if (willFetch) {
+          img.src = src;
+          box.setAttribute("data-gal-busy", "true");
+        }
+        img.alt = thumb?.alt ?? "";
+        const kind = tile.getAttribute("data-kind");
+        const price = tile.getAttribute("data-price");
+        titleEl.textContent = tile.getAttribute("data-title") ?? "";
+        const note = tile.getAttribute("data-note");
+        noteEl.textContent = note ?? "";
+        noteEl.hidden = !note;
+        metaEl.textContent = [
+          kind === "dish" ? "The listing's own photograph of this dish" : "From the restaurant's own frames",
+          `${tile.getAttribute("data-size") ?? "size unknown"}`,
+          // `priceLabel` was formatted by the same money() helper as the menu card. Formatting it again
+          // turns "KSh 700" into Number("KSh 700") → NaN, so the already-labelled string is the contract.
+          price || null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        countEl.textContent = `${at + 1} of ${tiles.length}`;
+        box.setAttribute("data-gal-kind", kind ?? "");
+        runBar();
+      };
+
+      // The reel's progress is a CSS transition restarted per frame of the sequence — a transform write
+      // here would be a second animation loop, and the frame gate in scripts/verify-runtime.mjs counts
+      // those on purpose.
+      function runBar() {
+        if (!bar) return;
+        if (!playing || reduced.matches) {
+          bar.style.transition = "none";
+          bar.style.transform = "scaleX(0)";
+          return;
+        }
+        bar.style.transition = "none";
+        bar.style.transform = "scaleX(0)";
+        void bar.offsetWidth;
+        bar.style.transition = `transform ${HOLD}ms linear`;
+        bar.style.transform = "scaleX(1)";
+      }
+
+      const stopReel = () => {
+        reelGeneration += 1;
+        playing = false;
+        cancel(timer);
+        timer = null;
+        play.setAttribute("aria-pressed", "false");
+        play.textContent = "Play";
+        runBar();
+      };
+
+      const obeyMotionPreference = () => {
+        play.hidden = reduced.matches;
+        if (reduced.matches) stopReel();
+      };
+      obeyMotionPreference();
+
+      const tick = (version) => {
+        if (!playing || version !== reelGeneration) return;
+        if (reduced.matches) {
+          stopReel();
+          return;
+        }
+        paint(at + 1);
+        timer = schedule(() => tick(version), HOLD);
+      };
+
+      const startReel = () => {
+        // Reduced motion removes the automatic walk, not the arrows: every photograph stays reachable
+        // by hand, and the page does not offer a Play control for a timer it refuses to start.
+        if (reduced.matches || playing) return;
+        const version = ++reelGeneration;
+        playing = true;
+        play.setAttribute("aria-pressed", "true");
+        play.textContent = "Pause";
+        runBar();
+        timer = schedule(() => tick(version), HOLD);
+      };
+
+      const open = (i, source) => {
+        const version = ++generation;
+        opener = source ?? readTile(i);
+        box.removeAttribute("data-gal-broken");
+        document.documentElement.classList.add("gal-open");
+        // Fill the box while it is still hidden, then wait for the file, then morph. The order matters:
+        // the new snapshot is taken from whatever the destination element is showing at that moment, so a
+        // morph started before the full-resolution file arrived would fly a blank plate to the middle of
+        // the screen and load the photograph into it afterwards.
+        paint(i);
+        let gone = false;
+        const go = () => {
+          if (gone || !isCurrent(version)) return;
+          gone = true;
+          cancel(belt);
+          morph(opener?.querySelector("img"), img, () => {
+            box.hidden = false;
+            box.focus({ preventScroll: true });
+          });
+        };
+        // …but never longer than a blink. A cold file on a slow connection must not cost the reader the
+        // click they just made.
+        const belt = schedule(go, 450);
+        if (typeof img.decode === "function") img.decode().then(go, go);
+        else go();
+      };
+
+      const close = () => {
+        // Invalidate a pending decode/belt and every older transition before starting the closing morph.
+        generation += 1;
+        stopReel();
+        cancelTimeouts();
+        morph(img, opener?.querySelector("img"), () => {
+          box.hidden = true;
+          box.removeAttribute("data-gal-busy");
+          document.documentElement.classList.remove("gal-open");
+        });
+        const back = opener;
+        opener = null;
+        // Focus goes home even when there was no morph to wait for, and it must not be stolen back by a
+        // transition callback that never runs because the reader already navigated away.
+        back?.focus?.({ preventScroll: true });
+      };
+
+      const step = (d) => {
+        stopReel();
+        box.removeAttribute("data-gal-broken");
+        paint(at + d);
+      };
+
+      const on = (node, ev, fn, opts) => {
+        node?.addEventListener(ev, fn, opts);
+        return () => node?.removeEventListener(ev, fn, opts);
+      };
+
+      const offs = [
+        ...tiles.map((tile) =>
+          on(tile, "click", (e) => {
+            // Left alone, the href still opens the raw file — a middle click or "open in new tab" is the
+            // reader's choice, and preventDefault only applies to the plain left click this viewer serves.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            open(Number(tile.getAttribute("data-gal-open")), tile);
+          })
+        ),
+        on(closeBtn, "click", close),
+        on(prev, "click", () => step(-1)),
+        on(next, "click", () => step(1)),
+        on(play, "click", () => (playing ? stopReel() : startReel())),
+        on(reduced, "change", obeyMotionPreference),
+        // Clicking the dark surround closes; clicking the photograph or the caption does not.
+        on(box, "click", (e) => {
+          if (e.target === box || e.target === plate) close();
+        }),
+        on(box, "keydown", (e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            close();
+            return;
+          }
+          if (e.key === "ArrowRight") {
+            e.preventDefault();
+            step(1);
+            return;
+          }
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            step(-1);
+            return;
+          }
+          // A trap, not a suggestion: the page behind is unreachable while this is open, so Tab has to
+          // circle inside the box or the keyboard guest is standing in a dark room with no door.
+          if (e.key === "Tab") {
+            // DOM order, not a hand-written order that happens to look symmetrical. From the dialog
+            // itself Shift+Tab must reach Close; from Close, Tab must wrap to the first visible control.
+            // Reversing this ring made the last control wrap to itself and stranded the keyboard in the viewer.
+            const ring = [play, prev, next, closeBtn].filter((control) => control && !control.hidden);
+            if (ring.length === 0) return;
+            const first = ring[0];
+            const last = ring[ring.length - 1];
+            const active = document.activeElement;
+            if (e.shiftKey && (active === first || active === box)) {
+              e.preventDefault();
+              last.focus();
+            } else if (!e.shiftKey && active === last) {
+              e.preventDefault();
+              first.focus();
+            }
+          }
+        }),
+        // The two ends of one request: the file arrived, or it did not. Both clear `busy`, because a
+        // dimmed plate is only honest while something is actually still coming.
+        on(img, "load", () => box.removeAttribute("data-gal-busy")),
+        on(img, "error", () => {
+          box.removeAttribute("data-gal-busy");
+          // `src=""` in the static markup can report an error before anyone opened anything; a broken
+          // mark on a closed box would greet the next reader with a message about a photograph they
+          // never asked for.
+          if (!box.hidden) box.setAttribute("data-gal-broken", "true");
+        }),
+      ];
+
+      return () => {
+        if (disposed) return;
+        disposed = true;
+        generation += 1;
+        stopReel();
+        cancelTimeouts();
+        for (const off of offs) off?.();
+        document.documentElement.classList.remove("gal-open");
+        take();
+      };
+    },
+    unmount: (stop) => stop?.(),
+  });
+</script>

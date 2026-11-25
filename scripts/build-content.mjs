@@ -7,10 +7,11 @@
 //   content/image-manifest.json┘                            (written by scripts/mirror-images.mjs)
 //
 // It fails instead of guessing. The count assertions are the point: 243 rows in and 243 items out,
-// 173 unique photographs, every item carrying a family, a section, an integer price and a photo with
-// real pixel dimensions.
+// 173 unique source image URLs, every item carrying a family, a section, an integer price and a photo
+// with real pixel dimensions. Real photographs also carry the SHA-256 of their mirrored full-size bytes.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -166,6 +167,11 @@ for (const row of source.items) {
   // The byte is mirrored so nothing 404s, but the item is marked so the UI never passes a
   // placeholder off as a photograph of the dish — see docs/OPEN-QUESTIONS.md.
   const placeholder = /image-to-be-updated/i.test(local || "");
+  // URLs are not identity: the listing has uploaded identical photographs under several names. Hash the
+  // actual full-size mirror so gallery selection and its tally can count byte streams without fetching media.
+  const photoSha256 = photo && !placeholder
+    ? createHash("sha256").update(await readFile(join(ROOT, "site/public/menu", photo.file))).digest("hex")
+    : null;
 
   const tags = tagsFor(row);
   const signature = signatureByRow.get(row.id);
@@ -195,6 +201,7 @@ for (const row of source.items) {
           remote: row.image,
           width: photo?.width ?? null,
           height: photo?.height ?? null,
+          ...(photoSha256 ? { sha256: photoSha256 } : {}),
           placeholder,
           alt: placeholder ? `${row.name} — photograph pending from the restaurant` : row.name,
         }
@@ -459,7 +466,7 @@ function seedSql(catalog) {
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 const size = new TextEncoder().encode(JSON.stringify(menu, null, 1)).length;
 console.log(
-  `build-content: ${menu.meta.items} items · ${menu.meta.photos} photos · ` +
+  `build-content: ${menu.meta.items} items · ${menu.meta.photos} source image URLs · ` +
     `${menu.meta.families} families · ${menu.meta.sections} sections · ` +
     `KSh ${menu.meta.priceRange.min}–${menu.meta.priceRange.max} (median ${menu.meta.median}) · ` +
     `${menu.meta.described} with descriptions\n` +

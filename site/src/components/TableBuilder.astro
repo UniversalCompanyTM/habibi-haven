@@ -374,6 +374,7 @@ const change = nextChange();
        handed back for it. Both are compared against the sheet on screen, which is what lets the hint say
        "you have changed it since" instead of leaving a stale reference looking current. */
     const defaultHint = recordHint.textContent ?? "";
+    const handoffLabel = handoffEl.textContent ?? "Send it on WhatsApp with my details";
     let recordedKey = "";
     let recordedRef = "";
 
@@ -385,6 +386,17 @@ const change = nextChange();
     const syncHandoff = () => {
       const sheet = getTable();
       const priced = getTotals();
+      // Both handoffs carry a sheet, not just a restaurant chat. An empty secondary link used to stay live
+      // while the primary button correctly refused the press, so keyboard activation could still open an
+      // empty WhatsApp draft. Keep the same state, wording and guard on the pair.
+      if (!priced.count) {
+        handoffEl.href = "#";
+        handoffEl.setAttribute("aria-disabled", "true");
+        handoffEl.textContent = "Add a dish first";
+        return;
+      }
+      handoffEl.removeAttribute("aria-disabled");
+      handoffEl.textContent = handoffLabel;
       const payload = tablePayload(Object.fromEntries(new FormData(recordForm)), {
         table: sheet,
         claimed: priced.subtotal,
@@ -518,7 +530,8 @@ const change = nextChange();
         copyStateEl.textContent = "";
         return;
       }
-      if (target?.closest?.("[data-whatsapp]") && waEl.getAttribute("aria-disabled") === "true") {
+      const handoff = target?.closest?.("[data-whatsapp],[data-handoff]");
+      if (handoff?.getAttribute("aria-disabled") === "true") {
         event.preventDefault();
         copyStateEl.textContent = "Nothing to send yet — add a dish first.";
       }

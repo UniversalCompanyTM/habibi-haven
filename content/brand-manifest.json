@@ -1,8 +1,8 @@
 {
  "meta": {
   "generatedBy": "scripts/sync-brand.mjs",
-  "files": 15,
-  "bytes": 705701,
+  "files": 21,
+  "bytes": 2122518,
   "note": "Hashes verified against brand/ASSETS.md. Private preview only — photo rights are an open question."
  },
  "files": [
@@ -43,10 +43,22 @@
    "source": "brand/logo/habibi-haven-badge.jpg"
   },
   {
+   "file": "/brand/venue-banquette-occupied.jpg",
+   "bytes": 254322,
+   "sha256_12": "086111ec5643",
+   "source": "brand/photos/venue-banquette-occupied.jpg"
+  },
+  {
    "file": "/brand/venue-courtyard-arches.jpg",
    "bytes": 21433,
    "sha256_12": "6017172feb07",
    "source": "brand/photos/venue-courtyard-arches.jpg"
+  },
+  {
+   "file": "/brand/venue-dessert-counter.jpg",
+   "bytes": 194138,
+   "sha256_12": "3b4fcb4d721c",
+   "source": "brand/photos/venue-dessert-counter.jpg"
   },
   {
    "file": "/brand/venue-facade-day.jpg",
@@ -67,6 +79,18 @@
    "source": "brand/photos/venue-interior-teal-sofa.jpg"
   },
   {
+   "file": "/brand/venue-lounge-teal-sofa.jpg",
+   "bytes": 229674,
+   "sha256_12": "62b8539c3503",
+   "source": "brand/photos/venue-lounge-teal-sofa.jpg"
+  },
+  {
+   "file": "/brand/venue-neon-green-wall.jpg",
+   "bytes": 228582,
+   "sha256_12": "e3e8b20b7c57",
+   "source": "brand/photos/venue-neon-green-wall.jpg"
+  },
+  {
    "file": "/brand/venue-table-branded-cup.jpg",
    "bytes": 22134,
    "sha256_12": "e9f2b4c7afe4",
@@ -85,6 +109,12 @@
    "source": "brand/photos/venue-table-mid-meal.jpg"
   },
   {
+   "file": "/brand/venue-terrace-daylight.jpg",
+   "bytes": 220865,
+   "sha256_12": "cb1a8a1b6e86",
+   "source": "brand/photos/venue-terrace-daylight.jpg"
+  },
+  {
    "file": "/brand/venue-terrace-seating.jpg",
    "bytes": 26520,
    "sha256_12": "728e0804e6ff",
@@ -95,6 +125,12 @@
    "bytes": 21007,
    "sha256_12": "eee7c9246085",
    "source": "brand/photos/venue-terrace-table-city.jpg"
+  },
+  {
+   "file": "/brand/venue-timber-arches-wide.jpg",
+   "bytes": 289236,
+   "sha256_12": "4ad51039e9ea",
+   "source": "brand/photos/venue-timber-arches-wide.jpg"
   }
  ]
 }

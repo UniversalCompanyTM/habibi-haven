@@ -1,4 +1,4 @@
-# Habibi Haven — third-party coverage, video and review sources
+# Habibi Haven — restaurant and third-party coverage, video and review sources
 
 Gathered 2026-11-14 by web search. This file exists so every external claim, quote and link on the
 site has a line back to where it was read, and so a reader can tell what was fetched as a full page
@@ -21,18 +21,20 @@ it were our own copy; quoted lines are marked as quotes with their source.
 
 ## 2. Video and social coverage (link, never re-host)
 
-Third-party video is presented as **a link out with a caption**, not as a re-uploaded file or an
-embedded player. Two reasons, both stated plainly: the clips are the reviewers' work, and a
-downloaded copy of someone else's video on a commercial site is an asset we have no right to ship.
-Instagram and TikTok also bot-gate their media, so a scrape would be unreliable as well as
-unauthorised. The site therefore does what a good editor does: it credits, quotes and links.
+Restaurant and third-party video is presented as **a link out with a caption**, not as a re-uploaded
+file or embedded player. The clips remain their creators' work, no reuse/redistribution permission has
+been confirmed, and the available social-media CDN addresses are signed or blocked. The site therefore
+credits, quotes only verified excerpts and links to the stable public posts. The three official-account
+links below were checked on 2026-11-25; no media bytes or expiring CDN URLs are stored in the project.
 
 | Item | What it says | Link |
 |---|---|---|
+| Habibi Haven, Facebook | "The week is finally over" — verified opening caption excerpt; the longer URL-slug sentence is not quoted | [facebook.com/…/2280376199396414](https://www.facebook.com/61575101935569/videos/the-week-is-finally-over-now-its-time-to-eatlaugh-and-enjoy-good-companyhabibi-f/2280376199396414/) |
+| Habibi Haven, Facebook | "Good mornings start with great breakfast!" | [facebook.com/…/1386843973177228](https://www.facebook.com/61575101935569/videos/good-mornings-start-with-great-breakfasthabibi-fyp-foryoupage-habibihaven-goodfo/1386843973177228/) |
+| Habibi Haven, TikTok | "Beauty captured in every angle" | [tiktok.com/@habibi.haven/video/7703445462203862279](https://www.tiktok.com/@habibi.haven/video/7703445462203862279) |
 | Instagram reel, food reviewer | "RESTAURANT REVIEW: @habibi.haven Koinange Street; Nairobi CBD — Habibi Haven is a Green Escape in the heart of Nairobi CBD; Tucked away on the…" | [instagram.com/reel/DQlckpEDDKJ](https://www.instagram.com/reel/DQlckpEDDKJ/) |
 | TikTok, @johnson_valentis | "Habibi Haven Restaurant Review: Food & Prices on Koinange St." — description praises its "garden elegance" ambience | [tiktok.com/@johnson_valentis/video/7559881339999161656](https://www.tiktok.com/@johnson_valentis/video/7559881339999161656) |
 | TikTok discovery page for the name | aggregate of visitor clips, captioned "Good ambience. Beautiful smiles. Great service. This is what dining at Habibi Haven feels like ✨ Come for the food, stay for the…" | [tiktok.com/discover/habibi-haven-restaurant](https://www.tiktok.com/discover/habibi-haven-restaurant) |
-| Their own TikTok | @habibi.haven | [tiktok.com/@habibi.haven](https://www.tiktok.com/@habibi.haven) |
 
 Search results also attached these phrases to the restaurant in other creators' captions — recorded
 because they are how the place is talked about, and the copy should not contradict them: "aesthetic
@@ -68,11 +70,11 @@ argument; hiding it would be the error.
 
 ## 5. What a client conversation could still add
 
-- The venue photography in hand is real but small (nine of ten frames 300×225), so a shoot or the
+- The venue photography in hand is real but small (ten of eighteen frames 300×225), so a shoot or the
   client's originals remain the right ask for full-bleed imagery.
 - No vector logo on hand — only a 200×200 raster badge, so the wordmark is typeset, not traced.
 - Whether reservations exist as an operation at all: nothing in the captured stack shows a booking
   system, and WhatsApp is demonstrably the channel, so the configurator hands off there and claims
   nothing more.
-- Permission to re-host the reviewers' clips (with credit) if a future version wants video on the
-  page rather than links out.
+- Permission to re-host the restaurant's or reviewers' clips (with credit) if a future version wants
+  video on the page rather than links out.

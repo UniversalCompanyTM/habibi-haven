@@ -152,6 +152,38 @@ export function emptyTable(party = PARTY_DEFAULT) {
   return { party, lines: [] };
 }
 
+/**
+ * The one canonical table shape, whether it came from localStorage, a shared URL or a live control.
+ *
+ * Storage is older than the menu and a link is editable by its recipient, so neither is trusted to
+ * contain current ids, whole quantities or a side the kitchen still serves. Invalid rows disappear;
+ * a required side falls back to the first option the card itself defaults to. Duplicate decoded rows
+ * merge by line identity and quantities stay inside the same 1–99 range as the live controls.
+ */
+export function sanitizeTable(source, candidate) {
+  const party = clampParty(candidate?.party);
+  const incoming = Array.isArray(candidate?.lines) ? candidate.lines : [];
+  const merged = new Map();
+  for (const line of incoming) {
+    if (!line || typeof line.id !== "string" || !Number.isInteger(line.qty) || line.qty <= 0) continue;
+    const item = findItem(source, line.id);
+    if (!item) continue;
+    const options = Array.isArray(item.accompaniments?.options) ? item.accompaniments.options : [];
+    const option = options.length
+      ? options.includes(line.option) ? line.option : options[0]
+      : undefined;
+    const key = lineKey(item.id, option);
+    const qty = Math.min(99, line.qty);
+    const previous = merged.get(key);
+    merged.set(key, {
+      id: item.id,
+      ...(option ? { option } : {}),
+      qty: previous ? Math.min(99, previous.qty + qty) : qty,
+    });
+  }
+  return { party, lines: [...merged.values()] };
+}
+
 /* ------------------------------------------------------------------ totals */
 
 export function totals(menu, table) {
@@ -259,9 +291,19 @@ export function decodeTable(raw) {
     const m = part.match(/^(.*)x(\d{1,2})$/);
     if (!m) continue;
     const [idChunk, qty] = [m[1], Number(m[2])];
+    if (!idChunk || qty < 1) continue;
     const gt = idChunk.indexOf(">");
-    if (gt === -1) lines.push({ id: idChunk, qty });
-    else lines.push({ id: idChunk.slice(0, gt), option: decodeURIComponent(idChunk.slice(gt + 1)), qty });
+    if (gt === -1) {
+      lines.push({ id: idChunk, qty });
+      continue;
+    }
+    const id = idChunk.slice(0, gt);
+    if (!id) continue;
+    try {
+      lines.push({ id, option: decodeURIComponent(idChunk.slice(gt + 1)), qty });
+    } catch {
+      // One hand-edited, malformed accompaniment must not discard the valid dishes beside it.
+    }
   }
   return { party, lines };
 }

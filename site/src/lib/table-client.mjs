@@ -13,11 +13,11 @@
 import menu from "../data/menu.json";
 import {
   addLine,
-  clampParty,
   decodeTable,
   emptyTable,
-  findItem,
+  encodeTable,
   removeLine,
+  sanitizeTable,
   setOption,
   setQty,
   shareUrl,
@@ -34,13 +34,20 @@ const ON_CLIENT = typeof location !== "undefined" && typeof localStorage !== "un
 const KEY = "habibi-haven:table:v1";
 export const EVENT = "hh:table";
 
-function readStored() {
+function parseStored(raw) {
   try {
-    const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.lines)) return null;
     return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function readStored() {
+  try {
+    return parseStored(localStorage.getItem(KEY));
   } catch {
     // private mode, a full quota, or a shape from an older build — all of them mean "start clean"
     return null;
@@ -63,13 +70,9 @@ function writeStored(table) {
  * place both the sheet and the nav read from, so filtering here filters it for everyone.
  */
 export function sanitize(table) {
-  const lines = table.lines.filter((line) => Boolean(findItem(menu, line.id)));
-  // The party is clamped to the site's own limit rather than to a wider one: a stored table from an older
-  // build (or a hand-edited share link) that says 99 would be accepted here and then 422'd by the book, so
-  // the guest would be told the sheet they are looking at is impossible. clampParty is the same window the
-  // stepper and the decoder use, and tests/api.mjs compares it against the Worker's.
-  const party = clampParty(table.party);
-  return { party, lines };
+  // The pure menu-aware sanitizer is shared by stored tables, URL tables and every live mutation. A
+  // second browser-only filter would let the sheet, the cards and the WhatsApp message disagree again.
+  return sanitizeTable(menu, table);
 }
 
 /**
@@ -86,10 +89,39 @@ function initial() {
   if (!ON_CLIENT) return emptyTable();
   const fromUrl = new URLSearchParams(location.search).get("t");
   const source = fromUrl ? decodeTable(fromUrl) : readStored();
-  return sanitize(source || emptyTable());
+  const table = sanitize(source || emptyTable());
+  // A shared link is authoritative for this visit and the next one. Persisting it here prevents a
+  // later router destination without `t` from falling back to a different, older stored sheet.
+  writeStored(table);
+  writeUrl(table);
+  return table;
 }
 
 let current = initial();
+
+function sameTable(a, b) {
+  return a.party === b.party && a.lines.length === b.lines.length && a.lines.every((line, index) => {
+    const other = b.lines[index];
+    return line.id === other.id && line.option === other.option && line.qty === other.qty;
+  });
+}
+
+/** Keep the address shareable without discarding Menu filters, sort state or the room hash. */
+function writeUrl(table) {
+  if (!ON_CLIENT) return;
+  const url = new URL(location.href);
+  if (table.lines.length) url.searchParams.set("t", encodeTable(table));
+  else url.searchParams.delete("t");
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  if (next !== `${location.pathname}${location.search}${location.hash}`) history.replaceState(null, "", next);
+}
+
+/** A router swap or Back/Forward can introduce a different shared table in the same document. */
+function syncLocation() {
+  const fromUrl = new URLSearchParams(location.search).get("t");
+  if (fromUrl) commit(decodeTable(fromUrl) || emptyTable(current.party));
+  else writeUrl(current);
+}
 
 export function getTable() {
   return current;
@@ -100,10 +132,15 @@ export function getTotals() {
 }
 
 function commit(next) {
-  current = sanitize(next);
+  const canonical = sanitize(next);
+  const changed = !sameTable(current, canonical);
+  current = canonical;
   writeStored(current);
-  const snapshot = totals(menu, current);
-  document.dispatchEvent(new CustomEvent(EVENT, { detail: { table: current, totals: snapshot, menu } }));
+  writeUrl(current);
+  if (changed) {
+    const snapshot = totals(menu, current);
+    document.dispatchEvent(new CustomEvent(EVENT, { detail: { table: current, totals: snapshot, menu } }));
+  }
   return current;
 }
 
@@ -151,8 +188,18 @@ export function tableLink() {
    conditional for the same reason `initial()` is: `addEventListener` is a global on a page and is
    not a global in the Node process that renders this component into HTML. */
 if (ON_CLIENT) {
+  addEventListener("popstate", syncLocation);
+  document.addEventListener("astro:after-swap", syncLocation);
+  document.addEventListener("astro:page-load", syncLocation);
   addEventListener("storage", (event) => {
     if (event.key !== KEY) return;
-    commit(event.newValue ? JSON.parse(event.newValue) : emptyTable(current.party));
+    if (!event.newValue) {
+      commit(emptyTable(current.party));
+      return;
+    }
+    const incoming = parseStored(event.newValue);
+    // Another tab may have written a partial or obsolete value. Keep the last canonical table rather
+    // than replacing it with a shape the menu cannot price.
+    if (incoming) commit(incoming);
   });
 }

@@ -289,7 +289,7 @@ const indexable = import.meta.env.PUBLIC_INDEXABLE === "true";
     // callers below mean this runs twice per navigation, and `applyHour` broadcasts `hh:hour` to the door
     // and to both dials — an unconditional second call would be a redundant repaint of the whole room for
     // one click.
-    if (askedFor !== null && root.style.getPropertyValue("--hour") !== String(askedFor)) applyHour(askedFor);
+    if (askedFor !== null && root.style.getPropertyValue("--hour").trim() !== askedFor.toFixed(4)) applyHour(askedFor);
   }
 
   // after-swap is the earliest moment the incoming document exists, and that is where this has to run:
