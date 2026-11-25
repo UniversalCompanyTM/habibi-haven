@@ -1269,7 +1269,7 @@ snapshots, and every visible dial's value, label, phase, line and open/closed st
 event's hour/night/open fields and transition properties/durations, then restores the real clock. Rounded
 three-decimal DoorScene attributes need not change at every one-second sample; the exact expected
 snapshot is checked instead. The runtime harness runs this audit under both normal and reduced motion,
-including a live preference change. The standalone suite has 22 checks and its RED/GREEN evidence is
+including a live preference change. The standalone suite has 24 checks and its RED/GREEN evidence is
 recorded in `tests/clock-continuity.mjs`.
 
 **Menu reserves the space it actually uses.** The old bar height was sampled before its badge was
@@ -1285,9 +1285,13 @@ pairwise card overlap, text/image containment errors, wrong frame ratios, a disp
 saved bar-height drift, obstructed anchors and controls that `elementFromPoint()` cannot actually hit.
 The browser lifecycle audit also sorts and restores the kitchen's original DOM order, clears real
 search/tag/band/sort controls, removes only the Menu's reset query parameters, and preserves the
-shared table parameter, unrelated query state and room hash. The dependency-free Menu suite has 21
-passing source, geometry-helper and lifecycle contracts. Real geometry remains a CI claim until the
-matching runner completes.
+shared table parameter, unrelated query state and room hash. Card reveal travel is capped at `0.4rem`,
+half the deck's `0.8rem` minimum gap, so staggered neighbours cannot cross while arriving. That travel
+is conditional on `prefers-reduced-motion: no-preference`; the reduced-motion runtime phase also
+requires every card's computed transform to be `none`. The dependency-free Menu suite has 30 passing
+source, geometry-helper and lifecycle contracts. GitHub Actions run `45552456633`, matched to commit
+`d09a638b8033bc2a3d015b26ff82fd1653fbed26`, then proved all twelve geometry states with zero errors or
+warnings.
 
 **Table selections and WhatsApp messages share one canonical state.** Stored, shared and live lines
 are menu-aware sanitized values; accompaniment remains part of line identity, and changing a side onto
@@ -1295,7 +1299,8 @@ an existing side merges quantities. `?t=` wins on a fresh load and is reconciled
 `popstate`, router swaps and page loads without losing Menu filters or hashes. The browser probe
 decodes both actual handoff URLs and compares their complete text, recipient, visible rows, totals
 and share URL with `whatsappText()`/`encodeTable()`; empty handoffs stay disabled. Its comparator
-suite and the table-client/WhatsApp source suites pass locally. Browser execution remains part of CI.
+suite and the table-client/WhatsApp source suites pass locally, and the matching green runner executed
+the complete table/WhatsApp parity battery with zero errors or warnings.
 
 **The wall now contains 36 photographs, not 30.** Six official-source portrait JPEGs were retrieved
 from the restaurant's `menu.or.ke` page on 2026-11-24. They are byte-for-byte mirrors, not generated
@@ -1360,21 +1365,35 @@ test-fixture errors were corrected before accepting GREEN. The invalid demand th
 attributes change at every sample was also removed in favour of exact expected snapshots. The first
 official Facebook quotation was initially reconstructed from its URL slug; a new provenance regression
 failed on that longer sentence, and the shipped quote now contains only the verified caption excerpt.
+The first full Menu runtime run then found real transient card overlap on tablet and phone: the generic
+22 px reveal rise exceeded the minimum grid gap. A failing travel/gap contract preceded the `0.4rem`
+cap. Independent review caught a second, pre-deployment cascade error in that cap: its specificity
+overrode reduced motion. A failing conditional-media contract and computed-style runtime assertion
+preceded the `no-preference` scope. Neither defect reached the live preview. The ad-hoc live smoke
+script initially used encoded-link and page/selector assumptions that did not match the rendered
+source; those probe errors were corrected against the real selectors before the final 43-assertion pass.
 
 **Local evidence, 2026-11-25.** The lightweight gates passed SSR safety (13 modules), Astro parse
-(22 files, 16 script blocks), CSS variables (74 declared properties), 131 aggregate source checks,
-the standalone clock (22), Menu (21), gallery (20), table-client (7), card-parity (6), WhatsApp
-source (4), runtime-comparator (7) and rendered preview-policy (4) suites, plus drift (3 checks).
+(22 files, 16 script blocks), CSS variables (74 declared properties), 133 aggregate source checks,
+the standalone clock (24), Menu (30), gallery (20), table-client (8), card-parity (6), WhatsApp
+source (4), runtime-comparator (8) and rendered preview-policy (4) suites, plus drift (3 checks).
 `tests/api.mjs` passed 95 checks. Brand sync verified 21 files/2,073 KB; the board check verified
 177 visible strings; runtime/dist syntax and `git diff --check` passed. No build or headless browser
 ran locally.
 
-**Still open.** The matching GitHub Actions run must prove the new clock, twelve Menu geometry states,
-gallery ratios, repaired ticker pixels and WhatsApp runtime parity before its `dist` is downloaded.
-Only a green run may be uploaded to the existing private preview at `habibihavenpreview.pages.dev`.
-This amendment does not yet claim CI success or a live update. Payments stay dark. Photo rights,
-synthetic D1 cleanup, production indexing and the other client decisions in `OPEN-QUESTIONS.md` remain
-open.
+**Verified release, 2026-11-25.** GitHub Actions run `45552456633` matched commit
+`d09a638b8033bc2a3d015b26ff82fd1653fbed26` and passed all 133 source checks, the build, dist/board
+audits and every runtime phase, including clock continuity, the twelve Menu geometry states, gallery
+ratios, review/ticker controls, exact table/WhatsApp parity, keyboard/no-JavaScript/router flows and
+reduced motion. Its verified artifact was uploaded to the existing private preview at
+`https://habibihavenpreview.pages.dev`; the deployment alias is
+`https://f0376b13.habibihavenpreview.pages.dev`. A fresh live smoke check passed 43 assertions across
+the five routes, privacy/canonical metadata, 243 Menu cards, 36 gallery tiles, table/review/ticker
+controls, all five credited videos plus their aggregate, and all six new venue JPEGs. Routes remain
+slash-free and `noindex, nofollow`.
+
+**Still open.** Payments stay dark by instruction. Photo rights, synthetic D1 cleanup, production
+indexing and the other client decisions in `OPEN-QUESTIONS.md` remain open.
 
 - Hours and the Uber Eats status are contradictory upstream facts; we publish one value of record
   and log the rest rather than smoothing it over.
